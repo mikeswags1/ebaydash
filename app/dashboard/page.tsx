@@ -1,6 +1,6 @@
 'use client'
 import { useSession, signOut } from 'next-auth/react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
 
 type Tab = 'overview' | 'orders' | 'financials' | 'scripts' | 'settings'
@@ -19,7 +19,6 @@ interface EbayOrder {
 export default function Dashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [tab, setTab] = useState<Tab>('overview')
   const [orders, setOrders] = useState<EbayOrder[]>([])
   const [awaiting, setAwaiting] = useState<EbayOrder[]>([])
@@ -32,11 +31,12 @@ export default function Dashboard() {
   const [ebayMsg, setEbayMsg] = useState<string | null>(null)
 
   useEffect(() => {
-    const ebay = searchParams.get('ebay')
-    const msg = searchParams.get('msg')
+    const params = new URLSearchParams(window.location.search)
+    const ebay = params.get('ebay')
+    const msg = params.get('msg')
     if (ebay === 'error') setEbayMsg(msg ? decodeURIComponent(msg) : 'eBay connection failed')
     if (ebay === 'connected') setEbayMsg('✓ eBay connected successfully')
-  }, [searchParams])
+  }, [])
 
 
   useEffect(() => {
