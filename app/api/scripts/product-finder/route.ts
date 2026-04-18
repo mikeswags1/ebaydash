@@ -3,9 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
 const EBAY_FEE = 0.1335
-const MIN_PROFIT = 8
+const MIN_PROFIT = 5
 const MIN_ROI = 30
-const MAX_COST = 60
+const MAX_COST = 300
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -14,11 +14,14 @@ const REJECT_KEYWORDS = [
 ]
 
 function calcMetrics(amazonPrice: number) {
-  const markup = amazonPrice < 15 ? 2.4
-    : amazonPrice < 25 ? 2.1
-    : amazonPrice < 40 ? 1.85
-    : amazonPrice < 55 ? 1.65
-    : 1.5
+  // Markup chosen so net margin stays ≥ 30% ROI after eBay fees
+  const markup = amazonPrice < 15  ? 2.4
+    : amazonPrice < 25  ? 2.1
+    : amazonPrice < 40  ? 1.85
+    : amazonPrice < 60  ? 1.65
+    : amazonPrice < 100 ? 1.55
+    : amazonPrice < 200 ? 1.45
+    : 1.38
   const ebayPrice = parseFloat((amazonPrice * markup).toFixed(2))
   const fees = parseFloat((ebayPrice * EBAY_FEE).toFixed(2))
   const profit = parseFloat((ebayPrice - amazonPrice - fees).toFixed(2))
@@ -38,7 +41,7 @@ const NICHE_QUERIES: Record<string, string[]> = {
   'Smart Home Devices': ['smart plug wifi outlet', 'smart home security camera indoor'],
   'Gaming Gear': ['gaming accessories rgb keyboard', 'gaming headset pc console'],
   'Kitchen Gadgets': ['kitchen gadgets silicone utensils', 'air fryer accessories baking'],
-  'Home Decor': ['decorative throw pillows bedroom', 'candles home fragrance scented'],
+  'Home Decor': ['wall art prints framed bedroom', 'decorative vase home accent', 'throw blanket couch sofa', 'picture frames collage wall'],
   'Furniture & Lighting': ['led desk lamp usb charging', 'wall art canvas prints bedroom'],
   'Cleaning Supplies': ['cleaning supplies microfiber cloths', 'cleaning brush kit bathroom'],
   'Storage & Organization': ['storage bins organizer closet', 'cable management organizer desk'],
@@ -97,11 +100,18 @@ export async function GET(req: NextRequest) {
     try {
       // Step 1: search for ASINs
       const searchRes = await fetch(
-        `https://axesso-axesso-amazon-data-service-v1.p.rapidapi.com/amz/amazon-search-by-keyword-asin?keyword=${encodeURIComponent(query)}&domainCode=com&sortBy=relevanceblender&numberOfProducts=10`,
+        `https://axesso-axesso-amazon-data-service-v1.p.rapidapi.com/amz/amazon-search-by-keyword-asin?keyword=${encodeURIComponent(query)}&domainCode=com&sortBy=relevanceblender&numberOfProducts=20`,
         { headers: { 'x-rapidapi-host': 'axesso-axesso-amazon-data-service-v1.p.rapidapi.com', 'x-rapidapi-key': rapidKey } }
       )
       const searchData = await searchRes.json()
-      const asins: string[] = searchData.foundProducts || []
+      // Axesso may return foundProducts or searchProductDetails[].asin
+      let asins: string[] = searchData.foundProducts || []
+      if (!asins.length && Array.isArray(searchData.searchProductDetails)) {
+        asins = searchData.searchProductDetails.map((p: { asin?: string }) => p.asin).filter(Boolean)
+      }
+      if (!asins.length && Array.isArray(searchData.products)) {
+        asins = searchData.products.map((p: { asin?: string }) => p.asin).filter(Boolean)
+      }
 
       // Step 2: look up each ASIN until we get enough good results
       for (const asin of asins) {
@@ -129,7 +139,7 @@ export async function GET(req: NextRequest) {
           const { ebayPrice, profit, roi } = calcMetrics(price)
           if (profit < MIN_PROFIT || roi < MIN_ROI) continue
 
-          const risk = price > 50 ? 'HIGH' : price > 30 || roi < 45 ? 'MEDIUM' : 'LOW'
+          const risk = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
           results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk })
         } catch { continue }
       }
