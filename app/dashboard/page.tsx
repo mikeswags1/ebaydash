@@ -49,7 +49,7 @@ export default function Dashboard() {
   const [finderLoading, setFinderLoading] = useState(false)
   const [finderResults, setFinderResults] = useState<Array<{
     asin: string; title: string; amazonPrice: number; ebayPrice: number
-    profit: number; roi: number; imageUrl?: string; risk: string
+    profit: number; roi: number; imageUrl?: string; risk: string; salesVolume?: string
   }> | null>(null)
   const [finderError, setFinderError] = useState<string | null>(null)
   const [scriptRunning, setScriptRunning] = useState<string | null>(null)
@@ -839,6 +839,7 @@ export default function Dashboard() {
                                   <span style={{ fontSize: '11px', color: 'var(--sil)' }}>List at: <b style={{ color: 'var(--gld2)' }}>${p.ebayPrice.toFixed(2)}</b></span>
                                   <span style={{ fontSize: '11px', color: 'var(--sil)' }}>Profit: <b style={{ color: 'var(--grn)' }}>${p.profit.toFixed(2)}</b></span>
                                   <span style={{ fontSize: '11px', color: 'var(--sil)' }}>ROI: <b style={{ color: 'var(--grn)' }}>{p.roi}%</b></span>
+                                  {p.salesVolume && <span style={{ fontSize: '11px', color: 'var(--sil)' }}>🔥 <b style={{ color: 'var(--txt)' }}>{p.salesVolume}</b></span>}
                                   <span style={{ fontSize: '9px', padding: '2px 8px', borderRadius: '20px', fontWeight: 700,
                                     background: p.risk === 'LOW' ? 'rgba(46,207,118,0.10)' : p.risk === 'MEDIUM' ? 'rgba(200,162,80,0.10)' : 'rgba(232,63,80,0.10)',
                                     color: p.risk === 'LOW' ? 'var(--grn)' : p.risk === 'MEDIUM' ? 'var(--gold)' : 'var(--red)',

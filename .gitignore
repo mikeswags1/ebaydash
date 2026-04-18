@@ -8,3 +8,4 @@ out/
 
 .vercel
 .env*.local
+.env.prod

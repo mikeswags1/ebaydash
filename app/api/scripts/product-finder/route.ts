@@ -14,7 +14,6 @@ const REJECT_KEYWORDS = [
 ]
 
 function calcMetrics(amazonPrice: number) {
-  // Markup chosen so net margin stays ≥ 30% ROI after eBay fees
   const markup = amazonPrice < 15  ? 2.4
     : amazonPrice < 25  ? 2.1
     : amazonPrice < 40  ? 1.85
@@ -41,7 +40,7 @@ const NICHE_QUERIES: Record<string, string[]> = {
   'Smart Home Devices': ['smart plug wifi outlet', 'smart home security camera indoor'],
   'Gaming Gear': ['gaming accessories rgb keyboard', 'gaming headset pc console'],
   'Kitchen Gadgets': ['kitchen gadgets silicone utensils', 'air fryer accessories baking'],
-  'Home Decor': ['wall art prints framed bedroom', 'decorative vase home accent', 'throw blanket couch sofa', 'picture frames collage wall'],
+  'Home Decor': ['wall art prints framed bedroom', 'decorative vase home accent', 'throw blanket couch sofa'],
   'Furniture & Lighting': ['led desk lamp usb charging', 'wall art canvas prints bedroom'],
   'Cleaning Supplies': ['cleaning supplies microfiber cloths', 'cleaning brush kit bathroom'],
   'Storage & Organization': ['storage bins organizer closet', 'cable management organizer desk'],
@@ -77,6 +76,15 @@ const NICHE_QUERIES: Record<string, string[]> = {
   'Sports Memorabilia': ['sports card display case', 'autograph frame display'],
 }
 
+interface SearchProduct {
+  asin?: string
+  productDescription?: string
+  price?: number
+  retailPrice?: number
+  imgUrl?: string
+  salesVolume?: string
+}
+
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -87,61 +95,52 @@ export async function GET(req: NextRequest) {
   const rapidKey = process.env.RAPIDAPI_KEY
   if (!rapidKey) return NextResponse.json({ error: 'RapidAPI key not configured' }, { status: 500 })
 
-  const queries = NICHE_QUERIES[niche] || [`${niche} accessories bestseller`]
+  const queries = NICHE_QUERIES[niche] || [`${niche} bestseller`]
   const results: Array<{
     asin: string; title: string; amazonPrice: number; ebayPrice: number
-    profit: number; roi: number; imageUrl?: string; risk: string
+    profit: number; roi: number; imageUrl?: string; risk: string; salesVolume?: string
   }> = []
 
   const seenAsins = new Set<string>()
 
   for (const query of queries) {
-    if (results.length >= 12) break
+    if (results.length >= 15) break
     try {
-      // Step 1: search for ASINs
       const searchRes = await fetch(
-        `https://axesso-axesso-amazon-data-service-v1.p.rapidapi.com/amz/amazon-search-by-keyword-asin?keyword=${encodeURIComponent(query)}&domainCode=com&sortBy=relevanceblender&numberOfProducts=20`,
+        `https://axesso-axesso-amazon-data-service-v1.p.rapidapi.com/amz/amazon-search-by-keyword-asin?keyword=${encodeURIComponent(query)}&domainCode=com&sortBy=relevanceblender&numberOfProducts=20&page=1`,
         { headers: { 'x-rapidapi-host': 'axesso-axesso-amazon-data-service-v1.p.rapidapi.com', 'x-rapidapi-key': rapidKey } }
       )
       const searchData = await searchRes.json()
-      // Axesso may return foundProducts or searchProductDetails[].asin
-      let asins: string[] = searchData.foundProducts || []
-      if (!asins.length && Array.isArray(searchData.searchProductDetails)) {
-        asins = searchData.searchProductDetails.map((p: { asin?: string }) => p.asin).filter(Boolean)
-      }
-      if (!asins.length && Array.isArray(searchData.products)) {
-        asins = searchData.products.map((p: { asin?: string }) => p.asin).filter(Boolean)
-      }
 
-      // Step 2: look up each ASIN until we get enough good results
-      for (const asin of asins) {
-        if (results.length >= 12) break
-        if (seenAsins.has(asin)) continue
-        seenAsins.add(asin)
+      // Use searchProductDetails directly — already has price, title, image
+      const products: SearchProduct[] = searchData.searchProductDetails || []
 
-        try {
-          const lookupRes = await fetch(
-            `https://axesso-axesso-amazon-data-service-v1.p.rapidapi.com/amz/amazon-lookup-product?url=https%3A%2F%2Fwww.amazon.com%2Fdp%2F${asin}`,
-            { headers: { 'x-rapidapi-host': 'axesso-axesso-amazon-data-service-v1.p.rapidapi.com', 'x-rapidapi-key': rapidKey } }
-          )
-          const p = await lookupRes.json()
-          if (p.type === 'error') continue
+      for (const p of products) {
+        if (results.length >= 15) break
+        if (!p.asin || seenAsins.has(p.asin)) continue
+        seenAsins.add(p.asin)
 
-          const rawPrice = p.price ?? p.currentPrice ?? 0
-          const price = typeof rawPrice === 'string' ? parseFloat(rawPrice.replace(/[^0-9.]/g, '')) : rawPrice
-          const title = p.productTitle ?? p.title ?? ''
-          const imageUrl = p.imageUrl ?? p.mainImageUrl
+        const price = typeof p.price === 'number' ? p.price : parseFloat(String(p.price || 0))
+        const title = p.productDescription || ''
 
-          if (!price || price <= 0 || price > MAX_COST) continue
-          if (!title || isRejected(title)) continue
-          if (p.warehouseAvailability === 'NOT_AVAILABLE') continue
+        if (!price || price <= 0 || price > MAX_COST) continue
+        if (!title || isRejected(title)) continue
 
-          const { ebayPrice, profit, roi } = calcMetrics(price)
-          if (profit < MIN_PROFIT || roi < MIN_ROI) continue
+        const { ebayPrice, profit, roi } = calcMetrics(price)
+        if (profit < MIN_PROFIT || roi < MIN_ROI) continue
 
-          const risk = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
-          results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk })
-        } catch { continue }
+        const risk = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
+        results.push({
+          asin: p.asin,
+          title,
+          amazonPrice: price,
+          ebayPrice,
+          profit,
+          roi,
+          imageUrl: p.imgUrl,
+          risk,
+          salesVolume: p.salesVolume,
+        })
       }
     } catch { continue }
   }
