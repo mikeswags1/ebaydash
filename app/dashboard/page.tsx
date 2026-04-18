@@ -54,6 +54,7 @@ export default function Dashboard() {
   const [finderError, setFinderError] = useState<string | null>(null)
   const [scriptRunning, setScriptRunning] = useState<string | null>(null)
   const [scriptMsg, setScriptMsg] = useState<string | null>(null)
+  const [finderView, setFinderView] = useState<'cards' | 'list'>('cards')
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -824,39 +825,104 @@ export default function Dashboard() {
 
                     {finderResults && finderResults.length > 0 && (
                       <div>
-                        <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.24em', color: 'var(--dim)', marginBottom: '16px' }}>
-                          {finderResults.length} Profitable Products Found · {niche}
+                        {/* Header + view toggle */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                          <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.24em', color: 'var(--dim)' }}>
+                            {finderResults.length} Profitable Products · {niche}
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            {(['cards', 'list'] as const).map(v => (
+                              <button key={v} onClick={() => setFinderView(v)} style={{
+                                padding: '5px 12px', borderRadius: '8px', fontSize: '10px', fontWeight: 700,
+                                fontFamily: 'inherit', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.08em',
+                                border: finderView === v ? '1px solid rgba(200,162,80,0.35)' : '1px solid rgba(195,158,88,0.12)',
+                                background: finderView === v ? 'rgba(200,162,80,0.12)' : 'transparent',
+                                color: finderView === v ? 'var(--gld2)' : 'var(--dim)',
+                              }}>{v === 'cards' ? '⊞ Cards' : '☰ List'}</button>
+                            ))}
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          {finderResults.map(p => (
-                            <div key={p.asin} className="card" style={{ padding: '20px 24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-                              {p.imageUrl && <img src={p.imageUrl} alt={p.title} style={{ width: '60px', height: '60px', objectFit: 'contain', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', flexShrink: 0 }} />}
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--txt)', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
-                                <div style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--dim)', marginBottom: '6px' }}>{p.asin}</div>
-                                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                                  <span style={{ fontSize: '11px', color: 'var(--sil)' }}>Amazon: <b style={{ color: 'var(--txt)' }}>${p.amazonPrice.toFixed(2)}</b></span>
-                                  <span style={{ fontSize: '11px', color: 'var(--sil)' }}>List at: <b style={{ color: 'var(--gld2)' }}>${p.ebayPrice.toFixed(2)}</b></span>
-                                  <span style={{ fontSize: '11px', color: 'var(--sil)' }}>Profit: <b style={{ color: 'var(--grn)' }}>${p.profit.toFixed(2)}</b></span>
-                                  <span style={{ fontSize: '11px', color: 'var(--sil)' }}>ROI: <b style={{ color: 'var(--grn)' }}>{p.roi}%</b></span>
-                                  {p.salesVolume && <span style={{ fontSize: '11px', color: 'var(--sil)' }}>🔥 <b style={{ color: 'var(--txt)' }}>{p.salesVolume}</b></span>}
-                                  <span style={{ fontSize: '9px', padding: '2px 8px', borderRadius: '20px', fontWeight: 700,
-                                    background: p.risk === 'LOW' ? 'rgba(46,207,118,0.10)' : p.risk === 'MEDIUM' ? 'rgba(200,162,80,0.10)' : 'rgba(232,63,80,0.10)',
-                                    color: p.risk === 'LOW' ? 'var(--grn)' : p.risk === 'MEDIUM' ? 'var(--gold)' : 'var(--red)',
-                                    border: `1px solid ${p.risk === 'LOW' ? 'rgba(46,207,118,0.25)' : p.risk === 'MEDIUM' ? 'rgba(200,162,80,0.25)' : 'rgba(232,63,80,0.25)'}`,
-                                  }}>{p.risk} RISK</span>
+
+                        {/* Cards view */}
+                        {finderView === 'cards' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '14px' }}>
+                            {finderResults.map(p => (
+                              <div key={p.asin} className="card" style={{ padding: '20px' }}>
+                                <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', marginBottom: '14px' }}>
+                                  {p.imageUrl && <img src={p.imageUrl} alt={p.title} style={{ width: '56px', height: '56px', objectFit: 'contain', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', flexShrink: 0 }} />}
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--txt)', marginBottom: '4px', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.title}</div>
+                                    <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)' }}>{p.asin}</div>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
+                                  {[
+                                    { label: 'Amazon', val: `$${p.amazonPrice.toFixed(2)}`, color: 'var(--txt)' },
+                                    { label: 'List at', val: `$${p.ebayPrice.toFixed(2)}`, color: 'var(--gld2)' },
+                                    { label: 'Profit', val: `$${p.profit.toFixed(2)}`, color: 'var(--grn)' },
+                                    { label: 'ROI', val: `${p.roi}%`, color: 'var(--grn)' },
+                                  ].map(s => (
+                                    <div key={s.label} style={{ padding: '8px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)' }}>
+                                      <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '3px' }}>{s.label}</div>
+                                      <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '15px', fontWeight: 800, color: s.color }}>{s.val}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: '9px', padding: '2px 8px', borderRadius: '20px', fontWeight: 700,
+                                      background: p.risk === 'LOW' ? 'rgba(46,207,118,0.10)' : p.risk === 'MEDIUM' ? 'rgba(200,162,80,0.10)' : 'rgba(232,63,80,0.10)',
+                                      color: p.risk === 'LOW' ? 'var(--grn)' : p.risk === 'MEDIUM' ? 'var(--gold)' : 'var(--red)',
+                                      border: `1px solid ${p.risk === 'LOW' ? 'rgba(46,207,118,0.25)' : p.risk === 'MEDIUM' ? 'rgba(200,162,80,0.25)' : 'rgba(232,63,80,0.25)'}`,
+                                    }}>{p.risk}</span>
+                                    {p.salesVolume && <span style={{ fontSize: '9px', color: 'var(--dim)' }}>🔥 {p.salesVolume}</span>}
+                                  </div>
+                                  <button onClick={() => { setAsinInput(p.asin); setTab('asin') }} className="btn btn-gold btn-sm" style={{ fontSize: '10px' }}>Analyze →</button>
                                 </div>
                               </div>
-                              <button
-                                onClick={() => { setAsinInput(p.asin); setTab('asin') }}
-                                className="btn btn-gold btn-sm"
-                                style={{ flexShrink: 0, fontSize: '11px' }}
-                              >
-                                Analyze →
-                              </button>
-                            </div>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* List view */}
+                        {finderView === 'list' && (
+                          <div className="card" style={{ overflow: 'hidden' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                              <thead>
+                                <tr style={{ background: 'rgba(20,14,6,0.95)', borderBottom: '1px solid rgba(195,158,88,0.11)' }}>
+                                  {['Product', 'Amazon', 'List At', 'Profit', 'ROI', 'Sales', 'Risk', ''].map(h => (
+                                    <th key={h} style={{ color: 'rgba(100,86,58,0.95)', fontSize: '7.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', padding: '12px 14px', textAlign: h === 'Product' ? 'left' : 'center', whiteSpace: 'nowrap' }}>{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {finderResults.map((p, i) => (
+                                  <tr key={p.asin} style={{ background: i % 2 === 0 ? 'rgba(17,12,7,0.80)' : 'rgba(12,9,4,0.70)', borderBottom: '1px solid rgba(195,158,88,0.06)' }}>
+                                    <td style={{ padding: '12px 14px', maxWidth: '280px' }}>
+                                      <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+                                      <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '2px' }}>{p.asin}</div>
+                                    </td>
+                                    <td style={{ padding: '12px 14px', textAlign: 'center', fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, fontSize: '12px', color: 'var(--txt)' }}>${p.amazonPrice.toFixed(2)}</td>
+                                    <td style={{ padding: '12px 14px', textAlign: 'center', fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, fontSize: '12px', color: 'var(--gld2)' }}>${p.ebayPrice.toFixed(2)}</td>
+                                    <td style={{ padding: '12px 14px', textAlign: 'center', fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, fontSize: '12px', color: 'var(--grn)' }}>${p.profit.toFixed(2)}</td>
+                                    <td style={{ padding: '12px 14px', textAlign: 'center', fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, fontSize: '12px', color: 'var(--grn)' }}>{p.roi}%</td>
+                                    <td style={{ padding: '12px 14px', textAlign: 'center', fontSize: '10px', color: 'var(--dim)', whiteSpace: 'nowrap' }}>{p.salesVolume || '—'}</td>
+                                    <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                                      <span style={{ fontSize: '8px', padding: '2px 8px', borderRadius: '20px', fontWeight: 700,
+                                        background: p.risk === 'LOW' ? 'rgba(46,207,118,0.10)' : p.risk === 'MEDIUM' ? 'rgba(200,162,80,0.10)' : 'rgba(232,63,80,0.10)',
+                                        color: p.risk === 'LOW' ? 'var(--grn)' : p.risk === 'MEDIUM' ? 'var(--gold)' : 'var(--red)',
+                                        border: `1px solid ${p.risk === 'LOW' ? 'rgba(46,207,118,0.25)' : p.risk === 'MEDIUM' ? 'rgba(200,162,80,0.25)' : 'rgba(232,63,80,0.25)'}`,
+                                      }}>{p.risk}</span>
+                                    </td>
+                                    <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                                      <button onClick={() => { setAsinInput(p.asin); setTab('asin') }} className="btn btn-gold btn-sm" style={{ fontSize: '10px', padding: '4px 10px' }}>Analyze</button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
