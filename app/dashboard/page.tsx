@@ -3,7 +3,7 @@ import { useSession, signOut } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
 
-type Tab = 'overview' | 'orders' | 'financials' | 'scripts' | 'ai' | 'settings'
+type Tab = 'overview' | 'orders' | 'financials' | 'scripts' | 'settings'
 
 interface EbayOrder {
   orderId: string
@@ -25,9 +25,6 @@ export default function Dashboard() {
   const [connected, setConnected] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncTime, setSyncTime] = useState<string | null>(null)
-  const [aiInput, setAiInput] = useState('')
-  const [aiResponse, setAiResponse] = useState('')
-  const [aiLoading, setAiLoading] = useState(false)
 
 
   useEffect(() => {
@@ -83,7 +80,6 @@ export default function Dashboard() {
     { id: 'orders', label: 'Orders', icon: '📦' },
     { id: 'financials', label: 'Financials', icon: '📊' },
     { id: 'scripts', label: 'Scripts', icon: '⚡' },
-    { id: 'ai', label: 'AI Assistant', icon: '🤖' },
     { id: 'settings', label: 'eBay Settings', icon: '🔗' },
   ]
 
@@ -356,53 +352,29 @@ export default function Dashboard() {
               <div style={{ padding: '0 44px 44px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '18px' }}>
                   {[
-                    { title: 'Lead Generator', desc: 'Find profitable products to source and list on eBay', badge: 'Automation', color: 'var(--pur)' },
-                    { title: 'ASIN Lookup', desc: 'Cross-reference Amazon ASINs with eBay listings', badge: 'Research', color: 'var(--ice)' },
-                    { title: 'Bulk Caller', desc: 'Automated outreach to potential suppliers', badge: 'Outreach', color: 'var(--ora)' },
-                    { title: 'Log Leads', desc: 'Track and organize interested supplier leads', badge: 'CRM', color: 'var(--grn)' },
+                    { title: 'Auto Feedback', file: 'auto-feedback.js', desc: 'Sends rotating feedback messages to buyers automatically after order completion.', badge: 'Fulfillment' },
+                    { title: 'Optimize Titles', file: 'optimize-titles.js', desc: 'Rewrites eBay listing titles for better SEO and search visibility.', badge: 'SEO' },
+                    { title: 'Apply Title Changes', file: 'optimize-titles-apply.js', desc: 'Pushes optimized title changes live to your eBay listings.', badge: 'SEO' },
+                    { title: 'Check Orders', file: 'check-orders.js', desc: 'Audits order status across your store and flags items needing action.', badge: 'Operations' },
+                    { title: 'Fix Campaigns', file: 'fix-campaigns.js', desc: 'Reviews and corrects underperforming eBay Promoted Listings campaigns.', badge: 'Ads' },
+                    { title: 'Delete Low ROI', file: 'delete-low-roi.js', desc: 'Identifies and removes listings with consistently poor return on investment.', badge: 'Cleanup' },
+                    { title: 'Audit & Clean', file: 'audit-and-clean.js', desc: 'Full store audit — removes duplicates, fixes broken listings, cleans inventory.', badge: 'Cleanup' },
+                    { title: 'Product Finder', file: 'product-finder.js', desc: 'Discovers profitable products to source based on eBay demand data.', badge: 'Research' },
+                    { title: 'Delete Dead Listings', file: 'delete-dead-listings.js', desc: 'Removes stale listings with zero views or sales over 60 days.', badge: 'Cleanup' },
+                    { title: 'Auto Lister', file: 'auto-lister.js', desc: 'Bulk-creates new eBay listings from a product data source automatically.', badge: 'Automation' },
+                    { title: 'Update Descriptions', file: 'update-descriptions.js', desc: 'Rewrites and improves item descriptions across all active listings.', badge: 'SEO' },
+                    { title: 'Sync Amazon Costs', file: 'sync-amazon-costs.js', desc: 'Updates cost-of-goods from Amazon pricing to keep margins accurate.', badge: 'Finance' },
                   ].map(s => (
-                    <div key={s.title} className="card" style={{ padding: '28px' }}>
+                    <div key={s.file} className="card" style={{ padding: '28px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                         <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 600, color: 'var(--txt)' }}>{s.title}</div>
                         <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '8px', fontWeight: 700, letterSpacing: '0.06em', background: 'rgba(200,162,80,0.08)', color: 'var(--gold)', border: '1px solid rgba(200,162,80,0.2)' }}>{s.badge}</span>
                       </div>
+                      <div style={{ fontSize: '11px', color: 'var(--dim)', marginBottom: '8px', fontFamily: 'monospace', opacity: 0.7 }}>{s.file}</div>
                       <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '22px', lineHeight: 1.6 }}>{s.desc}</div>
                       <button className="btn btn-gold btn-sm" style={{ width: '100%' }}>Run Script</button>
                     </div>
                   ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── AI ── */}
-          {tab === 'ai' && (
-            <div style={{ animation: 'fadein 0.22s ease' }}>
-              <div style={{ padding: '56px 52px 40px' }}>
-                <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.32em', color: 'var(--gold)', marginBottom: '14px', opacity: 0.85 }}>EbayDash · Intelligence</div>
-                <div style={{ fontFamily: 'var(--serif)', fontSize: '68px', fontWeight: 600, color: 'var(--txt)', lineHeight: 0.92, letterSpacing: '-0.015em', textShadow: '0 4px 80px rgba(200,162,80,0.18)' }}>AI Assistant</div>
-              </div>
-              <div style={{ padding: '0 44px 44px' }}>
-                <div className="card" style={{ padding: '32px' }}>
-                  <div style={{ marginBottom: '20px', minHeight: '120px' }}>
-                    {aiResponse ? (
-                      <div style={{ fontSize: '14px', color: 'var(--txt)', lineHeight: 1.7 }}>{aiResponse}</div>
-                    ) : (
-                      <div style={{ fontSize: '14px', color: 'var(--dim)', fontStyle: 'italic' }}>Ask anything about your eBay business, pricing strategy, or product research…</div>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: '12px', borderTop: '1px solid var(--bdr)', paddingTop: '20px' }}>
-                    <input
-                      value={aiInput}
-                      onChange={e => setAiInput(e.target.value)}
-                      placeholder="Ask your AI assistant…"
-                      onKeyDown={e => e.key === 'Enter' && !aiLoading && handleAI()}
-                      style={{ flex: 1 }}
-                    />
-                    <button onClick={handleAI} className="btn btn-gold" disabled={aiLoading || !aiInput.trim()}>
-                      {aiLoading ? '…' : 'Send'}
-                    </button>
-                  </div>
                 </div>
               </div>
             </div>
@@ -454,24 +426,6 @@ export default function Dashboard() {
     </div>
   )
 
-  async function handleAI() {
-    if (!aiInput.trim() || aiLoading) return
-    setAiLoading(true)
-    setAiResponse('')
-    try {
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: aiInput }),
-      })
-      const data = await res.json()
-      setAiResponse(data.result || data.error || 'No response')
-    } catch {
-      setAiResponse('Failed to reach AI assistant.')
-    }
-    setAiLoading(false)
-    setAiInput('')
-  }
 }
 
 function OrderTable({ orders }: { orders: EbayOrder[] }) {
