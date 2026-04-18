@@ -25,6 +25,9 @@ export default function Dashboard() {
   const [connected, setConnected] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncTime, setSyncTime] = useState<string | null>(null)
+  const [niche, setNiche] = useState<string | null>(null)
+  const [nicheSaving, setNicheSaving] = useState(false)
+  const [nicheSaved, setNicheSaved] = useState(false)
 
 
   useEffect(() => {
@@ -58,12 +61,36 @@ export default function Dashboard() {
     } catch { /* ignore */ }
   }, [])
 
+  const loadNiche = useCallback(async () => {
+    try {
+      const res = await fetch('/api/user/niche')
+      const data = await res.json()
+      if (data.niche) setNiche(data.niche)
+    } catch { /* ignore */ }
+  }, [])
+
+  const saveNiche = async (value: string) => {
+    setNicheSaving(true)
+    setNiche(value)
+    try {
+      await fetch('/api/user/niche', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ niche: value }),
+      })
+      setNicheSaved(true)
+      setTimeout(() => setNicheSaved(false), 2000)
+    } catch { /* ignore */ }
+    setNicheSaving(false)
+  }
+
   useEffect(() => {
     if (status === 'authenticated') {
       loadCreds()
       fetchOrders()
+      loadNiche()
     }
-  }, [status, fetchOrders, loadCreds])
+  }, [status, fetchOrders, loadCreds, loadNiche])
 
   const grossRevenue = orders.reduce((s, o) => s + parseFloat(o.pricingSummary?.total?.value || '0'), 0)
 
@@ -122,6 +149,19 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
+
+        {/* Niche badge */}
+        {niche && (
+          <div style={{ padding: '10px 20px', borderBottom: '1px solid rgba(195,158,88,0.08)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(200,162,80,0.06)', border: '1px solid rgba(200,162,80,0.14)' }}>
+              <span style={{ fontSize: '11px' }}>◎</span>
+              <div>
+                <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--dim)', marginBottom: '2px' }}>Niche</div>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gold)' }}>{niche}</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: '2px', overflowY: 'auto' }}>
@@ -388,13 +428,15 @@ export default function Dashboard() {
                 <div style={{ fontFamily: 'var(--serif)', fontSize: '68px', fontWeight: 600, color: 'var(--txt)', lineHeight: 0.92, letterSpacing: '-0.015em', textShadow: '0 4px 80px rgba(200,162,80,0.18)' }}>eBay Account</div>
               </div>
 
-              <div style={{ padding: '0 44px 44px', maxWidth: '640px' }}>
-                <div className="card" style={{ padding: '44px', textAlign: 'center' }}>
+              <div style={{ padding: '0 44px 44px', maxWidth: '680px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+                {/* eBay connect card */}
+                <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
                   {connected ? (
                     <>
-                      <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(46,207,118,0.12)', border: '1px solid rgba(46,207,118,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: '28px' }}>✓</div>
-                      <div style={{ fontFamily: 'var(--serif)', fontSize: '28px', fontWeight: 600, color: 'var(--txt)', marginBottom: '10px' }}>eBay Connected</div>
-                      <div style={{ fontSize: '14px', color: 'var(--sil)', marginBottom: '32px', lineHeight: 1.7 }}>Your eBay account is linked. Orders and data sync automatically.</div>
+                      <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(46,207,118,0.12)', border: '1px solid rgba(46,207,118,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px', fontSize: '24px' }}>✓</div>
+                      <div style={{ fontFamily: 'var(--serif)', fontSize: '24px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px' }}>eBay Connected</div>
+                      <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '28px', lineHeight: 1.7 }}>Your eBay account is linked. Orders and data sync automatically.</div>
                       <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
                         <button onClick={fetchOrders} className="btn btn-gold">↻ Sync Now</button>
                         <a href="/api/ebay/connect" className="btn btn-ghost" style={{ fontSize: '12px' }}>Reconnect eBay</a>
@@ -402,21 +444,74 @@ export default function Dashboard() {
                     </>
                   ) : (
                     <>
-                      <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(200,162,80,0.10)', border: '1px solid rgba(200,162,80,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: '28px' }}>🔗</div>
-                      <div style={{ fontFamily: 'var(--serif)', fontSize: '28px', fontWeight: 600, color: 'var(--txt)', marginBottom: '10px' }}>Connect Your eBay Account</div>
-                      <div style={{ fontSize: '14px', color: 'var(--sil)', marginBottom: '32px', lineHeight: 1.7 }}>
-                        Click the button below and log in with your eBay account.<br />
-                        Your orders will sync instantly — no setup required.
+                      <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(200,162,80,0.10)', border: '1px solid rgba(200,162,80,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px', fontSize: '24px' }}>🔗</div>
+                      <div style={{ fontFamily: 'var(--serif)', fontSize: '24px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px' }}>Connect Your eBay Account</div>
+                      <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '28px', lineHeight: 1.7 }}>
+                        Click below and log in with your eBay account.<br />
+                        Your orders sync instantly — no setup required.
                       </div>
-                      <a href="/api/ebay/connect" className="btn btn-solid" style={{ padding: '16px 40px', fontSize: '14px', display: 'inline-flex' }}>
+                      <a href="/api/ebay/connect" className="btn btn-solid" style={{ padding: '14px 36px', fontSize: '14px', display: 'inline-flex' }}>
                         Connect eBay Account
                       </a>
-                      <div style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '20px' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '16px' }}>
                         You&apos;ll be redirected to eBay to authorize access. We never store your eBay password.
                       </div>
                     </>
                   )}
                 </div>
+
+                {/* Niche selector card */}
+                <div className="card" style={{ padding: '36px' }}>
+                  <div style={{ marginBottom: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 600, color: 'var(--txt)', marginBottom: '6px' }}>Store Niche</div>
+                      <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.6 }}>
+                        Your niche focuses the Product Finder and scripts on the most relevant items for your store.
+                      </div>
+                    </div>
+                    {nicheSaved && (
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--grn)', letterSpacing: '0.06em' }}>Saved ✓</span>
+                    )}
+                  </div>
+
+                  <div style={{ marginTop: '24px', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px' }}>
+                    {[
+                      { group: 'Electronics', items: ['Phone Accessories', 'Computer Parts', 'Audio & Headphones', 'Smart Home Devices', 'Gaming Gear'] },
+                      { group: 'Home', items: ['Kitchen Gadgets', 'Home Decor', 'Furniture & Lighting', 'Cleaning Supplies', 'Storage & Organization'] },
+                      { group: 'Outdoors', items: ['Camping & Hiking', 'Garden & Tools', 'Sporting Goods', 'Fishing & Hunting', 'Cycling'] },
+                      { group: 'Health', items: ['Fitness Equipment', 'Personal Care', 'Supplements & Vitamins', 'Medical Supplies', 'Mental Wellness'] },
+                      { group: 'Automotive', items: ['Car Parts', 'Car Accessories', 'Motorcycle Gear', 'Truck & Towing', 'Car Care'] },
+                      { group: 'Lifestyle', items: ['Pet Supplies', 'Baby & Kids', 'Toys & Games', 'Clothing & Accessories', 'Jewelry & Watches'] },
+                      { group: 'Business', items: ['Office Supplies', 'Industrial Equipment', 'Safety Gear', 'Janitorial & Cleaning', 'Packaging Materials'] },
+                      { group: 'Collectibles', items: ['Trading Cards', 'Vintage & Antiques', 'Coins & Currency', 'Comics & Manga', 'Sports Memorabilia'] },
+                    ].map(group => (
+                      <div key={group.group}>
+                        <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '6px', paddingLeft: '4px' }}>{group.group}</div>
+                        {group.items.map(item => (
+                          <button
+                            key={item}
+                            onClick={() => saveNiche(item)}
+                            disabled={nicheSaving}
+                            style={{
+                              display: 'block', width: '100%', textAlign: 'left',
+                              padding: '8px 12px', marginBottom: '4px', borderRadius: '8px',
+                              fontSize: '12px', fontFamily: 'inherit', cursor: 'pointer',
+                              border: niche === item ? '1px solid rgba(200,162,80,0.40)' : '1px solid rgba(195,158,88,0.10)',
+                              background: niche === item ? 'linear-gradient(135deg,rgba(200,162,80,0.16),rgba(220,185,100,0.06))' : 'rgba(255,255,255,0.02)',
+                              color: niche === item ? 'var(--gld2)' : 'var(--sil)',
+                              fontWeight: niche === item ? 600 : 400,
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            {niche === item && <span style={{ marginRight: '6px', fontSize: '10px' }}>◆</span>}
+                            {item}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             </div>
           )}

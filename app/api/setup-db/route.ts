@@ -28,6 +28,8 @@ export async function GET() {
     `
     // Allow Google OAuth users (no password)
     await sql`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`.catch(() => {})
+    // Add niche column for product targeting
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS niche VARCHAR(100)`.catch(() => {})
     return NextResponse.json({ success: true, message: 'Database tables ready' })
   } catch (e) {
     console.error(e)
