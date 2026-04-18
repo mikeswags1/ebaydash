@@ -19,7 +19,7 @@ interface EbayOrder {
   buyer: { username: string }
   pricingSummary: { total: { value: string; currency: string } }
   fulfillmentStartInstructions?: Array<{ shippingStep?: { shipTo?: { fullName?: string } } }>
-  lineItems?: Array<{ title: string; quantity: number; lineItemCost: { value: string } }>
+  lineItems?: Array<{ title: string; quantity: number; lineItemCost: { value: string }; sku?: string; legacyItemId?: string }>
   orderFulfillmentStatus: string
   creationDate: string
 }
@@ -37,6 +37,8 @@ export default function Dashboard() {
   const [niche, setNiche] = useState<string | null>(null)
   const [nicheSaving, setNicheSaving] = useState(false)
   const [nicheSaved, setNicheSaved] = useState(false)
+  const [amazonConnected, setAmazonConnected] = useState(false)
+  const [amazonSellerId, setAmazonSellerId] = useState<string | null>(null)
   const [ebayMsg, setEbayMsg] = useState<string | null>(null)
   const [asinInput, setAsinInput] = useState('')
   const [asinResult, setAsinResult] = useState<AsinResult | null>(null)
@@ -44,13 +46,24 @@ export default function Dashboard() {
   const [asinError, setAsinError] = useState<string | null>(null)
   const [ebayPrice, setEbayPrice] = useState('')
   const [shippingCost, setShippingCost] = useState('5.00')
+  const [finderLoading, setFinderLoading] = useState(false)
+  const [finderResults, setFinderResults] = useState<Array<{
+    asin: string; title: string; amazonPrice: number; ebayPrice: number
+    profit: number; roi: number; imageUrl?: string; risk: string
+  }> | null>(null)
+  const [finderError, setFinderError] = useState<string | null>(null)
+  const [scriptRunning, setScriptRunning] = useState<string | null>(null)
+  const [scriptMsg, setScriptMsg] = useState<string | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const ebay = params.get('ebay')
+    const amazon = params.get('amazon')
     const msg = params.get('msg')
     if (ebay === 'error') setEbayMsg(msg ? decodeURIComponent(msg) : 'eBay connection failed')
     if (ebay === 'connected') setEbayMsg('✓ eBay connected successfully')
+    if (amazon === 'error') setEbayMsg(msg ? `Amazon error: ${decodeURIComponent(msg)}` : 'Amazon connection failed')
+    if (amazon === 'connected') setEbayMsg('✓ Amazon Seller account connected')
   }, [])
 
 
@@ -93,6 +106,15 @@ export default function Dashboard() {
     } catch { /* ignore */ }
   }, [])
 
+  const loadAmazon = useCallback(async () => {
+    try {
+      const res = await fetch('/api/amazon/credentials')
+      const data = await res.json()
+      setAmazonConnected(!!data.connected)
+      if (data.sellingPartnerId) setAmazonSellerId(data.sellingPartnerId)
+    } catch { /* ignore */ }
+  }, [])
+
   const saveNiche = async (value: string) => {
     setNicheSaving(true)
     setNiche(value)
@@ -113,8 +135,9 @@ export default function Dashboard() {
       loadCreds()
       fetchOrders()
       loadNiche()
+      loadAmazon()
     }
-  }, [status, fetchOrders, loadCreds, loadNiche])
+  }, [status, fetchOrders, loadCreds, loadNiche, loadAmazon])
 
   const grossRevenue = orders.reduce((s, o) => s + parseFloat(o.pricingSummary?.total?.value || '0'), 0)
 
@@ -466,7 +489,12 @@ export default function Dashboard() {
                     { title: 'Auto Lister', file: 'auto-lister.js', desc: 'Bulk-creates new eBay listings from a product data source automatically.', badge: 'Automation' },
                     { title: 'Update Descriptions', file: 'update-descriptions.js', desc: 'Rewrites and improves item descriptions across all active listings.', badge: 'SEO' },
                     { title: 'Sync Amazon Costs', file: 'sync-amazon-costs.js', desc: 'Updates cost-of-goods from Amazon pricing to keep margins accurate.', badge: 'Finance' },
-                  ].map(s => (
+                  ].map(s => {
+                    const isRunning = scriptRunning === s.file
+                    const isDone = scriptMsg?.startsWith(s.file + ':')
+                    const msg = isDone ? scriptMsg!.slice(s.file.length + 1) : null
+                    const isProductFinder = s.file === 'product-finder.js'
+                    return (
                     <div key={s.file} className="card" style={{ padding: '28px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                         <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 600, color: 'var(--txt)' }}>{s.title}</div>
@@ -474,9 +502,30 @@ export default function Dashboard() {
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--dim)', marginBottom: '8px', fontFamily: 'monospace', opacity: 0.7 }}>{s.file}</div>
                       <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '22px', lineHeight: 1.6 }}>{s.desc}</div>
-                      <button className="btn btn-gold btn-sm" style={{ width: '100%' }}>Run Script</button>
+                      {msg && <div style={{ marginBottom: '12px', fontSize: '12px', color: msg.startsWith('✓') ? 'var(--grn)' : msg.startsWith('✗') ? 'var(--red)' : 'var(--gold)', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(195,158,88,0.12)' }}>{msg}</div>}
+                      <button
+                        className="btn btn-gold btn-sm"
+                        style={{ width: '100%' }}
+                        disabled={isRunning}
+                        onClick={async () => {
+                          if (isProductFinder) { setTab('product'); return }
+                          setScriptRunning(s.file)
+                          setScriptMsg(null)
+                          try {
+                            const res = await fetch(`/api/scripts/run?script=${s.file}`)
+                            const data = await res.json()
+                            setScriptMsg(`${s.file}:${data.message || data.error || 'Done'}`)
+                          } catch {
+                            setScriptMsg(`${s.file}:✗ Failed to run`)
+                          }
+                          setScriptRunning(null)
+                        }}
+                      >
+                        {isRunning ? 'Running…' : isProductFinder ? 'Open Product Finder →' : 'Run Script'}
+                      </button>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             </div>
@@ -513,31 +562,45 @@ export default function Dashboard() {
                 {/* Orders reference list */}
                 {orders.length > 0 && !asinResult && (
                   <div className="card" style={{ padding: '20px 24px', marginBottom: '20px' }}>
-                    <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '14px' }}>Your eBay Orders — click to prefill search</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '260px', overflowY: 'auto' }}>
-                      {orders.map(o => (
-                        <button
-                          key={o.orderId}
-                          onClick={() => setAsinInput('')}
-                          style={{
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            padding: '10px 14px', borderRadius: '8px', cursor: 'pointer',
-                            background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(195,158,88,0.08)',
-                            textAlign: 'left', width: '100%', fontFamily: 'inherit',
-                            transition: 'background 0.15s',
-                          }}
-                        >
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {o.lineItems?.[0]?.title?.slice(0, 70) || o.orderId}
+                    <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '14px' }}>Your eBay Orders — click to prefill ASIN search</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '300px', overflowY: 'auto' }}>
+                      {orders.map(o => {
+                        const item = o.lineItems?.[0]
+                        const sku = item?.sku || ''
+                        const itemId = item?.legacyItemId || ''
+                        const isAsin = /^[A-Z0-9]{10}$/.test(sku)
+                        const prefillValue = isAsin ? sku : ''
+                        return (
+                          <button
+                            key={o.orderId}
+                            onClick={() => { setAsinInput(prefillValue); setAsinResult(null); setAsinError(null) }}
+                            style={{
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                              padding: '10px 14px', borderRadius: '8px', cursor: 'pointer',
+                              background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(195,158,88,0.08)',
+                              textAlign: 'left', width: '100%', fontFamily: 'inherit',
+                              transition: 'background 0.15s',
+                            }}
+                          >
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {item?.title?.slice(0, 65) || o.orderId}
+                              </div>
+                              <div style={{ fontSize: '10px', color: 'var(--dim)', marginTop: '3px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                <span>{o.buyer?.username} · {new Date(o.creationDate).toLocaleDateString()}</span>
+                                {itemId && <span style={{ fontFamily: 'monospace', color: 'rgba(200,162,80,0.6)' }}>Item #{itemId}</span>}
+                                {sku && <span style={{ fontFamily: 'monospace', color: isAsin ? 'var(--gold)' : 'rgba(200,162,80,0.45)' }}>SKU: {sku}{isAsin ? ' ↗' : ''}</span>}
+                              </div>
                             </div>
-                            <div style={{ fontSize: '10px', color: 'var(--dim)', marginTop: '2px' }}>{o.buyer?.username} · {new Date(o.creationDate).toLocaleDateString()}</div>
-                          </div>
-                          <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, color: 'var(--gld2)', fontSize: '12px', marginLeft: '16px', flexShrink: 0 }}>
-                            ${parseFloat(o.pricingSummary?.total?.value || '0').toFixed(2)}
-                          </div>
-                        </button>
-                      ))}
+                            <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, color: 'var(--gld2)', fontSize: '12px', marginLeft: '16px', flexShrink: 0 }}>
+                              ${parseFloat(o.pricingSummary?.total?.value || '0').toFixed(2)}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--dim)', opacity: 0.7 }}>
+                      Orders with an ASIN-format SKU (highlighted gold) will auto-fill the search box.
                     </div>
                   </div>
                 )}
@@ -710,25 +773,92 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                {/* Once niche is selected - product research tools */}
+                {/* Once niche is selected */}
                 {niche && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '18px' }}>
-                    {[
-                      { title: 'Product Finder', desc: `Find the top selling products in ${niche} right now. Ranked by demand, margin, and competition.`, badge: 'Research', action: 'Find Products' },
-                      { title: 'ASIN Lookup', desc: 'Cross-reference any Amazon product to calculate your exact profit margin before listing.', badge: 'Pricing', action: 'Go to ASIN Tab', onClick: () => setTab('asin') },
-                      { title: 'Optimize Titles', desc: `Rewrite your ${niche} listing titles with high-search keywords to increase visibility.`, badge: 'SEO', action: 'Run Script' },
-                      { title: 'Delete Low ROI', desc: `Identify which of your ${niche} listings are unprofitable and remove them automatically.`, badge: 'Cleanup', action: 'Run Script' },
-                    ].map(s => (
-                      <div key={s.title} className="card" style={{ padding: '28px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                          <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 600, color: 'var(--txt)' }}>{s.title}</div>
-                          <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '8px', fontWeight: 700, letterSpacing: '0.06em', background: 'rgba(200,162,80,0.08)', color: 'var(--gold)', border: '1px solid rgba(200,162,80,0.2)' }}>{s.badge}</span>
-                        </div>
-                        <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '22px', lineHeight: 1.6 }}>{s.desc}</div>
-                        <button className="btn btn-gold btn-sm" style={{ width: '100%' }} onClick={s.onClick}>{s.action}</button>
+                  <>
+                    {/* Quick actions row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '14px', marginBottom: '24px' }}>
+                      <button
+                        className="btn btn-gold"
+                        disabled={finderLoading}
+                        onClick={async () => {
+                          setFinderLoading(true)
+                          setFinderError(null)
+                          setFinderResults(null)
+                          try {
+                            const res = await fetch(`/api/scripts/product-finder?niche=${encodeURIComponent(niche)}`)
+                            const data = await res.json()
+                            if (data.error) { setFinderError(data.error); return }
+                            setFinderResults(data.results || [])
+                          } catch { setFinderError('Search failed — try again') }
+                          finally { setFinderLoading(false) }
+                        }}
+                        style={{ padding: '14px', fontSize: '13px' }}
+                      >
+                        {finderLoading ? '🔍 Scanning Amazon…' : '🔍 Find Products'}
+                      </button>
+                      <button className="btn btn-ghost" onClick={() => setTab('asin')} style={{ padding: '14px', fontSize: '13px' }}>
+                        ASIN Lookup →
+                      </button>
+                      <button className="btn btn-ghost" onClick={() => setTab('scripts')} style={{ padding: '14px', fontSize: '13px' }}>
+                        Run Scripts →
+                      </button>
+                    </div>
+
+                    {finderError && (
+                      <div style={{ marginBottom: '20px', padding: '12px 16px', borderRadius: '10px', background: 'rgba(232,63,80,0.08)', border: '1px solid rgba(232,63,80,0.2)', fontSize: '13px', color: 'var(--red)' }}>{finderError}</div>
+                    )}
+
+                    {finderLoading && (
+                      <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '13px', color: 'var(--dim)', marginBottom: '8px' }}>Scanning Amazon for profitable {niche} products…</div>
+                        <div style={{ fontSize: '11px', color: 'var(--dim)', opacity: 0.6 }}>Checking prices, margins, and availability. This takes ~15 seconds.</div>
                       </div>
-                    ))}
-                  </div>
+                    )}
+
+                    {finderResults && finderResults.length === 0 && (
+                      <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '13px', color: 'var(--dim)' }}>No products met the profit criteria for {niche}. Try a different niche or lower your filters.</div>
+                      </div>
+                    )}
+
+                    {finderResults && finderResults.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.24em', color: 'var(--dim)', marginBottom: '16px' }}>
+                          {finderResults.length} Profitable Products Found · {niche}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {finderResults.map(p => (
+                            <div key={p.asin} className="card" style={{ padding: '20px 24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                              {p.imageUrl && <img src={p.imageUrl} alt={p.title} style={{ width: '60px', height: '60px', objectFit: 'contain', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', flexShrink: 0 }} />}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--txt)', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+                                <div style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--dim)', marginBottom: '6px' }}>{p.asin}</div>
+                                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: '11px', color: 'var(--sil)' }}>Amazon: <b style={{ color: 'var(--txt)' }}>${p.amazonPrice.toFixed(2)}</b></span>
+                                  <span style={{ fontSize: '11px', color: 'var(--sil)' }}>List at: <b style={{ color: 'var(--gld2)' }}>${p.ebayPrice.toFixed(2)}</b></span>
+                                  <span style={{ fontSize: '11px', color: 'var(--sil)' }}>Profit: <b style={{ color: 'var(--grn)' }}>${p.profit.toFixed(2)}</b></span>
+                                  <span style={{ fontSize: '11px', color: 'var(--sil)' }}>ROI: <b style={{ color: 'var(--grn)' }}>{p.roi}%</b></span>
+                                  <span style={{ fontSize: '9px', padding: '2px 8px', borderRadius: '20px', fontWeight: 700,
+                                    background: p.risk === 'LOW' ? 'rgba(46,207,118,0.10)' : p.risk === 'MEDIUM' ? 'rgba(200,162,80,0.10)' : 'rgba(232,63,80,0.10)',
+                                    color: p.risk === 'LOW' ? 'var(--grn)' : p.risk === 'MEDIUM' ? 'var(--gold)' : 'var(--red)',
+                                    border: `1px solid ${p.risk === 'LOW' ? 'rgba(46,207,118,0.25)' : p.risk === 'MEDIUM' ? 'rgba(200,162,80,0.25)' : 'rgba(232,63,80,0.25)'}`,
+                                  }}>{p.risk} RISK</span>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => { setAsinInput(p.asin); setTab('asin') }}
+                                className="btn btn-gold btn-sm"
+                                style={{ flexShrink: 0, fontSize: '11px' }}
+                              >
+                                Analyze →
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -774,9 +904,36 @@ export default function Dashboard() {
                   )}
                 </div>
 
+                {/* Amazon connect card */}
+                <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
+                  {amazonConnected ? (
+                    <>
+                      <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(46,207,118,0.12)', border: '1px solid rgba(46,207,118,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px', fontSize: '24px' }}>✓</div>
+                      <div style={{ fontFamily: 'var(--serif)', fontSize: '24px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px' }}>Amazon Connected</div>
+                      <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '8px', lineHeight: 1.7 }}>Your Amazon Seller account is linked. ASIN lookups now use your live catalog.</div>
+                      {amazonSellerId && <div style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--dim)', marginBottom: '24px' }}>Seller ID: {amazonSellerId}</div>}
+                      <a href="/api/amazon/connect" className="btn btn-ghost" style={{ fontSize: '12px' }}>Reconnect Amazon</a>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(200,162,80,0.10)', border: '1px solid rgba(200,162,80,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px', fontSize: '26px' }}>🔗</div>
+                      <div style={{ fontFamily: 'var(--serif)', fontSize: '24px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px' }}>Connect Amazon Seller Account</div>
+                      <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '28px', lineHeight: 1.7 }}>
+                        Link your Amazon Seller account to sync inventory, pull live ASIN data, and keep your cost-of-goods accurate automatically.
+                      </div>
+                      <a href="/api/amazon/connect" className="btn btn-solid" style={{ padding: '14px 36px', fontSize: '14px', display: 'inline-flex' }}>
+                        Connect Amazon Account
+                      </a>
+                      <div style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '16px' }}>
+                        You&apos;ll be redirected to Amazon Seller Central to authorize access. We never store your Amazon password.
+                      </div>
+                    </>
+                  )}
+                </div>
+
                 {niche && (
                   <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(200,162,80,0.06)', border: '1px solid rgba(200,162,80,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ fontSize: '13px', color: 'var(--sil)' }}>Active niche: <span style={{ color: 'var(--gold)', fontWeight: 600 }}>{niche}</span></div>
+                    <div style={{ fontSize: '13px', color: 'var(--sil)' }}>Active niche: <span style={{ color: 'var(--gold)', fontWeight: 600 }}>{niche}</span>{nicheSaved && <span style={{ color: 'var(--grn)', marginLeft: '8px', fontSize: '11px' }}>✓ Saved</span>}</div>
                     <button onClick={() => setTab('product')} className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }}>Manage →</button>
                   </div>
                 )}

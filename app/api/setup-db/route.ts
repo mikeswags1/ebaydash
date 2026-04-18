@@ -26,6 +26,17 @@ export async function GET() {
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `
+    await sql`
+      CREATE TABLE IF NOT EXISTS amazon_credentials (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        selling_partner_id VARCHAR(255),
+        access_token TEXT,
+        refresh_token TEXT,
+        token_expires_at TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `
     // Allow Google OAuth users (no password)
     await sql`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`.catch(() => {})
     // Add missing columns if they don't exist
