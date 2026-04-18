@@ -3,7 +3,7 @@ import { useSession, signOut } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
 
-type Tab = 'overview' | 'orders' | 'financials' | 'scripts' | 'asin' | 'settings'
+type Tab = 'overview' | 'orders' | 'financials' | 'scripts' | 'asin' | 'product' | 'settings'
 
 interface AsinResult {
   asin: string
@@ -132,6 +132,7 @@ export default function Dashboard() {
     { id: 'financials', label: 'Financials', icon: '📊' },
     { id: 'scripts', label: 'Scripts', icon: '⚡' },
     { id: 'asin', label: 'ASIN Lookup', icon: '🔍' },
+    { id: 'product', label: 'Product Listing', icon: '🛍️' },
     { id: 'settings', label: 'eBay Settings', icon: '🔗' },
   ]
 
@@ -509,6 +510,38 @@ export default function Dashboard() {
                   {asinError && <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--red)' }}>{asinError}</div>}
                 </div>
 
+                {/* Orders reference list */}
+                {orders.length > 0 && !asinResult && (
+                  <div className="card" style={{ padding: '20px 24px', marginBottom: '20px' }}>
+                    <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '14px' }}>Your eBay Orders — click to prefill search</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '260px', overflowY: 'auto' }}>
+                      {orders.map(o => (
+                        <button
+                          key={o.orderId}
+                          onClick={() => setAsinInput('')}
+                          style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            padding: '10px 14px', borderRadius: '8px', cursor: 'pointer',
+                            background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(195,158,88,0.08)',
+                            textAlign: 'left', width: '100%', fontFamily: 'inherit',
+                            transition: 'background 0.15s',
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {o.lineItems?.[0]?.title?.slice(0, 70) || o.orderId}
+                            </div>
+                            <div style={{ fontSize: '10px', color: 'var(--dim)', marginTop: '2px' }}>{o.buyer?.username} · {new Date(o.creationDate).toLocaleDateString()}</div>
+                          </div>
+                          <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, color: 'var(--gld2)', fontSize: '12px', marginLeft: '16px', flexShrink: 0 }}>
+                            ${parseFloat(o.pricingSummary?.total?.value || '0').toFixed(2)}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Result */}
                 {asinResult && (
                   <>
@@ -612,6 +645,95 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* ── PRODUCT LISTING ── */}
+          {tab === 'product' && (
+            <div style={{ animation: 'fadein 0.22s ease' }}>
+              <div style={{ padding: '56px 52px 40px' }}>
+                <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.32em', color: 'var(--gold)', marginBottom: '14px', opacity: 0.85 }}>EbayDash · Strategy</div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: '68px', fontWeight: 600, color: 'var(--txt)', lineHeight: 0.92, letterSpacing: '-0.015em', textShadow: '0 4px 80px rgba(200,162,80,0.18)' }}>Product Listing</div>
+              </div>
+
+              <div style={{ padding: '0 44px 44px' }}>
+                {/* Current niche banner */}
+                {niche && (
+                  <div style={{ marginBottom: '24px', padding: '16px 24px', borderRadius: '14px', background: 'linear-gradient(135deg,rgba(200,162,80,0.10),rgba(220,185,100,0.04))', border: '1px solid rgba(200,162,80,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '4px' }}>Active Niche</div>
+                      <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 600, color: 'var(--gld2)' }}>{niche}</div>
+                    </div>
+                    <button onClick={() => setNiche(null)} className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }}>Change Niche</button>
+                  </div>
+                )}
+
+                {/* Niche selector */}
+                {!niche && (
+                  <div className="card" style={{ padding: '36px', marginBottom: '24px' }}>
+                    <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px' }}>Choose Your Niche</div>
+                    <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '28px', lineHeight: 1.6 }}>
+                      Pick the category you want to sell in. This focuses your product research and scripts on the most profitable items for your store.
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px' }}>
+                      {[
+                        { group: 'Electronics', icon: '⚡', items: ['Phone Accessories', 'Computer Parts', 'Audio & Headphones', 'Smart Home Devices', 'Gaming Gear'] },
+                        { group: 'Home', icon: '🏠', items: ['Kitchen Gadgets', 'Home Decor', 'Furniture & Lighting', 'Cleaning Supplies', 'Storage & Organization'] },
+                        { group: 'Outdoors', icon: '🌲', items: ['Camping & Hiking', 'Garden & Tools', 'Sporting Goods', 'Fishing & Hunting', 'Cycling'] },
+                        { group: 'Health', icon: '💪', items: ['Fitness Equipment', 'Personal Care', 'Supplements & Vitamins', 'Medical Supplies', 'Mental Wellness'] },
+                        { group: 'Automotive', icon: '🚗', items: ['Car Parts', 'Car Accessories', 'Motorcycle Gear', 'Truck & Towing', 'Car Care'] },
+                        { group: 'Lifestyle', icon: '✨', items: ['Pet Supplies', 'Baby & Kids', 'Toys & Games', 'Clothing & Accessories', 'Jewelry & Watches'] },
+                        { group: 'Business', icon: '💼', items: ['Office Supplies', 'Industrial Equipment', 'Safety Gear', 'Janitorial & Cleaning', 'Packaging Materials'] },
+                        { group: 'Collectibles', icon: '🎴', items: ['Trading Cards', 'Vintage & Antiques', 'Coins & Currency', 'Comics & Manga', 'Sports Memorabilia'] },
+                      ].map(group => (
+                        <div key={group.group}>
+                          <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>{group.icon}</span>{group.group}
+                          </div>
+                          {group.items.map(item => (
+                            <button
+                              key={item}
+                              onClick={() => saveNiche(item)}
+                              disabled={nicheSaving}
+                              style={{
+                                display: 'block', width: '100%', textAlign: 'left',
+                                padding: '8px 12px', marginBottom: '4px', borderRadius: '8px',
+                                fontSize: '12px', fontFamily: 'inherit', cursor: 'pointer',
+                                border: '1px solid rgba(195,158,88,0.10)',
+                                background: 'rgba(255,255,255,0.02)',
+                                color: 'var(--sil)', transition: 'all 0.15s',
+                              }}
+                            >
+                              {item}
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Once niche is selected - product research tools */}
+                {niche && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '18px' }}>
+                    {[
+                      { title: 'Product Finder', desc: `Find the top selling products in ${niche} right now. Ranked by demand, margin, and competition.`, badge: 'Research', action: 'Find Products' },
+                      { title: 'ASIN Lookup', desc: 'Cross-reference any Amazon product to calculate your exact profit margin before listing.', badge: 'Pricing', action: 'Go to ASIN Tab', onClick: () => setTab('asin') },
+                      { title: 'Optimize Titles', desc: `Rewrite your ${niche} listing titles with high-search keywords to increase visibility.`, badge: 'SEO', action: 'Run Script' },
+                      { title: 'Delete Low ROI', desc: `Identify which of your ${niche} listings are unprofitable and remove them automatically.`, badge: 'Cleanup', action: 'Run Script' },
+                    ].map(s => (
+                      <div key={s.title} className="card" style={{ padding: '28px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                          <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 600, color: 'var(--txt)' }}>{s.title}</div>
+                          <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '8px', fontWeight: 700, letterSpacing: '0.06em', background: 'rgba(200,162,80,0.08)', color: 'var(--gold)', border: '1px solid rgba(200,162,80,0.2)' }}>{s.badge}</span>
+                        </div>
+                        <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '22px', lineHeight: 1.6 }}>{s.desc}</div>
+                        <button className="btn btn-gold btn-sm" style={{ width: '100%' }} onClick={s.onClick}>{s.action}</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ── SETTINGS ── */}
           {tab === 'settings' && (
             <div style={{ animation: 'fadein 0.22s ease' }}>
@@ -652,57 +774,12 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                {/* Niche selector card */}
-                <div className="card" style={{ padding: '36px' }}>
-                  <div style={{ marginBottom: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 600, color: 'var(--txt)', marginBottom: '6px' }}>Store Niche</div>
-                      <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.6 }}>
-                        Your niche focuses the Product Finder and scripts on the most relevant items for your store.
-                      </div>
-                    </div>
-                    {nicheSaved && (
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--grn)', letterSpacing: '0.06em' }}>Saved ✓</span>
-                    )}
+                {niche && (
+                  <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(200,162,80,0.06)', border: '1px solid rgba(200,162,80,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '13px', color: 'var(--sil)' }}>Active niche: <span style={{ color: 'var(--gold)', fontWeight: 600 }}>{niche}</span></div>
+                    <button onClick={() => setTab('product')} className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }}>Manage →</button>
                   </div>
-
-                  <div style={{ marginTop: '24px', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px' }}>
-                    {[
-                      { group: 'Electronics', items: ['Phone Accessories', 'Computer Parts', 'Audio & Headphones', 'Smart Home Devices', 'Gaming Gear'] },
-                      { group: 'Home', items: ['Kitchen Gadgets', 'Home Decor', 'Furniture & Lighting', 'Cleaning Supplies', 'Storage & Organization'] },
-                      { group: 'Outdoors', items: ['Camping & Hiking', 'Garden & Tools', 'Sporting Goods', 'Fishing & Hunting', 'Cycling'] },
-                      { group: 'Health', items: ['Fitness Equipment', 'Personal Care', 'Supplements & Vitamins', 'Medical Supplies', 'Mental Wellness'] },
-                      { group: 'Automotive', items: ['Car Parts', 'Car Accessories', 'Motorcycle Gear', 'Truck & Towing', 'Car Care'] },
-                      { group: 'Lifestyle', items: ['Pet Supplies', 'Baby & Kids', 'Toys & Games', 'Clothing & Accessories', 'Jewelry & Watches'] },
-                      { group: 'Business', items: ['Office Supplies', 'Industrial Equipment', 'Safety Gear', 'Janitorial & Cleaning', 'Packaging Materials'] },
-                      { group: 'Collectibles', items: ['Trading Cards', 'Vintage & Antiques', 'Coins & Currency', 'Comics & Manga', 'Sports Memorabilia'] },
-                    ].map(group => (
-                      <div key={group.group}>
-                        <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '6px', paddingLeft: '4px' }}>{group.group}</div>
-                        {group.items.map(item => (
-                          <button
-                            key={item}
-                            onClick={() => saveNiche(item)}
-                            disabled={nicheSaving}
-                            style={{
-                              display: 'block', width: '100%', textAlign: 'left',
-                              padding: '8px 12px', marginBottom: '4px', borderRadius: '8px',
-                              fontSize: '12px', fontFamily: 'inherit', cursor: 'pointer',
-                              border: niche === item ? '1px solid rgba(200,162,80,0.40)' : '1px solid rgba(195,158,88,0.10)',
-                              background: niche === item ? 'linear-gradient(135deg,rgba(200,162,80,0.16),rgba(220,185,100,0.06))' : 'rgba(255,255,255,0.02)',
-                              color: niche === item ? 'var(--gld2)' : 'var(--sil)',
-                              fontWeight: niche === item ? 600 : 400,
-                              transition: 'all 0.15s',
-                            }}
-                          >
-                            {niche === item && <span style={{ marginRight: '6px', fontSize: '10px' }}>◆</span>}
-                            {item}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                )}
 
               </div>
             </div>
