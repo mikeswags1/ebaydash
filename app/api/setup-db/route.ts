@@ -21,6 +21,7 @@ export async function GET() {
         dev_id VARCHAR(500),
         oauth_token TEXT,
         refresh_token TEXT,
+        token_expires_at TIMESTAMP,
         sandbox_mode BOOLEAN DEFAULT false,
         updated_at TIMESTAMP DEFAULT NOW()
       )

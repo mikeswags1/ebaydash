@@ -15,13 +15,6 @@ interface EbayOrder {
   creationDate: string
 }
 
-interface Creds {
-  app_id: string
-  cert_id: string
-  dev_id: string
-  oauth_token: string
-  sandbox_mode: boolean
-}
 
 export default function Dashboard() {
   const { data: session, status } = useSession()
@@ -36,10 +29,6 @@ export default function Dashboard() {
   const [aiResponse, setAiResponse] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
 
-  // Settings form state
-  const [creds, setCreds] = useState<Creds>({ app_id: '', cert_id: '', dev_id: '', oauth_token: '', sandbox_mode: false })
-  const [savingCreds, setSavingCreds] = useState(false)
-  const [credsSaved, setCredsSaved] = useState(false)
 
   useEffect(() => {
     if (status === 'unauthenticated') router.replace('/login')
@@ -67,7 +56,6 @@ export default function Dashboard() {
       const res = await fetch('/api/ebay/credentials')
       const data = await res.json()
       if (data.credentials) {
-        setCreds(prev => ({ ...prev, ...data.credentials, oauth_token: prev.oauth_token }))
         setConnected(!!data.credentials.has_token)
       }
     } catch { /* ignore */ }
@@ -79,20 +67,6 @@ export default function Dashboard() {
       fetchOrders()
     }
   }, [status, fetchOrders, loadCreds])
-
-  async function saveCreds(e: React.FormEvent) {
-    e.preventDefault()
-    setSavingCreds(true)
-    await fetch('/api/ebay/credentials', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(creds),
-    })
-    setSavingCreds(false)
-    setCredsSaved(true)
-    setTimeout(() => setCredsSaved(false), 3000)
-    fetchOrders()
-  }
 
   const grossRevenue = orders.reduce((s, o) => s + parseFloat(o.pricingSummary?.total?.value || '0'), 0)
 
@@ -439,84 +413,38 @@ export default function Dashboard() {
             <div style={{ animation: 'fadein 0.22s ease' }}>
               <div style={{ padding: '56px 52px 40px' }}>
                 <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.32em', color: 'var(--gold)', marginBottom: '14px', opacity: 0.85 }}>EbayDash · Configuration</div>
-                <div style={{ fontFamily: 'var(--serif)', fontSize: '68px', fontWeight: 600, color: 'var(--txt)', lineHeight: 0.92, letterSpacing: '-0.015em', textShadow: '0 4px 80px rgba(200,162,80,0.18)' }}>eBay Settings</div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: '68px', fontWeight: 600, color: 'var(--txt)', lineHeight: 0.92, letterSpacing: '-0.015em', textShadow: '0 4px 80px rgba(200,162,80,0.18)' }}>eBay Account</div>
               </div>
 
-              <div style={{ padding: '0 44px 44px', maxWidth: '780px' }}>
-
-                {/* Instructions */}
-                <div className="card" style={{ padding: '28px 32px', marginBottom: '24px' }}>
-                  <div style={{ fontFamily: 'var(--serif)', fontSize: '18px', fontWeight: 600, color: 'var(--txt)', marginBottom: '12px' }}>How to get your eBay API credentials</div>
-                  <ol style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 2, paddingLeft: '18px' }}>
-                    <li>Go to <strong style={{ color: 'var(--gold)' }}>developer.ebay.com</strong> and sign in with your eBay account</li>
-                    <li>Navigate to <strong style={{ color: 'var(--plat)' }}>My Account → Application Keys</strong></li>
-                    <li>Copy your <strong style={{ color: 'var(--plat)' }}>App ID (Client ID)</strong>, <strong style={{ color: 'var(--plat)' }}>Cert ID (Client Secret)</strong>, and <strong style={{ color: 'var(--plat)' }}>Dev ID</strong></li>
-                    <li>For the <strong style={{ color: 'var(--plat)' }}>OAuth Token</strong>: go to <strong style={{ color: 'var(--gold)' }}>developer.ebay.com/my/auth</strong>, generate a User Token for the <strong style={{ color: 'var(--plat)' }}>sell.fulfillment</strong> scope and paste it below</li>
-                  </ol>
+              <div style={{ padding: '0 44px 44px', maxWidth: '640px' }}>
+                <div className="card" style={{ padding: '44px', textAlign: 'center' }}>
+                  {connected ? (
+                    <>
+                      <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(46,207,118,0.12)', border: '1px solid rgba(46,207,118,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: '28px' }}>✓</div>
+                      <div style={{ fontFamily: 'var(--serif)', fontSize: '28px', fontWeight: 600, color: 'var(--txt)', marginBottom: '10px' }}>eBay Connected</div>
+                      <div style={{ fontSize: '14px', color: 'var(--sil)', marginBottom: '32px', lineHeight: 1.7 }}>Your eBay account is linked. Orders and data sync automatically.</div>
+                      <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                        <button onClick={fetchOrders} className="btn btn-gold">↻ Sync Now</button>
+                        <a href="/api/ebay/connect" className="btn btn-ghost" style={{ fontSize: '12px' }}>Reconnect eBay</a>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(200,162,80,0.10)', border: '1px solid rgba(200,162,80,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: '28px' }}>🔗</div>
+                      <div style={{ fontFamily: 'var(--serif)', fontSize: '28px', fontWeight: 600, color: 'var(--txt)', marginBottom: '10px' }}>Connect Your eBay Account</div>
+                      <div style={{ fontSize: '14px', color: 'var(--sil)', marginBottom: '32px', lineHeight: 1.7 }}>
+                        Click the button below and log in with your eBay account.<br />
+                        Your orders will sync instantly — no setup required.
+                      </div>
+                      <a href="/api/ebay/connect" className="btn btn-solid" style={{ padding: '16px 40px', fontSize: '14px', display: 'inline-flex' }}>
+                        Connect eBay Account
+                      </a>
+                      <div style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '20px' }}>
+                        You&apos;ll be redirected to eBay to authorize access. We never store your eBay password.
+                      </div>
+                    </>
+                  )}
                 </div>
-
-                {/* Credentials Form */}
-                <form onSubmit={saveCreds}>
-                  <div className="card" style={{ padding: '32px' }}>
-                    <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 600, color: 'var(--txt)', marginBottom: '26px' }}>API Credentials</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>App ID (Client ID)</label>
-                        <input value={creds.app_id} onChange={e => setCreds(p => ({ ...p, app_id: e.target.value }))} placeholder="YourApp-12345-Production-abc..." />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>Cert ID (Client Secret)</label>
-                        <input value={creds.cert_id} onChange={e => setCreds(p => ({ ...p, cert_id: e.target.value }))} placeholder="PRD-abc123..." />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>Dev ID</label>
-                        <input value={creds.dev_id} onChange={e => setCreds(p => ({ ...p, dev_id: e.target.value }))} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>
-                          OAuth User Token <span style={{ color: 'var(--red)' }}>*</span>
-                        </label>
-                        <textarea
-                          value={creds.oauth_token}
-                          onChange={e => setCreds(p => ({ ...p, oauth_token: e.target.value }))}
-                          placeholder="v^1.1#i^1#r^1#p^3#I^3#f^0#t^H4sIAAAAAAAA..."
-                          style={{ minHeight: '90px', fontFamily: 'monospace', fontSize: '12px' }}
-                        />
-                        <div style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '6px' }}>Required for fetching your orders. Keep this private.</div>
-                      </div>
-
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', padding: '14px 18px', borderRadius: '12px', border: '1px solid var(--bdr)', background: 'rgba(10,8,4,0.4)' }}>
-                        <input
-                          type="checkbox"
-                          checked={creds.sandbox_mode}
-                          onChange={e => setCreds(p => ({ ...p, sandbox_mode: e.target.checked }))}
-                          style={{ width: '16px', height: '16px', flexShrink: 0, accentColor: 'var(--gold)' }}
-                        />
-                        <div>
-                          <div style={{ fontSize: '13px', color: 'var(--txt)', fontWeight: 500 }}>Sandbox Mode</div>
-                          <div style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '2px' }}>Use eBay sandbox environment for testing</div>
-                        </div>
-                      </label>
-
-                      <div style={{ display: 'flex', gap: '12px', paddingTop: '8px' }}>
-                        <button type="submit" className="btn btn-solid" disabled={savingCreds} style={{ flex: 1 }}>
-                          {savingCreds ? 'Saving…' : credsSaved ? '✓ Saved!' : 'Save Credentials'}
-                        </button>
-                        {connected && (
-                          <button type="button" onClick={fetchOrders} className="btn btn-gold">
-                            Test Connection
-                          </button>
-                        )}
-                      </div>
-
-                      {credsSaved && (
-                        <div style={{ padding: '12px 16px', borderRadius: '10px', background: 'rgba(46,207,118,0.08)', border: '1px solid rgba(46,207,118,0.22)', fontSize: '13px', color: 'var(--grn)' }}>
-                          ✓ Credentials saved successfully. Your eBay account is now connected.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </form>
               </div>
             </div>
           )}
