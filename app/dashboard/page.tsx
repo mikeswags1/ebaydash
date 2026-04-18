@@ -3,7 +3,16 @@ import { useSession, signOut } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
 
-type Tab = 'overview' | 'orders' | 'financials' | 'scripts' | 'settings'
+type Tab = 'overview' | 'orders' | 'financials' | 'scripts' | 'asin' | 'settings'
+
+interface AsinResult {
+  asin: string
+  title: string
+  amazonPrice: number
+  imageUrl?: string
+  available: boolean
+  source: 'api' | 'manual'
+}
 
 interface EbayOrder {
   orderId: string
@@ -29,6 +38,12 @@ export default function Dashboard() {
   const [nicheSaving, setNicheSaving] = useState(false)
   const [nicheSaved, setNicheSaved] = useState(false)
   const [ebayMsg, setEbayMsg] = useState<string | null>(null)
+  const [asinInput, setAsinInput] = useState('')
+  const [asinResult, setAsinResult] = useState<AsinResult | null>(null)
+  const [asinLoading, setAsinLoading] = useState(false)
+  const [asinError, setAsinError] = useState<string | null>(null)
+  const [ebayPrice, setEbayPrice] = useState('')
+  const [shippingCost, setShippingCost] = useState('5.00')
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -116,8 +131,31 @@ export default function Dashboard() {
     { id: 'orders', label: 'Orders', icon: '📦' },
     { id: 'financials', label: 'Financials', icon: '📊' },
     { id: 'scripts', label: 'Scripts', icon: '⚡' },
+    { id: 'asin', label: 'ASIN Lookup', icon: '🔍' },
     { id: 'settings', label: 'eBay Settings', icon: '🔗' },
   ]
+
+  const EBAY_FEE_RATE = 0.1325
+  const lookupAsin = async () => {
+    if (!asinInput.trim()) return
+    setAsinLoading(true)
+    setAsinError(null)
+    setAsinResult(null)
+    try {
+      const res = await fetch(`/api/amazon/lookup?asin=${asinInput.trim()}`)
+      const data = await res.json()
+      if (data.error) { setAsinError(data.error); return }
+      setAsinResult(data)
+      if (data.amazonPrice) setEbayPrice((data.amazonPrice * 1.3).toFixed(2))
+    } catch { setAsinError('Lookup failed') }
+    finally { setAsinLoading(false) }
+  }
+  const ep = parseFloat(ebayPrice) || 0
+  const ac = asinResult?.amazonPrice || 0
+  const sc = parseFloat(shippingCost) || 0
+  const ebayFee = ep * EBAY_FEE_RATE
+  const profit = ep - ac - ebayFee - sc
+  const margin = ep > 0 ? (profit / ep) * 100 : 0
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', position: 'relative', zIndex: 1 }}>
@@ -439,6 +477,137 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── ASIN LOOKUP ── */}
+          {tab === 'asin' && (
+            <div style={{ animation: 'fadein 0.22s ease' }}>
+              <div style={{ padding: '56px 52px 40px' }}>
+                <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.32em', color: 'var(--gold)', marginBottom: '14px', opacity: 0.85 }}>EbayDash · Research</div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: '68px', fontWeight: 600, color: 'var(--txt)', lineHeight: 0.92, letterSpacing: '-0.015em', textShadow: '0 4px 80px rgba(200,162,80,0.18)' }}>ASIN Lookup</div>
+              </div>
+
+              <div style={{ padding: '0 44px 44px', maxWidth: '780px' }}>
+
+                {/* Search bar */}
+                <div className="card" style={{ padding: '28px 32px', marginBottom: '20px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '14px' }}>Enter Amazon ASIN</div>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <input
+                      value={asinInput}
+                      onChange={e => setAsinInput(e.target.value.toUpperCase().trim())}
+                      onKeyDown={e => e.key === 'Enter' && lookupAsin()}
+                      placeholder="e.g. B08N5WRWNW"
+                      style={{ flex: 1, fontFamily: 'monospace', fontSize: '14px', letterSpacing: '0.06em' }}
+                    />
+                    <button onClick={lookupAsin} className="btn btn-gold" disabled={asinLoading || !asinInput.trim()}>
+                      {asinLoading ? 'Looking up…' : 'Look Up'}
+                    </button>
+                  </div>
+                  {asinError && <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--red)' }}>{asinError}</div>}
+                </div>
+
+                {/* Result */}
+                {asinResult && (
+                  <>
+                    {/* Product info */}
+                    <div className="card" style={{ padding: '28px 32px', marginBottom: '20px', display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+                      {asinResult.imageUrl && (
+                        <img src={asinResult.imageUrl} alt={asinResult.title} style={{ width: '80px', height: '80px', objectFit: 'contain', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }} />
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px', lineHeight: 1.4 }}>{asinResult.title}</div>
+                        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <div>
+                            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '4px' }}>Amazon Price</div>
+                            <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '28px', fontWeight: 800, color: 'var(--gld2)', letterSpacing: '-0.03em' }}>${asinResult.amazonPrice.toFixed(2)}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '4px' }}>Availability</div>
+                            <div style={{ fontSize: '13px', fontWeight: 600, color: asinResult.available ? 'var(--grn)' : 'var(--red)' }}>
+                              {asinResult.available ? 'In Stock' : 'Out of Stock'}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '4px' }}>ASIN</div>
+                            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--sil)' }}>{asinResult.asin}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Profit calculator */}
+                    <div className="card" style={{ padding: '28px 32px' }}>
+                      <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 600, color: 'var(--txt)', marginBottom: '24px' }}>Profit Calculator</div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '28px' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--dim)', marginBottom: '8px' }}>Your eBay Listing Price</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: 'var(--gold)', fontSize: '16px', fontWeight: 700 }}>$</span>
+                            <input value={ebayPrice} onChange={e => setEbayPrice(e.target.value)} style={{ flex: 1 }} placeholder="0.00" />
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--dim)', marginBottom: '8px' }}>Shipping Cost</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: 'var(--gold)', fontSize: '16px', fontWeight: 700 }}>$</span>
+                            <input value={shippingCost} onChange={e => setShippingCost(e.target.value)} style={{ flex: 1 }} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Breakdown */}
+                      <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '14px', padding: '20px 24px', marginBottom: '20px' }}>
+                        {[
+                          { label: 'eBay Selling Price', value: `$${ep.toFixed(2)}`, color: 'var(--gld2)' },
+                          { label: 'Amazon Cost (COGS)', value: `-$${ac.toFixed(2)}`, color: 'var(--red)' },
+                          { label: `eBay Final Value Fee (13.25%)`, value: `-$${ebayFee.toFixed(2)}`, color: 'var(--red)' },
+                          { label: 'Shipping', value: `-$${sc.toFixed(2)}`, color: 'var(--red)' },
+                        ].map((row, i) => (
+                          <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: i < 3 ? '1px solid rgba(195,158,88,0.07)' : 'none' }}>
+                            <span style={{ fontSize: '13px', color: 'var(--sil)' }}>{row.label}</span>
+                            <span style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, fontSize: '13px', color: row.color }}>{row.value}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Net profit */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderRadius: '12px', background: profit > 0 ? 'rgba(46,207,118,0.08)' : 'rgba(232,63,80,0.08)', border: `1px solid ${profit > 0 ? 'rgba(46,207,118,0.2)' : 'rgba(232,63,80,0.2)'}` }}>
+                        <div>
+                          <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '4px' }}>Net Profit per Unit</div>
+                          <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '36px', fontWeight: 800, color: profit > 0 ? 'var(--grn)' : 'var(--red)', letterSpacing: '-0.04em', lineHeight: 1 }}>
+                            {profit >= 0 ? '+' : ''}{profit.toFixed(2)}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '4px' }}>Margin</div>
+                          <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '36px', fontWeight: 800, color: profit > 0 ? 'var(--grn)' : 'var(--red)', letterSpacing: '-0.04em', lineHeight: 1 }}>
+                            {margin.toFixed(1)}%
+                          </div>
+                        </div>
+                      </div>
+
+                      {profit > 0 && margin >= 15 && (
+                        <div style={{ marginTop: '14px', padding: '10px 16px', borderRadius: '8px', background: 'rgba(46,207,118,0.06)', border: '1px solid rgba(46,207,118,0.15)', fontSize: '12px', color: 'var(--grn)' }}>
+                          ✓ Good margin — worth listing. Suggested eBay price: ${ep.toFixed(2)}
+                        </div>
+                      )}
+                      {profit > 0 && margin < 15 && (
+                        <div style={{ marginTop: '14px', padding: '10px 16px', borderRadius: '8px', background: 'rgba(200,162,80,0.06)', border: '1px solid rgba(200,162,80,0.15)', fontSize: '12px', color: 'var(--gold)' }}>
+                          ⚠ Thin margin — consider raising your eBay price to ${(ac / (1 - EBAY_FEE_RATE - 0.15) + sc).toFixed(2)} for 15% margin
+                        </div>
+                      )}
+                      {profit <= 0 && (
+                        <div style={{ marginTop: '14px', padding: '10px 16px', borderRadius: '8px', background: 'rgba(232,63,80,0.06)', border: '1px solid rgba(232,63,80,0.15)', fontSize: '12px', color: 'var(--red)' }}>
+                          ✗ Not profitable at this price. Minimum break-even eBay price: ${((ac + sc) / (1 - EBAY_FEE_RATE)).toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
