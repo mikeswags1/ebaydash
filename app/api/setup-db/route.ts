@@ -28,8 +28,10 @@ export async function GET() {
     `
     // Allow Google OAuth users (no password)
     await sql`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`.catch(() => {})
-    // Add niche column for product targeting
+    // Add missing columns if they don't exist
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS niche VARCHAR(100)`.catch(() => {})
+    await sql`ALTER TABLE ebay_credentials ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMP`.catch(() => {})
+    await sql`ALTER TABLE ebay_credentials ADD COLUMN IF NOT EXISTS refresh_token TEXT`.catch(() => {})
     return NextResponse.json({ success: true, message: 'Database tables ready' })
   } catch (e) {
     console.error(e)
