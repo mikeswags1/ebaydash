@@ -10,6 +10,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard?ebay=error', req.url))
   }
 
+  // Guard: userId must be a valid integer
+  if (!userId || isNaN(parseInt(userId))) {
+    console.error('eBay callback: invalid userId in state param:', userId)
+    return NextResponse.redirect(new URL('/dashboard?ebay=error&msg=invalid_session', req.url))
+  }
+
   try {
     // Exchange code for access + refresh tokens
     const credentials = Buffer.from(
@@ -52,7 +58,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.redirect(new URL('/dashboard?ebay=connected', req.url))
   } catch (e) {
+    const msg = encodeURIComponent(String(e).slice(0, 120))
     console.error('eBay callback error:', e)
-    return NextResponse.redirect(new URL('/dashboard?ebay=error', req.url))
+    return NextResponse.redirect(new URL(`/dashboard?ebay=error&msg=${msg}`, req.url))
   }
 }
