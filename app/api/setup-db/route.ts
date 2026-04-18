@@ -7,7 +7,7 @@ export async function GET() {
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
+        password_hash VARCHAR(255),
         name VARCHAR(255),
         created_at TIMESTAMP DEFAULT NOW()
       )
@@ -25,6 +25,8 @@ export async function GET() {
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `
+    // Allow Google OAuth users (no password)
+    await sql`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`.catch(() => {})
     return NextResponse.json({ success: true, message: 'Database tables ready' })
   } catch (e) {
     console.error(e)
