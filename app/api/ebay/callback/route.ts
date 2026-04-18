@@ -32,8 +32,9 @@ export async function GET(req: NextRequest) {
     const data = await res.json()
 
     if (!data.access_token) {
-      console.error('eBay token exchange failed:', data)
-      return NextResponse.redirect(new URL('/dashboard?ebay=error', req.url))
+      console.error('eBay token exchange failed:', JSON.stringify(data))
+      const msg = encodeURIComponent(data.error_description || data.error || 'token_failed')
+      return NextResponse.redirect(new URL(`/dashboard?ebay=error&msg=${msg}`, req.url))
     }
 
     const expiresAt = new Date(Date.now() + data.expires_in * 1000)

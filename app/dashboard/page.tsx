@@ -1,6 +1,6 @@
 'use client'
 import { useSession, signOut } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
 
 type Tab = 'overview' | 'orders' | 'financials' | 'scripts' | 'settings'
@@ -19,6 +19,7 @@ interface EbayOrder {
 export default function Dashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [tab, setTab] = useState<Tab>('overview')
   const [orders, setOrders] = useState<EbayOrder[]>([])
   const [awaiting, setAwaiting] = useState<EbayOrder[]>([])
@@ -28,6 +29,14 @@ export default function Dashboard() {
   const [niche, setNiche] = useState<string | null>(null)
   const [nicheSaving, setNicheSaving] = useState(false)
   const [nicheSaved, setNicheSaved] = useState(false)
+  const [ebayMsg, setEbayMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    const ebay = searchParams.get('ebay')
+    const msg = searchParams.get('msg')
+    if (ebay === 'error') setEbayMsg(msg ? decodeURIComponent(msg) : 'eBay connection failed')
+    if (ebay === 'connected') setEbayMsg('✓ eBay connected successfully')
+  }, [searchParams])
 
 
   useEffect(() => {
@@ -222,6 +231,20 @@ export default function Dashboard() {
 
       {/* MAIN */}
       <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        {/* eBay status banner */}
+        {ebayMsg && (
+          <div style={{
+            padding: '10px 44px', fontSize: '12px', fontWeight: 600,
+            background: ebayMsg.startsWith('✓') ? 'rgba(46,207,118,0.10)' : 'rgba(232,63,80,0.10)',
+            color: ebayMsg.startsWith('✓') ? 'var(--grn)' : 'var(--red)',
+            borderBottom: ebayMsg.startsWith('✓') ? '1px solid rgba(46,207,118,0.2)' : '1px solid rgba(232,63,80,0.2)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}>
+            {ebayMsg}
+            <button onClick={() => setEbayMsg(null)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '14px' }}>×</button>
+          </div>
+        )}
+
         {/* Topbar */}
         <header style={{
           height: '56px', background: 'rgba(12,9,4,0.96)', backdropFilter: 'blur(70px)',
