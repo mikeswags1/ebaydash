@@ -122,6 +122,8 @@ export async function POST(req: NextRequest) {
     <ConditionID>1000</ConditionID>
     <Country>US</Country>
     <Currency>USD</Currency>
+    <Location>${process.env.EBAY_ITEM_LOCATION || 'New Jersey, United States'}</Location>
+    <PostalCode>${process.env.EBAY_POSTAL_CODE || '07001'}</PostalCode>
     <DispatchTimeMax>3</DispatchTimeMax>
     <ListingDuration>GTC</ListingDuration>
     <ListingType>FixedPriceItem</ListingType>

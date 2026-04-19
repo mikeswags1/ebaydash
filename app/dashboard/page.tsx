@@ -63,6 +63,7 @@ export default function Dashboard() {
   const [listLoading, setListLoading] = useState(false)
   const [listResult, setListResult] = useState<{ listingUrl: string; listingId: string } | null>(null)
   const [listError, setListError] = useState<string | null>(null)
+  const [orderAsinMap, setOrderAsinMap] = useState<Record<string, { asin: string; title: string }>>({})
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -124,6 +125,14 @@ export default function Dashboard() {
     } catch { /* ignore */ }
   }, [])
 
+  const loadOrderAsinMap = useCallback(async () => {
+    try {
+      const res = await fetch('/api/amazon/order-asins')
+      const data = await res.json()
+      if (data.map) setOrderAsinMap(data.map)
+    } catch { /* ignore */ }
+  }, [])
+
   const saveNiche = async (value: string) => {
     setNicheSaving(true)
     setNiche(value)
@@ -145,8 +154,9 @@ export default function Dashboard() {
       fetchOrders()
       loadNiche()
       loadAmazon()
+      loadOrderAsinMap()
     }
-  }, [status, fetchOrders, loadCreds, loadNiche, loadAmazon])
+  }, [status, fetchOrders, loadCreds, loadNiche, loadAmazon, loadOrderAsinMap])
 
   const grossRevenue = orders.reduce((s, o) => s + parseFloat(o.pricingSummary?.total?.value || '0'), 0)
 
@@ -571,14 +581,18 @@ export default function Dashboard() {
                 {/* Orders reference list */}
                 {orders.length > 0 && !asinResult && (
                   <div className="card" style={{ padding: '20px 24px', marginBottom: '20px' }}>
-                    <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '14px' }}>Your eBay Orders — click to find on Amazon</div>
+                    <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '14px' }}>Your eBay Orders — click to view on Amazon</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '300px', overflowY: 'auto' }}>
                       {orders.map(o => {
                         const item = o.lineItems?.[0]
                         const sku = item?.sku || ''
                         const itemId = item?.legacyItemId || ''
-                        const isAsin = /^[A-Z0-9]{10}$/.test(sku)
                         const title = item?.title || ''
+                        // 1. Best: ASIN stored at listing time (100% accurate)
+                        const storedAsin = itemId ? orderAsinMap[itemId]?.asin : undefined
+                        // 2. Fallback: SKU is ASIN format
+                        const skuIsAsin = /^[A-Z0-9]{10}$/.test(sku)
+                        const resolvedAsin = storedAsin || (skuIsAsin ? sku : undefined)
                         return (
                           <div
                             key={o.orderId}
@@ -596,20 +610,32 @@ export default function Dashboard() {
                               <div style={{ fontSize: '10px', color: 'var(--dim)', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <span>{o.buyer?.username} · {new Date(o.creationDate).toLocaleDateString()}</span>
                                 {itemId && <span style={{ fontFamily: 'monospace', color: 'rgba(200,162,80,0.55)' }}>Item #{itemId}</span>}
+                                {resolvedAsin && <span style={{ fontFamily: 'monospace', color: 'rgba(195,158,88,0.7)' }}>ASIN: {resolvedAsin}</span>}
                               </div>
                             </div>
                             <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
                               <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, color: 'var(--gld2)', fontSize: '12px' }}>
                                 ${parseFloat(o.pricingSummary?.total?.value || '0').toFixed(2)}
                               </div>
-                              {isAsin ? (
-                                <button
-                                  onClick={() => { setAsinInput(sku); setAsinResult(null); setAsinError(null) }}
-                                  className="btn btn-gold btn-sm"
-                                  style={{ fontSize: '9px', padding: '3px 8px' }}
-                                >
-                                  Look Up
-                                </button>
+                              {resolvedAsin ? (
+                                <>
+                                  <button
+                                    onClick={() => { setAsinInput(resolvedAsin); setAsinResult(null); setAsinError(null) }}
+                                    className="btn btn-gold btn-sm"
+                                    style={{ fontSize: '9px', padding: '3px 8px' }}
+                                  >
+                                    Look Up
+                                  </button>
+                                  <a
+                                    href={`https://www.amazon.com/dp/${resolvedAsin}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ fontSize: '9px', padding: '3px 8px', textDecoration: 'none' }}
+                                  >
+                                    Amazon ↗
+                                  </a>
+                                </>
                               ) : (
                                 <a
                                   href={`https://www.amazon.com/s?k=${encodeURIComponent(title.slice(0, 80))}`}
@@ -618,7 +644,7 @@ export default function Dashboard() {
                                   className="btn btn-ghost btn-sm"
                                   style={{ fontSize: '9px', padding: '3px 8px', textDecoration: 'none' }}
                                 >
-                                  Find ASIN ↗
+                                  Search ↗
                                 </a>
                               )}
                             </div>
@@ -627,7 +653,7 @@ export default function Dashboard() {
                       })}
                     </div>
                     <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--dim)', opacity: 0.7 }}>
-                      Click <b style={{ color: 'var(--gold)' }}>Look Up</b> to check the Amazon price · <b style={{ color: 'var(--sil)' }}>Find ASIN ↗</b> searches Amazon so you can copy the ASIN and paste it above
+                      <b style={{ color: 'var(--gold)' }}>Look Up</b> — load price data · <b style={{ color: 'var(--sil)' }}>Amazon ↗</b> — open exact product · <b style={{ color: 'var(--dim)' }}>Search ↗</b> — find manually (order not listed via dashboard)
                     </div>
                   </div>
                 )}
