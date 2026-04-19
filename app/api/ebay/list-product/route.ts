@@ -163,27 +163,8 @@ async function fetchAmazonDetails(
   }
 }
 
-// ── Delivery date helpers ────────────────────────────────────────────────────
-function addBusinessDays(date: Date, n: number): Date {
-  const d = new Date(date)
-  let added = 0
-  while (added < n) {
-    d.setDate(d.getDate() + 1)
-    if (d.getDay() !== 0 && d.getDay() !== 6) added++
-  }
-  return d
-}
-
-function fmtDate(d: Date): string {
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-}
-
 // ── Description builder ──────────────────────────────────────────────────────
 function buildDescription(title: string, features: string[], about: string, images: string[]): string {
-  const now = new Date()
-  const shipDate = addBusinessDays(now, 1)
-  const delivMin = fmtDate(addBusinessDays(shipDate, 2))
-  const delivMax = fmtDate(addBusinessDays(shipDate, 3))
 
   const featureRows = features
     .map(f => `<tr><td class="check">&#10003;</td><td>${f}</td></tr>`)
@@ -299,7 +280,7 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
     <div class="dbar-icon">&#128666;</div>
     <div>
       <div class="dbar-head">FREE 2&ndash;3 DAY DELIVERY INCLUDED</div>
-      <div class="dbar-eta">Estimated arrival: <strong>${delivMin} &ndash; ${delivMax}</strong> &nbsp;&bull;&nbsp; Ships within 1 business day &bull; USPS Priority Mail</div>
+      <div class="dbar-eta">Ships within 1 business day &bull; USPS Priority Mail &bull; Typically arrives in 2&ndash;3 days</div>
     </div>
   </div>
 

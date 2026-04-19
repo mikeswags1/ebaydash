@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import sharp from 'sharp'
 
 // Clean professional FREE SHIPPING banner — bottom strip on product image
+// Font stack targets fonts available on Vercel's Amazon Linux (librsvg/fontconfig):
+// FreeSans (GNU FreeFont), Liberation Sans, DejaVu Sans — no letter-spacing or
+// non-ASCII chars which can cause rendering issues on minimal server environments
 const BANNER_SVG = Buffer.from(
-  `<svg width="800" height="68" xmlns="http://www.w3.org/2000/svg">
-    <rect width="800" height="68" fill="rgb(21,128,61)"/>
-    <rect x="0" y="0" width="800" height="3" fill="rgb(74,222,128)"/>
-    <text x="400" y="44" font-family="Arial Black,Arial,Helvetica,sans-serif" font-size="24"
-      font-weight="900" fill="white" text-anchor="middle" letter-spacing="2">
-      FREE SHIPPING  |  2-3 DAY DELIVERY
+  `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="68">
+    <rect width="800" height="68" fill="#15803d"/>
+    <rect width="800" height="4" fill="#4ade80"/>
+    <text x="400" y="44"
+      font-family="FreeSans,Liberation Sans,DejaVu Sans,Ubuntu,Helvetica,Arial,sans-serif"
+      font-size="26" font-weight="bold" fill="white" text-anchor="middle">
+      FREE SHIPPING - 2-3 DAY DELIVERY
     </text>
   </svg>`
 )
