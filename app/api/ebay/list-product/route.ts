@@ -194,14 +194,26 @@ export async function POST(req: NextRequest) {
   if (!token) return NextResponse.json({ error: 'RECONNECT_REQUIRED' }, { status: 401 })
 
   const appId = process.env.EBAY_APP_ID || ''
-  const safeTitle = title.replace(/[^\x20-\x7E]/g, '').replace(/[<>&"]/g, ' ').slice(0, 80).trim()
+
+  // Optimized title: strip non-ASCII/special chars, remove filler packaging phrases,
+  // smart-truncate at word boundary to fit 80 chars
+  const cleanTitle = title
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/[<>&"]/g, '')
+    .replace(/\s*[-|,]\s*(Pack of|Pack|Count|Piece|Pcs|Units?|Set of)\s*\d+/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  const safeTitle = cleanTitle.length <= 80
+    ? cleanTitle
+    : cleanTitle.slice(0, 80).replace(/\s+\S*$/, '').trim()
+
   const categoryId = NICHE_CATEGORY[niche] || '293'
   const price = parseFloat(ebayPrice).toFixed(2)
   const extraSpecifics = (NICHE_SPECIFICS[niche] || [])
     .map(([n, v]) => `\n      <NameValueList><Name>${n}</Name><Value>${v}</Value></NameValueList>`)
     .join('')
 
-  const description = `<![CDATA[<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;padding:20px;color:#333"><h2 style="font-size:20px;margin-bottom:12px">${safeTitle}</h2><p style="line-height:1.8;color:#555">Brand new, unused condition. Ships fast directly to your door.</p><ul style="line-height:2;color:#555;padding-left:20px"><li>New condition</li><li>FREE shipping</li><li>30-day hassle-free returns</li><li>Fast dispatch within 1-3 business days</li></ul></div>]]>`
+  const description = `<![CDATA[<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;color:#222}.wrap{max-width:680px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)}.hero{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:32px 36px}.hero-tag{font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:#c8a250;margin-bottom:10px}.hero-title{font-size:20px;font-weight:700;color:#fff;line-height:1.45;max-width:560px}.badges{display:flex;flex-wrap:wrap;gap:8px;padding:16px 36px;background:#0f172a}.badge{background:rgba(200,162,80,.15);border:1px solid rgba(200,162,80,.35);color:#e0c875;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;letter-spacing:.5px}.features{padding:28px 36px;border-bottom:1px solid #eee}.sec-label{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:18px}.feat-list{display:flex;flex-direction:column;gap:14px}.feat{display:flex;align-items:flex-start;gap:14px}.feat-dot{width:36px;height:36px;border-radius:10px;background:#f0f7ff;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}.feat-copy{font-size:14px;color:#444;line-height:1.55}.feat-copy b{color:#111}.trust{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:28px 36px;border-bottom:1px solid #eee}.trust-box{padding:18px 14px;border-radius:10px;background:#fafafa;border:1px solid #eee;text-align:center}.t-icon{font-size:26px;margin-bottom:6px}.t-label{font-size:12px;font-weight:700;color:#222;margin-bottom:2px}.t-sub{font-size:11px;color:#999}.footer{background:#1a1a2e;padding:20px 36px;text-align:center;color:#888;font-size:12px;line-height:1.9}.footer b{color:#c8a250}</style></head><body><div class="wrap"><div class="hero"><div class="hero-tag">Product Listing</div><div class="hero-title">${safeTitle}</div></div><div class="badges"><span class="badge">&#10003; Brand New &amp; Sealed</span><span class="badge">&#10003; Free Shipping</span><span class="badge">&#10003; 30-Day Returns</span><span class="badge">&#10003; Fast Dispatch</span></div><div class="features"><div class="sec-label">What You Get</div><div class="feat-list"><div class="feat"><div class="feat-dot">&#128230;</div><div class="feat-copy"><b>Brand New &amp; Sealed</b> &mdash; 100% genuine product in original packaging, ready to use right out of the box.</div></div><div class="feat"><div class="feat-dot">&#128640;</div><div class="feat-copy"><b>Ships Fast</b> &mdash; Orders dispatched within 1&ndash;3 business days so it arrives quickly.</div></div><div class="feat"><div class="feat-dot">&#128272;</div><div class="feat-copy"><b>Hassle-Free 30-Day Returns</b> &mdash; Not 100% satisfied? Return it within 30 days for a full refund, no questions asked.</div></div><div class="feat"><div class="feat-dot">&#128176;</div><div class="feat-copy"><b>Free Shipping Included</b> &mdash; No hidden fees. The price you see is exactly what you pay, delivered to your door.</div></div></div></div><div class="trust"><div class="trust-box"><div class="t-icon">&#128666;</div><div class="t-label">Free Shipping</div><div class="t-sub">No extra cost</div></div><div class="trust-box"><div class="t-icon">&#9889;</div><div class="t-label">Fast Dispatch</div><div class="t-sub">Ships in 1&ndash;3 days</div></div><div class="trust-box"><div class="t-icon">&#8617;</div><div class="t-label">30-Day Returns</div><div class="t-sub">Hassle-free policy</div></div><div class="trust-box"><div class="t-icon">&#10003;</div><div class="t-label">Satisfaction</div><div class="t-sub">100% guaranteed</div></div></div><div class="footer">Questions? Message us &mdash; we reply within 24 hours.<br><b>Save our store for exclusive deals and new arrivals!</b></div></div></body></html>]]>`
 
   const pictureXml = imageUrl
     ? `<PictureDetails><PictureURL>${imageUrl}</PictureURL></PictureDetails>`
