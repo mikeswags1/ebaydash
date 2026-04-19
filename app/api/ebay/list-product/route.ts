@@ -47,6 +47,23 @@ const NICHE_CATEGORY: Record<string, string> = {
   'Sports Memorabilia':    '64482',  // Sports Mem, Cards & Fan Shop
 }
 
+// Brands with active eBay VeRO programs that will get listings removed/account flagged
+const VERO_BRANDS = [
+  'louis vuitton','lv bag','gucci','chanel','prada','burberry','versace','fendi',
+  'christian dior','yves saint laurent','hermes','hermès','balenciaga','givenchy',
+  'bottega veneta','celine','valentino','off-white','supreme box logo',
+  'rolex','omega watch','patek philippe','audemars piguet','hublot','cartier watch',
+  'breitling','tag heuer','iwc schaffhausen',
+  'ray-ban','oakley sunglass',
+  'canada goose jacket','moncler jacket','ugg boot',
+  'lego set','lego technic','lego duplo',
+]
+
+function isVero(title: string): boolean {
+  const t = title.toLowerCase()
+  return VERO_BRANDS.some(b => t.includes(b))
+}
+
 const NICHE_SPECIFICS: Record<string, Array<[string, string]>> = {
   'Audio & Headphones':    [['Connectivity', 'Wireless'], ['Type', 'Bluetooth Speaker']],
   'Phone Accessories':     [['Compatible Brand', 'Universal'], ['Type', 'Phone Accessory']],
@@ -381,6 +398,10 @@ export async function POST(req: NextRequest) {
   const { asin, title, ebayPrice, imageUrl, niche } = await req.json()
   if (!asin || !title || !ebayPrice) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
+  if (isVero(title)) {
+    return NextResponse.json({ error: 'This product cannot be listed — it contains a brand enrolled in eBay VeRO. Choose a different product.' }, { status: 400 })
+  }
+
   const token = await getFreshToken(session.user.id)
   if (!token) return NextResponse.json({ error: 'RECONNECT_REQUIRED' }, { status: 401 })
 
@@ -398,7 +419,7 @@ export async function POST(req: NextRequest) {
     ? cleanTitle
     : cleanTitle.slice(0, 80).replace(/\s+\S*$/, '').trim()
 
-  const categoryId = NICHE_CATEGORY[niche] || '293'
+  const categoryId = NICHE_CATEGORY[niche] || '177'
   const price = parseFloat(ebayPrice).toFixed(2)
   const extraSpecifics = (NICHE_SPECIFICS[niche] || [])
     .map(([n, v]) => `\n      <NameValueList><Name>${n}</Name><Value>${v}</Value></NameValueList>`)
@@ -410,18 +431,12 @@ export async function POST(req: NextRequest) {
 
   const description = buildDescription(safeTitle, amazon.features, amazon.description)
 
-  // Main image gets the "FREE SHIPPING · 1-3 DAY DELIVERY" banner burned in
-  const host = req.headers.get('host') || ''
-  const proto = host.startsWith('localhost') ? 'http' : 'https'
-  const siteUrl = `${proto}://${host}`
-
+  // Use direct Amazon image URLs — eBay prohibits watermarked/text-overlay images
+  // and proxy URLs from our server can fail if eBay's fetcher can't reach Vercel
   const allImages = amazon.images
-  const badgedImages = allImages.map((u, i) =>
-    i === 0 ? `${siteUrl}/api/image/badge?url=${encodeURIComponent(u)}` : u
-  )
 
-  const pictureXml = badgedImages.length > 0
-    ? `<PictureDetails><GalleryType>Gallery</GalleryType>${badgedImages.map(u => `<PictureURL>${u}</PictureURL>`).join('')}</PictureDetails>`
+  const pictureXml = allImages.length > 0
+    ? `<PictureDetails><GalleryType>Gallery</GalleryType>${allImages.map(u => `<PictureURL>${u}</PictureURL>`).join('')}</PictureDetails>`
     : ''
 
   const xmlParams = { token, safeTitle, description, categoryId, price, pictureXml, extraSpecifics }

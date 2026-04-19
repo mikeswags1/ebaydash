@@ -9,9 +9,16 @@ const MIN_ROI = 30
 const MAX_COST = 300
 
 const REJECT_KEYWORDS = [
+  // Oversized / hard to ship
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
   'treadmill','elliptical','mattress','sofa','couch','generator','chainsaw',
   'television',' tv ','monitor','e-bike','pressure washer',
+  // VeRO brands — listing these risks account suspension
+  'louis vuitton','lv bag','gucci','chanel','prada','burberry','versace','fendi',
+  'christian dior','yves saint laurent','hermes','hermès','balenciaga','givenchy',
+  'rolex','omega watch','patek philippe','audemars piguet','hublot','cartier watch',
+  'ray-ban','oakley sunglass','canada goose jacket','moncler jacket',
+  'lego set','lego technic','lego duplo',
 ]
 
 function calcMetrics(amazonPrice: number) {
