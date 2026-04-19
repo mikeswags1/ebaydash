@@ -46,21 +46,6 @@ const NICHE_CATEGORY: Record<string, string> = {
   'Sports Memorabilia': '64482',
 }
 
-async function ebay(token: string, method: string, path: string, body?: object) {
-  const res = await fetch(`https://api.ebay.com${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Content-Language': 'en-US',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  const text = await res.text()
-  try { return { ok: res.ok, status: res.status, data: JSON.parse(text) } }
-  catch { return { ok: res.ok, status: res.status, data: text } }
-}
-
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -72,82 +57,99 @@ export async function POST(req: NextRequest) {
   const token = rows[0]?.oauth_token
   if (!token) return NextResponse.json({ error: 'eBay not connected — go to Settings first' }, { status: 400 })
 
-  // Get fulfillment, payment, return policies
-  const [fpRes, ppRes, rpRes] = await Promise.all([
-    ebay(token, 'GET', '/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_US'),
-    ebay(token, 'GET', '/sell/account/v1/payment_policy?marketplace_id=EBAY_US'),
-    ebay(token, 'GET', '/sell/account/v1/return_policy?marketplace_id=EBAY_US'),
-  ])
-
-  const fulfillmentPolicyId = fpRes.data?.fulfillmentPolicies?.[0]?.fulfillmentPolicyId
-  const paymentPolicyId = ppRes.data?.paymentPolicies?.[0]?.paymentPolicyId
-  const returnPolicyId = rpRes.data?.returnPolicies?.[0]?.returnPolicyId
-
-  if (!fulfillmentPolicyId || !paymentPolicyId || !returnPolicyId) {
-    return NextResponse.json({
-      error: 'Missing eBay business policies. Go to Seller Hub → Shipping / Payment / Returns and create at least one policy for each.'
-    }, { status: 400 })
-  }
-
-  const sku = `EBAYDASH-${asin}-${Date.now()}`
-  const safeTitle = title.replace(/[^a-zA-Z0-9 \-&,.'()]/g, '').slice(0, 80).trim()
+  const appId = process.env.EBAY_APP_ID || ''
+  const safeTitle = title.replace(/[^\x20-\x7E]/g, '').replace(/[<>&"]/g, ' ').slice(0, 80).trim()
   const categoryId = NICHE_CATEGORY[niche] || '293'
+  const price = parseFloat(ebayPrice).toFixed(2)
 
-  const description = `
-<div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px">
-  <h2 style="color:#333">${safeTitle}</h2>
-  <p style="color:#555;line-height:1.7">Brand new condition. Ships fast from US warehouse. Satisfaction guaranteed — we stand behind every order.</p>
-  <ul style="color:#555;line-height:1.9">
-    <li>✓ New, unused condition</li>
-    <li>✓ Fast US shipping</li>
-    <li>✓ 30-day hassle-free returns</li>
-    <li>✓ Responsive seller support</li>
+  const description = `<![CDATA[
+<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;padding:20px;color:#333">
+  <h2 style="font-size:20px;margin-bottom:12px">${safeTitle}</h2>
+  <p style="line-height:1.8;color:#555">Brand new, unused condition. Ships fast directly to your door.</p>
+  <ul style="line-height:2;color:#555;padding-left:20px">
+    <li>✔ New condition</li>
+    <li>✔ FREE shipping — no extra cost</li>
+    <li>✔ 30-day hassle-free returns</li>
+    <li>✔ Fast dispatch within 1–3 business days</li>
   </ul>
-</div>`.trim()
+</div>]]>`
 
-  // Create inventory item
-  const invRes = await ebay(token, 'PUT', `/sell/inventory/v1/inventory_item/${sku}`, {
-    availability: { shipToLocationAvailability: { quantity: 99 } },
-    condition: 'NEW',
-    product: {
-      title: safeTitle,
-      description,
-      imageUrls: imageUrl ? [imageUrl] : [],
-      aspects: {},
+  const pictureXml = imageUrl
+    ? `<PictureDetails><PictureURL>${imageUrl}</PictureURL></PictureDetails>`
+    : ''
+
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<AddFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials>
+    <eBayAuthToken>${token}</eBayAuthToken>
+  </RequesterCredentials>
+  <ErrorLanguage>en_US</ErrorLanguage>
+  <WarningLevel>High</WarningLevel>
+  <Item>
+    <Title>${safeTitle}</Title>
+    <Description>${description}</Description>
+    <PrimaryCategory><CategoryID>${categoryId}</CategoryID></PrimaryCategory>
+    <StartPrice>${price}</StartPrice>
+    <ConditionID>1000</ConditionID>
+    <Country>US</Country>
+    <Currency>USD</Currency>
+    <DispatchTimeMax>3</DispatchTimeMax>
+    <ListingDuration>GTC</ListingDuration>
+    <ListingType>FixedPriceItem</ListingType>
+    <Quantity>99</Quantity>
+    ${pictureXml}
+    <ShippingDetails>
+      <ShippingType>Flat</ShippingType>
+      <ShippingServiceOptions>
+        <ShippingServicePriority>1</ShippingServicePriority>
+        <ShippingService>ShippingMethodStandard</ShippingService>
+        <ShippingServiceCost>0.00</ShippingServiceCost>
+        <FreeShipping>true</FreeShipping>
+        <ShippingServiceAdditionalCost>0.00</ShippingServiceAdditionalCost>
+      </ShippingServiceOptions>
+    </ShippingDetails>
+    <ReturnPolicy>
+      <ReturnsAcceptedOption>ReturnsAccepted</ReturnsAcceptedOption>
+      <RefundOption>MoneyBack</RefundOption>
+      <ReturnsWithinOption>Days_30</ReturnsWithinOption>
+      <ShippingCostPaidByOption>Buyer</ShippingCostPaidByOption>
+      <Description>30-day returns accepted. Contact us and we will resolve any issue.</Description>
+    </ReturnPolicy>
+    <ItemSpecifics>
+      <NameValueList>
+        <Name>Brand</Name>
+        <Value>Unbranded</Value>
+      </NameValueList>
+    </ItemSpecifics>
+  </Item>
+</AddFixedPriceItemRequest>`
+
+  const res = await fetch('https://api.ebay.com/ws/api.dll', {
+    method: 'POST',
+    headers: {
+      'X-EBAY-API-CALL-NAME': 'AddFixedPriceItem',
+      'X-EBAY-API-SITEID': '0',
+      'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
+      'X-EBAY-API-APP-NAME': appId,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'text/xml',
     },
+    body: xml,
   })
 
-  if (!invRes.ok) {
-    return NextResponse.json({ error: `Inventory error: ${JSON.stringify(invRes.data)?.slice(0, 200)}` }, { status: 400 })
+  const responseText = await res.text()
+
+  // Extract ItemID from XML response
+  const itemIdMatch = responseText.match(/<ItemID>(\d+)<\/ItemID>/)
+  const errMatch = responseText.match(/<ShortMessage>(.*?)<\/ShortMessage>/)
+  const ackMatch = responseText.match(/<Ack>(.*?)<\/Ack>/)
+
+  if (!itemIdMatch || (ackMatch && ackMatch[1] === 'Failure')) {
+    const errMsg = errMatch ? errMatch[1] : responseText.slice(0, 300)
+    return NextResponse.json({ error: errMsg }, { status: 400 })
   }
 
-  // Create offer
-  const offerRes = await ebay(token, 'POST', '/sell/inventory/v1/offer', {
-    sku,
-    marketplaceId: 'EBAY_US',
-    format: 'FIXED_PRICE',
-    listingDescription: description,
-    pricingSummary: { price: { currency: 'USD', value: parseFloat(ebayPrice).toFixed(2) } },
-    categoryId,
-    listingPolicies: { fulfillmentPolicyId, paymentPolicyId, returnPolicyId },
-    quantityLimitPerBuyer: 5,
-    includeCatalogProductDetails: false,
-  })
-
-  if (!offerRes.ok || !offerRes.data?.offerId) {
-    return NextResponse.json({ error: `Offer error: ${JSON.stringify(offerRes.data)?.slice(0, 300)}` }, { status: 400 })
-  }
-
-  const offerId = offerRes.data.offerId
-
-  // Publish
-  const pubRes = await ebay(token, 'POST', `/sell/inventory/v1/offer/${offerId}/publish`, {})
-
-  if (!pubRes.ok || !pubRes.data?.listingId) {
-    return NextResponse.json({ error: `Publish error: ${JSON.stringify(pubRes.data)?.slice(0, 300)}` }, { status: 400 })
-  }
-
-  const listingId = pubRes.data.listingId
+  const listingId = itemIdMatch[1]
 
   // Save ASIN so it never shows in product finder again
   await sql`
@@ -160,6 +162,5 @@ export async function POST(req: NextRequest) {
     success: true,
     listingId,
     listingUrl: `https://www.ebay.com/itm/${listingId}`,
-    sku,
   })
 }
