@@ -3,51 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { sql } from '@/lib/db'
 
-// Leaf category IDs verified for eBay US Trading API
-const NICHE_CATEGORY: Record<string, string> = {
-  'Phone Accessories':     '9394',   // Cell Phone Accessories
-  'Computer Parts':        '58058',  // Keyboards, Mice & Pointing
-  'Audio & Headphones':    '14985',  // Portable Stereos, Boomboxes
-  'Smart Home Devices':    '183406', // Smart Plugs & Outlets
-  'Gaming Gear':           '117042', // Controllers & Attachments
-  'Kitchen Gadgets':       '20625',  // Kitchen Tools & Gadgets
-  'Home Decor':            '10033',  // Home Décor
-  'Furniture & Lighting':  '95672',  // Table Lamps (verified leaf)
-  'Cleaning Supplies':     '26677',  // Cleaning Supplies
-  'Storage & Organization':'26677',  // Cleaning Supplies (storage adjacent)
-  'Camping & Hiking':      '16034',  // Outdoor Sports
-  'Garden & Tools':        '2032',   // Garden & Patio Tools
-  'Sporting Goods':        '15273',  // Fitness Equipment
-  'Fishing & Hunting':     '1492',   // Fishing
-  'Cycling':               '7294',   // Cycling Accessories
-  'Fitness Equipment':     '15273',  // Fitness Equipment
-  'Personal Care':         '26248',  // Health Care
-  'Supplements & Vitamins':'180960', // Herbal Supplements & Botanicals (leaf)
-  'Medical Supplies':      '51148',  // Medical, Mobility & Disability
-  'Mental Wellness':       '26395',  // Aromatherapy
-  'Car Parts':             '6030',   // Car & Truck Parts
-  'Car Accessories':       '14946',  // Car Electronics
-  'Motorcycle Gear':       '10063',  // Motorcycle Accessories
-  'Truck & Towing':        '6030',   // Car & Truck Parts
-  'Car Care':              '179716', // Car Care
-  'Pet Supplies':          '1281',   // Pet Supplies
-  'Baby & Kids':           '2984',   // Baby
-  'Toys & Games':          '19169',  // Board & Traditional Games
-  'Clothing & Accessories':'11450',  // Clothing, Shoes & Accessories
-  'Jewelry & Watches':     '137839', // Fashion Jewelry
-  'Office Supplies':       '26215',  // Office & School Supplies
-  'Industrial Equipment':  '12576',  // Business & Industrial
-  'Safety Gear':           '177742', // Safety & Security
-  'Janitorial & Cleaning': '26677',  // Cleaning Supplies
-  'Packaging Materials':   '26677',  // Cleaning Supplies
-  'Trading Cards':         '183050', // Trading Card Games
-  'Vintage & Antiques':    '20081',  // Antiques
-  'Coins & Currency':      '11116',  // Coins & Paper Money
-  'Comics & Manga':        '259104', // Comics
-  'Sports Memorabilia':    '64482',  // Sports Mem, Cards & Fan Shop
-}
-
-// Brands with active eBay VeRO programs that will get listings removed/account flagged
+// ── VeRO Protection ──────────────────────────────────────────────────────────
 const VERO_BRANDS = [
   'louis vuitton','lv bag','gucci','chanel','prada','burberry','versace','fendi',
   'christian dior','yves saint laurent','hermes','hermès','balenciaga','givenchy',
@@ -62,6 +18,50 @@ const VERO_BRANDS = [
 function isVero(title: string): boolean {
   const t = title.toLowerCase()
   return VERO_BRANDS.some(b => t.includes(b))
+}
+
+// ── eBay Category IDs ────────────────────────────────────────────────────────
+const NICHE_CATEGORY: Record<string, string> = {
+  'Phone Accessories':     '9394',
+  'Computer Parts':        '58058',
+  'Audio & Headphones':    '14985',
+  'Smart Home Devices':    '183406',
+  'Gaming Gear':           '117042',
+  'Kitchen Gadgets':       '20625',
+  'Home Decor':            '10033',
+  'Furniture & Lighting':  '95672',
+  'Cleaning Supplies':     '26677',
+  'Storage & Organization':'26677',
+  'Camping & Hiking':      '16034',
+  'Garden & Tools':        '2032',
+  'Sporting Goods':        '15273',
+  'Fishing & Hunting':     '1492',
+  'Cycling':               '7294',
+  'Fitness Equipment':     '15273',
+  'Personal Care':         '26248',
+  'Supplements & Vitamins':'180960',
+  'Medical Supplies':      '51148',
+  'Mental Wellness':       '26395',
+  'Car Parts':             '6030',
+  'Car Accessories':       '14946',
+  'Motorcycle Gear':       '10063',
+  'Truck & Towing':        '6030',
+  'Car Care':              '179716',
+  'Pet Supplies':          '1281',
+  'Baby & Kids':           '2984',
+  'Toys & Games':          '19169',
+  'Clothing & Accessories':'11450',
+  'Jewelry & Watches':     '137839',
+  'Office Supplies':       '26215',
+  'Industrial Equipment':  '12576',
+  'Safety Gear':           '177742',
+  'Janitorial & Cleaning': '26677',
+  'Packaging Materials':   '26677',
+  'Trading Cards':         '183050',
+  'Vintage & Antiques':    '20081',
+  'Coins & Currency':      '11116',
+  'Comics & Manga':        '259104',
+  'Sports Memorabilia':    '64482',
 }
 
 const NICHE_SPECIFICS: Record<string, Array<[string, string]>> = {
@@ -107,13 +107,25 @@ const NICHE_SPECIFICS: Record<string, Array<[string, string]>> = {
   'Sports Memorabilia':    [['Type', 'Display Case'], ['Material', 'See Description']],
 }
 
+// ── Content helpers ──────────────────────────────────────────────────────────
 interface AmazonDetails {
   images: string[]
   features: string[]
   description: string
 }
 
-async function fetchAmazonDetails(asin: string, rapidKey: string, fallbackImage?: string): Promise<AmazonDetails> {
+function sanitizeContent(text: string): string {
+  return text
+    .replace(/\b(amazon\.?com?|amazon prime|prime\s+shipping|prime\s+eligible|prime\s+member|fulfilled\s+by\s+amazon|ships\s+from\s+amazon|sold\s+by\s+amazon|amazon\s+basics|amazon\s+brand|buy\s+on\s+amazon|visit\s+the\s+\S+\s+store|fba)\b/gi, '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[<>&"]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+async function fetchAmazonDetails(
+  asin: string, rapidKey: string, fallbackImage?: string
+): Promise<AmazonDetails> {
   try {
     const url = `https://axesso-axesso-amazon-data-service-v1.p.rapidapi.com/amz/amazon-lookup-product?url=https%3A%2F%2Fwww.amazon.com%2Fdp%2F${asin}`
     const res = await fetch(url, {
@@ -124,7 +136,6 @@ async function fetchAmazonDetails(asin: string, rapidKey: string, fallbackImage?
     })
     const data = await res.json()
 
-    // All images — Axesso returns imageUrlList array
     const rawImages: string[] = (
       data.imageUrlList ?? data.imageList ?? data.images ?? []
     ).filter((u: unknown): u is string => typeof u === 'string' && u.startsWith('http'))
@@ -132,21 +143,15 @@ async function fetchAmazonDetails(asin: string, rapidKey: string, fallbackImage?
     const mainImg: string = data.mainImageUrl ?? data.imageUrl ?? fallbackImage ?? ''
     const allImages = Array.from(new Set([mainImg, ...rawImages].filter(Boolean))).slice(0, 12)
 
-    // Product feature bullets
     const rawFeatures: unknown[] = data.keyFeatures ?? data.featureBullets ?? data.features ?? data.bulletPoints ?? []
     const features = (rawFeatures as string[])
       .filter((f): f is string => typeof f === 'string' && f.trim().length > 5)
-      .slice(0, 8)
-      .map(f => f.replace(/[<>&"]/g, ' ').replace(/\s{2,}/g, ' ').trim())
+      .slice(0, 10)
+      .map(f => sanitizeContent(f).slice(0, 400))
+      .filter(f => f.length > 5)
 
-    // Full Amazon product description
     const rawDesc: string = data.productDescription ?? data.description ?? data.productDetails ?? ''
-    const description = rawDesc
-      .replace(/<[^>]*>/g, ' ')   // strip any HTML tags
-      .replace(/[<>&"]/g, ' ')
-      .replace(/\s{2,}/g, ' ')
-      .trim()
-      .slice(0, 2000)
+    const description = sanitizeContent(rawDesc).slice(0, 3000)
 
     return {
       images: allImages.length > 0 ? allImages : (fallbackImage ? [fallbackImage] : []),
@@ -158,137 +163,228 @@ async function fetchAmazonDetails(asin: string, rapidKey: string, fallbackImage?
   }
 }
 
+// ── Delivery date helpers ────────────────────────────────────────────────────
+function addBusinessDays(date: Date, n: number): Date {
+  const d = new Date(date)
+  let added = 0
+  while (added < n) {
+    d.setDate(d.getDate() + 1)
+    if (d.getDay() !== 0 && d.getDay() !== 6) added++
+  }
+  return d
+}
+
+function fmtDate(d: Date): string {
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+// ── Description builder ──────────────────────────────────────────────────────
 function buildDescription(title: string, features: string[], about: string): string {
-  const featureRows = features.length > 0
-    ? features.map(f => `
-          <tr>
-            <td class="check">&#10003;</td>
-            <td>${f}</td>
-          </tr>`).join('')
-    : ''
+  const now = new Date()
+  const shipDate = addBusinessDays(now, 1)
+  const delivMin = fmtDate(addBusinessDays(shipDate, 2))
+  const delivMax = fmtDate(addBusinessDays(shipDate, 3))
+
+  const featureRows = features
+    .map(f => `<tr><td class="check">&#10003;</td><td>${f}</td></tr>`)
+    .join('\n          ')
 
   const featureSection = featureRows ? `
-    <div class="section">
-      <div class="section-title">Product Features</div>
-      <table class="feat-table">
-        <tbody>${featureRows}
-        </tbody>
-      </table>
-    </div>` : ''
+  <div class="section">
+    <div class="section-title">Key Features &amp; Benefits</div>
+    <table class="feat-table"><tbody>
+      ${featureRows}
+    </tbody></table>
+  </div>` : ''
 
-  const aboutSection = about ? `
-    <div class="section">
-      <div class="section-title">About This Item</div>
-      <div class="about-body">${about}</div>
-    </div>` : ''
+  const aboutSection = about.length > 30 ? `
+  <div class="section">
+    <div class="section-title">Product Description</div>
+    <div class="about-body">${about}</div>
+  </div>` : ''
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; background: #f2f2f2; color: #222; }
-    a { color: inherit; text-decoration: none; }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
+.wrap{max-width:680px;margin:0 auto;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 6px 40px rgba(0,0,0,.13)}
 
-    .wrap { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 32px rgba(0,0,0,.12); }
+/* Hero */
+.hero{background:linear-gradient(140deg,#0f1628 0%,#1a2744 100%);padding:38px 42px 30px}
+.hero-tag{font-size:10px;font-weight:700;letter-spacing:3.5px;text-transform:uppercase;color:#c8a250;margin-bottom:10px;opacity:.9}
+.hero-title{font-size:21px;font-weight:800;color:#fff;line-height:1.42;margin-bottom:10px}
+.hero-sub{font-size:12px;color:#94a3b8;letter-spacing:.4px}
 
-    /* ── Hero ── */
-    .hero { background: linear-gradient(140deg, #12172b 0%, #1a2744 100%); padding: 36px 40px 30px; }
-    .hero-label { font-size: 10px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: #c8a250; margin-bottom: 12px; }
-    .hero-title { font-size: 21px; font-weight: 800; color: #fff; line-height: 1.42; }
+/* Delivery bar */
+.dbar{background:#15803d;padding:17px 42px;display:flex;align-items:center;gap:14px}
+.dbar-icon{font-size:26px;flex-shrink:0}
+.dbar-head{font-size:15px;font-weight:800;color:#fff;letter-spacing:.3px}
+.dbar-eta{font-size:12px;color:#bbf7d0;margin-top:4px}
+.dbar-eta strong{color:#fff}
 
-    /* ── Delivery bar ── */
-    .delivery-bar { background: #166534; padding: 14px 40px; display: flex; align-items: center; gap: 12px; }
-    .delivery-bar .icon { font-size: 22px; }
-    .delivery-bar .text { color: #fff; }
-    .delivery-bar .head { font-size: 14px; font-weight: 800; letter-spacing: .3px; }
-    .delivery-bar .sub { font-size: 11px; color: #bbf7d0; margin-top: 1px; }
+/* Badges */
+.badges{display:flex;flex-wrap:wrap;gap:8px;padding:14px 42px;background:#0f172a}
+.badge{padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.4px}
+.bg{background:rgba(200,162,80,.15);border:1px solid rgba(200,162,80,.35);color:#e0c875}
+.bgg{background:rgba(22,163,74,.18);border:1px solid rgba(34,197,94,.4);color:#4ade80}
 
-    /* ── Badge strip ── */
-    .badges { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 40px; background: #0f172a; }
-    .badge { padding: 4px 13px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: .4px; }
-    .bg { background: rgba(200,162,80,.16); border: 1px solid rgba(200,162,80,.38); color: #e0c875; }
-    .bg-g { background: rgba(22,163,74,.16); border: 1px solid rgba(34,197,94,.4); color: #4ade80; }
+/* Sections */
+.section{padding:28px 42px;border-bottom:1px solid #eef0f3}
+.section-title{font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:#aaa;margin-bottom:18px}
 
-    /* ── Sections ── */
-    .section { padding: 26px 40px; border-bottom: 1px solid #e8e8e8; }
-    .section-title { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #aaa; margin-bottom: 16px; }
+/* Feature table */
+.feat-table{width:100%;border-collapse:separate;border-spacing:0 6px}
+.feat-table td{vertical-align:top;font-size:14px;color:#2d3748;line-height:1.7}
+.check{width:26px;padding:8px 4px;color:#16a34a;font-size:16px;font-weight:700}
+.feat-table tr td:last-child{padding:9px 15px;background:#f8fafc;border-radius:8px}
 
-    /* ── Feature table ── */
-    .feat-table { width: 100%; border-collapse: separate; border-spacing: 0 7px; }
-    .feat-table td { vertical-align: top; font-size: 14px; color: #333; line-height: 1.6; }
-    .feat-table .check { width: 28px; padding: 8px 0 8px 4px; color: #1d6fdb; font-size: 15px; font-weight: 700; }
-    .feat-table tr td:last-child { padding: 8px 12px; background: #f7f8fa; border-radius: 7px; }
+/* About */
+.about-body{font-size:14px;color:#444;line-height:1.85;padding:18px 22px;background:#f8fafc;border-radius:8px;border-left:4px solid #c8a250}
 
-    /* ── About body ── */
-    .about-body { font-size: 14px; color: #444; line-height: 1.82; padding: 16px 20px; background: #f7f8fa; border-radius: 8px; border-left: 4px solid #c8a250; }
+/* Why us */
+.why-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.why-card{display:flex;align-items:flex-start;gap:10px;padding:14px;background:#f8fafc;border-radius:9px;border:1px solid #e8ecf0}
+.why-icon{font-size:22px;flex-shrink:0;margin-top:1px}
+.why-title{font-size:13px;font-weight:700;color:#111;margin-bottom:3px}
+.why-sub{font-size:11px;color:#888;line-height:1.55}
 
-    /* ── Promise grid ── */
-    .promise-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 26px 40px; border-bottom: 1px solid #e8e8e8; }
-    .promise-card { padding: 18px 14px; border-radius: 10px; background: #f7f8fa; border: 1px solid #e4e6ea; text-align: center; }
-    .p-icon { font-size: 26px; margin-bottom: 7px; }
-    .p-title { font-size: 12px; font-weight: 700; color: #111; margin-bottom: 3px; }
-    .p-sub { font-size: 11px; color: #888; line-height: 1.5; }
+/* Shipping table */
+.ship-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #f2f2f2}
+.ship-row:last-child{border:none}
+.ship-label{font-size:12px;font-weight:700;color:#666;min-width:110px;flex-shrink:0}
+.ship-val{font-size:13px;color:#222}
+.green{color:#15803d;font-weight:700}
 
-    /* ── Footer ── */
-    .footer { background: #12172b; padding: 20px 40px; text-align: center; color: #666; font-size: 12px; line-height: 2; }
-    .footer strong { color: #c8a250; }
-  </style>
+/* Promise grid */
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:28px 42px;border-bottom:1px solid #eef0f3}
+.pcard{padding:18px 14px;border-radius:10px;background:#f8fafc;border:1px solid #e4e6ea;text-align:center}
+.p-icon{font-size:28px;margin-bottom:8px}
+.p-title{font-size:12px;font-weight:700;color:#111;margin-bottom:3px}
+.p-sub{font-size:11px;color:#888;line-height:1.5}
+
+/* Footer */
+.footer{background:#0f1628;padding:22px 42px;text-align:center;color:#556;font-size:12px;line-height:2.1}
+.footer strong{color:#c8a250}
+.stars{color:#f59e0b;font-size:14px}
+</style>
 </head>
 <body>
 <div class="wrap">
 
   <div class="hero">
-    <div class="hero-label">Product Details</div>
+    <div class="hero-tag">Premium Quality Product</div>
     <div class="hero-title">${title}</div>
+    <div class="hero-sub">Brand New &amp; Factory Sealed &nbsp;&middot;&nbsp; Fast Shipping &nbsp;&middot;&nbsp; Free 30-Day Returns</div>
   </div>
 
-  <div class="delivery-bar">
-    <div class="icon">&#128666;</div>
-    <div class="text">
-      <div class="head">FREE 2&ndash;4 DAY DELIVERY</div>
-      <div class="sub">Ships within 1 business day &bull; USPS Priority Mail &bull; No extra cost</div>
+  <div class="dbar">
+    <div class="dbar-icon">&#128666;</div>
+    <div>
+      <div class="dbar-head">FREE 2&ndash;3 DAY DELIVERY INCLUDED</div>
+      <div class="dbar-eta">Estimated arrival: <strong>${delivMin} &ndash; ${delivMax}</strong> &nbsp;&bull;&nbsp; Ships within 1 business day &bull; USPS Priority Mail</div>
     </div>
   </div>
 
   <div class="badges">
-    <span class="badge bg-g">&#10003; Free 2&ndash;4 Day Delivery</span>
+    <span class="badge bgg">&#10003; Free 2&ndash;3 Day Delivery</span>
     <span class="badge bg">&#10003; Brand New &amp; Sealed</span>
     <span class="badge bg">&#10003; Free Shipping</span>
-    <span class="badge bg">&#10003; 30-Day Returns</span>
+    <span class="badge bg">&#10003; 30-Day Free Returns</span>
+    <span class="badge bg">&#10003; Secure Purchase</span>
   </div>
 
   ${featureSection}
   ${aboutSection}
 
-  <div class="promise-grid">
-    <div class="promise-card">
+  <div class="section">
+    <div class="section-title">Why Shop With Us</div>
+    <div class="why-grid">
+      <div class="why-card">
+        <div class="why-icon">&#9889;</div>
+        <div>
+          <div class="why-title">Lightning-Fast Shipping</div>
+          <div class="why-sub">Ships within 1 business day via USPS Priority Mail. Delivered in 2&ndash;3 days.</div>
+        </div>
+      </div>
+      <div class="why-card">
+        <div class="why-icon">&#128230;</div>
+        <div>
+          <div class="why-title">100% Genuine Product</div>
+          <div class="why-sub">Every item is brand new, factory sealed, and arrives in original packaging.</div>
+        </div>
+      </div>
+      <div class="why-card">
+        <div class="why-icon">&#8617;</div>
+        <div>
+          <div class="why-title">Hassle-Free Returns</div>
+          <div class="why-sub">Full 30-day return window. We cover return shipping — no questions asked.</div>
+        </div>
+      </div>
+      <div class="why-card">
+        <div class="why-icon">&#128205;</div>
+        <div>
+          <div class="why-title">Full Order Tracking</div>
+          <div class="why-sub">Tracking number provided at shipment so you always know where your order is.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Shipping &amp; Delivery Details</div>
+    <div class="ship-row">
+      <div class="ship-label">Shipping Cost</div>
+      <div class="ship-val green">FREE &mdash; Included at no extra charge</div>
+    </div>
+    <div class="ship-row">
+      <div class="ship-label">Carrier</div>
+      <div class="ship-val">USPS Priority Mail</div>
+    </div>
+    <div class="ship-row">
+      <div class="ship-label">Dispatch Time</div>
+      <div class="ship-val">Ships within 1 business day of cleared payment</div>
+    </div>
+    <div class="ship-row">
+      <div class="ship-label">Est. Delivery</div>
+      <div class="ship-val green">${delivMin} &ndash; ${delivMax}</div>
+    </div>
+    <div class="ship-row">
+      <div class="ship-label">Returns</div>
+      <div class="ship-val">Free 30-day returns &mdash; seller pays return shipping</div>
+    </div>
+  </div>
+
+  <div class="pgrid">
+    <div class="pcard">
       <div class="p-icon">&#128230;</div>
       <div class="p-title">Brand New &amp; Sealed</div>
-      <div class="p-sub">100% genuine product in original packaging</div>
+      <div class="p-sub">100% genuine, original factory packaging</div>
     </div>
-    <div class="promise-card">
+    <div class="pcard">
       <div class="p-icon">&#128666;</div>
-      <div class="p-title">Free Shipping</div>
-      <div class="p-sub">USPS Priority Mail &mdash; no hidden fees</div>
+      <div class="p-title">Free 2&ndash;3 Day Shipping</div>
+      <div class="p-sub">USPS Priority Mail at zero extra cost</div>
     </div>
-    <div class="promise-card">
+    <div class="pcard">
       <div class="p-icon">&#8617;</div>
       <div class="p-title">30-Day Returns</div>
-      <div class="p-sub">Seller covers return shipping cost</div>
+      <div class="p-sub">Seller covers all return shipping costs</div>
     </div>
-    <div class="promise-card">
-      <div class="p-icon">&#128272;</div>
-      <div class="p-title">Buyer Protection</div>
-      <div class="p-sub">100% satisfaction guaranteed</div>
+    <div class="pcard">
+      <div class="p-icon">&#9733;</div>
+      <div class="p-title">Trusted Seller</div>
+      <div class="p-sub">Verified store &bull; Top-rated service</div>
     </div>
   </div>
 
   <div class="footer">
-    Have a question? Message us &mdash; we respond within 24 hours.<br>
-    <strong>&#9733; Save our store for exclusive deals and new arrivals</strong>
+    <span class="stars">&#9733;&#9733;&#9733;&#9733;&#9733;</span> &nbsp; Thank you for shopping with us &nbsp; <span class="stars">&#9733;&#9733;&#9733;&#9733;&#9733;</span><br>
+    Have a question? Message us — we respond within 24 hours<br>
+    <strong>&#128276; Save our store for exclusive deals and new arrivals</strong>
   </div>
 
 </div>
@@ -298,6 +394,38 @@ function buildDescription(title: string, features: string[], about: string): str
   return `<![CDATA[${html}]]>`
 }
 
+// ── eBay Picture Services — upload badge image so it's permanently hosted ────
+async function uploadBadgedImage(
+  badgeUrl: string, token: string, appId: string
+): Promise<string | null> {
+  try {
+    const xml = `<?xml version="1.0" encoding="utf-8"?>
+<UploadSiteHostedPicturesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
+  <ExternalPictureURL>${badgeUrl}</ExternalPictureURL>
+</UploadSiteHostedPicturesRequest>`
+
+    const res = await fetch('https://api.ebay.com/ws/api.dll', {
+      method: 'POST',
+      headers: {
+        'X-EBAY-API-CALL-NAME': 'UploadSiteHostedPictures',
+        'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
+        'X-EBAY-API-APP-NAME': appId,
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'text/xml',
+      },
+      body: xml,
+    })
+    const text = await res.text()
+    const match = text.match(/<FullURL>(.*?)<\/FullURL>/)
+    return match?.[1] || null
+  } catch {
+    return null
+  }
+}
+
+// ── Auth helper ──────────────────────────────────────────────────────────────
 async function getFreshToken(userId: string): Promise<string | null> {
   const rows = await sql`SELECT oauth_token, refresh_token, token_expires_at FROM ebay_credentials WHERE user_id = ${userId}`
   if (!rows[0]) return null
@@ -305,8 +433,8 @@ async function getFreshToken(userId: string): Promise<string | null> {
 
   const expired = !token_expires_at || new Date(token_expires_at) < new Date(Date.now() + 5 * 60 * 1000)
   if (!expired) return oauth_token as string
-
   if (!refresh_token) return null
+
   try {
     const creds = Buffer.from(`${process.env.EBAY_APP_ID}:${process.env.EBAY_CERT_ID}`).toString('base64')
     const res = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
@@ -326,6 +454,7 @@ async function getFreshToken(userId: string): Promise<string | null> {
   } catch { return null }
 }
 
+// ── eBay API call ────────────────────────────────────────────────────────────
 async function submitToEbay(xml: string, token: string, appId: string): Promise<string> {
   const res = await fetch('https://api.ebay.com/ws/api.dll', {
     method: 'POST',
@@ -391,6 +520,7 @@ function buildXml(params: {
 </AddFixedPriceItemRequest>`
 }
 
+// ── Route handler ────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -399,7 +529,10 @@ export async function POST(req: NextRequest) {
   if (!asin || !title || !ebayPrice) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
   if (isVero(title)) {
-    return NextResponse.json({ error: 'This product cannot be listed — it contains a brand enrolled in eBay VeRO. Choose a different product.' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'This product cannot be listed — it contains a brand enrolled in eBay VeRO. Choose a different product.' },
+      { status: 400 }
+    )
   }
 
   const token = await getFreshToken(session.user.id)
@@ -407,8 +540,6 @@ export async function POST(req: NextRequest) {
 
   const appId = process.env.EBAY_APP_ID || ''
 
-  // Optimized title: strip non-ASCII/special chars, remove filler packaging phrases,
-  // smart-truncate at word boundary to fit 80 chars
   const cleanTitle = title
     .replace(/[^\x20-\x7E]/g, '')
     .replace(/[<>&"]/g, '')
@@ -425,47 +556,61 @@ export async function POST(req: NextRequest) {
     .map(([n, v]) => `\n      <NameValueList><Name>${n}</Name><Value>${v}</Value></NameValueList>`)
     .join('')
 
-  // Fetch all Amazon images + feature bullets for this ASIN
   const rapidKey = process.env.RAPIDAPI_KEY || ''
   const amazon = await fetchAmazonDetails(asin, rapidKey, imageUrl)
-
   const description = buildDescription(safeTitle, amazon.features, amazon.description)
 
-  // Use direct Amazon image URLs — eBay prohibits watermarked/text-overlay images
-  // and proxy URLs from our server can fail if eBay's fetcher can't reach Vercel
-  const allImages = amazon.images
+  // Upload first image with FREE SHIPPING banner to eBay's picture hosting
+  // so it's permanently cached on eBay CDN (no proxy URL in the live listing)
+  const host = req.headers.get('host') || ''
+  const proto = host.startsWith('localhost') ? 'http' : 'https'
+  const siteUrl = `${proto}://${host}`
 
-  const pictureXml = allImages.length > 0
-    ? `<PictureDetails><GalleryType>Gallery</GalleryType>${allImages.map(u => `<PictureURL>${u}</PictureURL>`).join('')}</PictureDetails>`
+  const mainImage = amazon.images[0] || imageUrl || ''
+  const restImages = amazon.images.slice(1)
+
+  let firstPictureUrl = mainImage
+  if (mainImage) {
+    const badgeUrl = `${siteUrl}/api/image/badge?url=${encodeURIComponent(mainImage)}`
+    const hostedUrl = await uploadBadgedImage(badgeUrl, token, appId)
+    if (hostedUrl) firstPictureUrl = hostedUrl
+  }
+
+  const pictureList = firstPictureUrl
+    ? [firstPictureUrl, ...restImages]
+    : restImages
+
+  const pictureXml = pictureList.length > 0
+    ? `<PictureDetails><GalleryType>Gallery</GalleryType>${pictureList.map(u => `<PictureURL>${u}</PictureURL>`).join('')}</PictureDetails>`
     : ''
 
   const xmlParams = { token, safeTitle, description, categoryId, price, pictureXml, extraSpecifics }
 
-  // First attempt with niche category
+  // Submit listing — 3-tier retry if category is not a leaf
   let responseText = await submitToEbay(buildXml(xmlParams), token, appId)
 
-  // Auto-retry with generic leaf category if eBay rejects as non-leaf
-  const isLeafError = (text: string) => {
-    const lower = text.toLowerCase()
-    return lower.includes('leaf') || lower.includes('not a valid category') || lower.includes('invalid category')
+  const isLeafError = (t: string) => {
+    const l = t.toLowerCase()
+    return l.includes('leaf') || l.includes('not a valid category') || l.includes('invalid category')
   }
+
   const firstShort = responseText.match(/<ShortMessage>(.*?)<\/ShortMessage>/)?.[1] || ''
-  const firstLong = responseText.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || ''
+  const firstLong  = responseText.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || ''
   if (isLeafError(firstShort) || isLeafError(firstLong)) {
-    // Try a broad but valid leaf: "Home & Garden > Other" (leaf in eBay US)
+    // Tier 2: "Everything Else > Other" — verified leaf in eBay US
     responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '177', extraSpecifics: '' }), token, appId)
-    // If that still fails, fall back to "Clothing, Shoes & Accessories > Other" which is always leaf
-    const retryShort = responseText.match(/<ShortMessage>(.*?)<\/ShortMessage>/)?.[1] || ''
-    const retryLong = responseText.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || ''
-    if (isLeafError(retryShort) || isLeafError(retryLong)) {
-      responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '9355', extraSpecifics: '' }), token, appId)
+    const s2 = responseText.match(/<ShortMessage>(.*?)<\/ShortMessage>/)?.[1] || ''
+    const l2 = responseText.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || ''
+    if (isLeafError(s2) || isLeafError(l2)) {
+      // Tier 3: "Collectibles > Other"
+      responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '10971', extraSpecifics: '' }), token, appId)
     }
   }
 
   const itemIdMatch = responseText.match(/<ItemID>(\d+)<\/ItemID>/)
-  const shortMatch = responseText.match(/<ShortMessage>(.*?)<\/ShortMessage>/)
-  const longMatch = responseText.match(/<LongMessage>(.*?)<\/LongMessage>/)
-  const ackMatch = responseText.match(/<Ack>(.*?)<\/Ack>/)
+  const shortMatch  = responseText.match(/<ShortMessage>(.*?)<\/ShortMessage>/)
+  const longMatch   = responseText.match(/<LongMessage>(.*?)<\/LongMessage>/)
+  const ackMatch    = responseText.match(/<Ack>(.*?)<\/Ack>/)
 
   if (!itemIdMatch || ackMatch?.[1] === 'Failure') {
     const errMsg = longMatch?.[1] || shortMatch?.[1] || responseText.slice(0, 400)

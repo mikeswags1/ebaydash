@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import sharp from 'sharp'
 
-// SVG banner rendered onto the bottom of the main product image
+// Clean professional FREE SHIPPING banner — bottom strip on product image
 const BANNER_SVG = Buffer.from(
-  `<svg width="600" height="54" xmlns="http://www.w3.org/2000/svg">
-    <rect width="600" height="54" fill="rgba(22,163,74,0.92)"/>
-    <text x="300" y="35" font-family="Arial,Helvetica,sans-serif" font-size="22"
-      font-weight="bold" fill="white" text-anchor="middle">FREE SHIPPING  ·  1–3 DAY DELIVERY</text>
+  `<svg width="800" height="68" xmlns="http://www.w3.org/2000/svg">
+    <rect width="800" height="68" fill="rgb(21,128,61)"/>
+    <rect x="0" y="0" width="800" height="3" fill="rgb(74,222,128)"/>
+    <text x="400" y="44" font-family="Arial Black,Arial,Helvetica,sans-serif" font-size="24"
+      font-weight="900" fill="white" text-anchor="middle" letter-spacing="2">
+      FREE SHIPPING  |  2-3 DAY DELIVERY
+    </text>
   </svg>`
 )
 
@@ -15,32 +18,33 @@ export async function GET(req: NextRequest) {
   if (!url) return new NextResponse('Missing url', { status: 400 })
 
   try {
-    const imgRes = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } })
+    const imgRes = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(8000),
+    })
     if (!imgRes.ok) return new NextResponse('Image fetch failed', { status: 502 })
     const imgBuffer = Buffer.from(await imgRes.arrayBuffer())
 
     const img = sharp(imgBuffer)
     const { width = 600, height = 600 } = await img.metadata()
 
-    // Scale banner to image width, position at bottom
-    const bannerWidth = width
-    const bannerHeight = Math.round(54 * (bannerWidth / 600))
-    const bannerTop = height - bannerHeight
+    const bannerH = Math.round(68 * (width / 800))
+    const bannerTop = height - bannerH
 
     const scaledBanner = await sharp(BANNER_SVG)
-      .resize(bannerWidth, bannerHeight)
+      .resize(width, bannerH)
       .png()
       .toBuffer()
 
     const result = await img
       .composite([{ input: scaledBanner, top: bannerTop, left: 0 }])
-      .jpeg({ quality: 92 })
+      .jpeg({ quality: 93 })
       .toBuffer()
 
     return new NextResponse(result as unknown as BodyInit, {
       headers: {
         'Content-Type': 'image/jpeg',
-        'Cache-Control': 'public, max-age=604800',
+        'Cache-Control': 'public, max-age=2592000',
       },
     })
   } catch (e) {
