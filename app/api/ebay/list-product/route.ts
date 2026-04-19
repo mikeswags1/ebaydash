@@ -141,6 +141,146 @@ async function fetchAmazonDetails(asin: string, rapidKey: string, fallbackImage?
   }
 }
 
+function buildDescription(title: string, features: string[], about: string): string {
+  const featureRows = features.length > 0
+    ? features.map(f => `
+          <tr>
+            <td class="check">&#10003;</td>
+            <td>${f}</td>
+          </tr>`).join('')
+    : ''
+
+  const featureSection = featureRows ? `
+    <div class="section">
+      <div class="section-title">Product Features</div>
+      <table class="feat-table">
+        <tbody>${featureRows}
+        </tbody>
+      </table>
+    </div>` : ''
+
+  const aboutSection = about ? `
+    <div class="section">
+      <div class="section-title">About This Item</div>
+      <div class="about-body">${about}</div>
+    </div>` : ''
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; background: #f2f2f2; color: #222; }
+    a { color: inherit; text-decoration: none; }
+
+    .wrap { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 32px rgba(0,0,0,.12); }
+
+    /* ── Hero ── */
+    .hero { background: linear-gradient(140deg, #12172b 0%, #1a2744 100%); padding: 36px 40px 30px; }
+    .hero-label { font-size: 10px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: #c8a250; margin-bottom: 12px; }
+    .hero-title { font-size: 21px; font-weight: 800; color: #fff; line-height: 1.42; }
+
+    /* ── Delivery bar ── */
+    .delivery-bar { background: #166534; padding: 14px 40px; display: flex; align-items: center; gap: 12px; }
+    .delivery-bar .icon { font-size: 22px; }
+    .delivery-bar .text { color: #fff; }
+    .delivery-bar .head { font-size: 14px; font-weight: 800; letter-spacing: .3px; }
+    .delivery-bar .sub { font-size: 11px; color: #bbf7d0; margin-top: 1px; }
+
+    /* ── Badge strip ── */
+    .badges { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 40px; background: #0f172a; }
+    .badge { padding: 4px 13px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: .4px; }
+    .bg { background: rgba(200,162,80,.16); border: 1px solid rgba(200,162,80,.38); color: #e0c875; }
+    .bg-g { background: rgba(22,163,74,.16); border: 1px solid rgba(34,197,94,.4); color: #4ade80; }
+
+    /* ── Sections ── */
+    .section { padding: 26px 40px; border-bottom: 1px solid #e8e8e8; }
+    .section-title { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #aaa; margin-bottom: 16px; }
+
+    /* ── Feature table ── */
+    .feat-table { width: 100%; border-collapse: separate; border-spacing: 0 7px; }
+    .feat-table td { vertical-align: top; font-size: 14px; color: #333; line-height: 1.6; }
+    .feat-table .check { width: 28px; padding: 8px 0 8px 4px; color: #1d6fdb; font-size: 15px; font-weight: 700; }
+    .feat-table tr td:last-child { padding: 8px 12px; background: #f7f8fa; border-radius: 7px; }
+
+    /* ── About body ── */
+    .about-body { font-size: 14px; color: #444; line-height: 1.82; padding: 16px 20px; background: #f7f8fa; border-radius: 8px; border-left: 4px solid #c8a250; }
+
+    /* ── Promise grid ── */
+    .promise-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 26px 40px; border-bottom: 1px solid #e8e8e8; }
+    .promise-card { padding: 18px 14px; border-radius: 10px; background: #f7f8fa; border: 1px solid #e4e6ea; text-align: center; }
+    .p-icon { font-size: 26px; margin-bottom: 7px; }
+    .p-title { font-size: 12px; font-weight: 700; color: #111; margin-bottom: 3px; }
+    .p-sub { font-size: 11px; color: #888; line-height: 1.5; }
+
+    /* ── Footer ── */
+    .footer { background: #12172b; padding: 20px 40px; text-align: center; color: #666; font-size: 12px; line-height: 2; }
+    .footer strong { color: #c8a250; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="hero-label">Product Details</div>
+    <div class="hero-title">${title}</div>
+  </div>
+
+  <div class="delivery-bar">
+    <div class="icon">&#128666;</div>
+    <div class="text">
+      <div class="head">FREE 2&ndash;4 DAY DELIVERY</div>
+      <div class="sub">Ships within 1 business day &bull; USPS Priority Mail &bull; No extra cost</div>
+    </div>
+  </div>
+
+  <div class="badges">
+    <span class="badge bg-g">&#10003; Free 2&ndash;4 Day Delivery</span>
+    <span class="badge bg">&#10003; Brand New &amp; Sealed</span>
+    <span class="badge bg">&#10003; Free Shipping</span>
+    <span class="badge bg">&#10003; 30-Day Returns</span>
+  </div>
+
+  ${featureSection}
+  ${aboutSection}
+
+  <div class="promise-grid">
+    <div class="promise-card">
+      <div class="p-icon">&#128230;</div>
+      <div class="p-title">Brand New &amp; Sealed</div>
+      <div class="p-sub">100% genuine product in original packaging</div>
+    </div>
+    <div class="promise-card">
+      <div class="p-icon">&#128666;</div>
+      <div class="p-title">Free Shipping</div>
+      <div class="p-sub">USPS Priority Mail &mdash; no hidden fees</div>
+    </div>
+    <div class="promise-card">
+      <div class="p-icon">&#8617;</div>
+      <div class="p-title">30-Day Returns</div>
+      <div class="p-sub">Seller covers return shipping cost</div>
+    </div>
+    <div class="promise-card">
+      <div class="p-icon">&#128272;</div>
+      <div class="p-title">Buyer Protection</div>
+      <div class="p-sub">100% satisfaction guaranteed</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Have a question? Message us &mdash; we respond within 24 hours.<br>
+    <strong>&#9733; Save our store for exclusive deals and new arrivals</strong>
+  </div>
+
+</div>
+</body>
+</html>`
+
+  return `<![CDATA[${html}]]>`
+}
+
 async function getFreshToken(userId: string): Promise<string | null> {
   const rows = await sql`SELECT oauth_token, refresh_token, token_expires_at FROM ebay_credentials WHERE user_id = ${userId}`
   if (!rows[0]) return null
@@ -268,21 +408,7 @@ export async function POST(req: NextRequest) {
   const rapidKey = process.env.RAPIDAPI_KEY || ''
   const amazon = await fetchAmazonDetails(asin, rapidKey, imageUrl)
 
-  const productFeatures = amazon.features
-
-  // Build product features section
-  const featuresSection = productFeatures.length > 0
-    ? `<div class="section"><div class="sec-label">&#128313; Product Features</div><ul class="feat-list">${productFeatures.map(f => `<li>${f}</li>`).join('')}</ul></div>`
-    : ''
-
-  // Amazon full description
-  const aboutSection = amazon.description
-    ? `<div class="section"><div class="sec-label">&#128196; About This Item</div><p class="desc-body">${amazon.description}</p></div>`
-    : ''
-
-  const css = `*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:#f0f0f0;color:#222}.wrap{max-width:700px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.1)}.hero{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:36px 40px 28px}.hero-eyebrow{font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#c8a250;margin-bottom:10px}.hero-title{font-size:22px;font-weight:800;color:#fff;line-height:1.4;max-width:580px}.badge-bar{display:flex;flex-wrap:wrap;gap:8px;padding:14px 40px;background:#0f172a;border-bottom:1px solid #1e2a40}.badge{padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px}.badge-gold{background:rgba(200,162,80,.18);border:1px solid rgba(200,162,80,.4);color:#e0c875}.badge-green{background:rgba(22,163,74,.18);border:1px solid rgba(22,163,74,.45);color:#4ade80}.section{padding:28px 40px;border-bottom:1px solid #eaeaea}.sec-label{font-size:11px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:#999;margin-bottom:16px}.feat-list{list-style:none;display:flex;flex-direction:column;gap:10px}.feat-list li{display:flex;align-items:flex-start;gap:10px;font-size:14px;color:#333;line-height:1.6;padding:10px 14px;background:#f9fafb;border-radius:8px;border-left:3px solid #2563eb}.feat-list li::before{content:"";display:none}.desc-body{font-size:14px;color:#444;line-height:1.8;padding:16px 20px;background:#f9fafb;border-radius:8px;border-left:3px solid #c8a250}.promise-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;padding:28px 40px;border-bottom:1px solid #eaeaea}.promise-card{padding:20px 16px;border-radius:10px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center}.p-icon{font-size:28px;margin-bottom:8px}.p-title{font-size:13px;font-weight:700;color:#111;margin-bottom:3px}.p-sub{font-size:11px;color:#888}.deliver-banner{background:linear-gradient(90deg,#14532d,#166534);padding:18px 40px;display:flex;align-items:center;gap:14px}.d-icon{font-size:28px}.d-text{color:#fff}.d-head{font-size:15px;font-weight:800;letter-spacing:.5px}.d-sub{font-size:12px;color:#bbf7d0;margin-top:2px}.footer{background:#1a1a2e;padding:22px 40px;text-align:center;color:#777;font-size:12px;line-height:2}.footer strong{color:#c8a250}`
-
-  const description = `<![CDATA[<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body><div class="wrap"><div class="hero"><div class="hero-eyebrow">Product Details</div><div class="hero-title">${safeTitle}</div></div><div class="badge-bar"><span class="badge badge-gold">&#10003; Brand New &amp; Sealed</span><span class="badge badge-green">&#128994; FREE 1&ndash;3 Day Delivery</span><span class="badge badge-gold">&#10003; Free Shipping</span><span class="badge badge-gold">&#10003; 30-Day Returns</span></div>${featuresSection}${aboutSection}<div class="deliver-banner"><div class="d-icon">&#128666;</div><div class="d-text"><div class="d-head">FREE 1&ndash;3 DAY DELIVERY</div><div class="d-sub">Order today &mdash; ships within 1 business day via USPS Priority Mail</div></div></div><div class="promise-grid"><div class="promise-card"><div class="p-icon">&#128230;</div><div class="p-title">Brand New &amp; Sealed</div><div class="p-sub">100% genuine, original packaging</div></div><div class="promise-card"><div class="p-icon">&#128666;</div><div class="p-title">Free Shipping</div><div class="p-sub">USPS Priority &mdash; no hidden fees</div></div><div class="promise-card"><div class="p-icon">&#8617;&#65039;</div><div class="p-title">30-Day Returns</div><div class="p-sub">Seller pays return shipping</div></div><div class="promise-card"><div class="p-icon">&#128272;</div><div class="p-title">Buyer Protection</div><div class="p-sub">100% satisfaction guaranteed</div></div></div><div class="footer">Questions? Message us &mdash; we respond within 24 hours<br><strong>&#9733; Add us to your Saved Sellers for new arrivals &amp; deals</strong></div></div></body></html>]]>`
+  const description = buildDescription(safeTitle, amazon.features, amazon.description)
 
   // Main image gets the "FREE SHIPPING · 1-3 DAY DELIVERY" banner burned in
   const host = req.headers.get('host') || ''
