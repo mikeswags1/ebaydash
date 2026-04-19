@@ -93,6 +93,7 @@ const NICHE_SPECIFICS: Record<string, Array<[string, string]>> = {
 interface AmazonDetails {
   images: string[]
   features: string[]
+  description: string
 }
 
 async function fetchAmazonDetails(asin: string, rapidKey: string, fallbackImage?: string): Promise<AmazonDetails> {
@@ -111,7 +112,6 @@ async function fetchAmazonDetails(asin: string, rapidKey: string, fallbackImage?
       data.imageUrlList ?? data.imageList ?? data.images ?? []
     ).filter((u: unknown): u is string => typeof u === 'string' && u.startsWith('http'))
 
-    // Ensure main image is first; deduplicate; cap at 12 (eBay max)
     const mainImg: string = data.mainImageUrl ?? data.imageUrl ?? fallbackImage ?? ''
     const allImages = Array.from(new Set([mainImg, ...rawImages].filter(Boolean))).slice(0, 12)
 
@@ -119,12 +119,25 @@ async function fetchAmazonDetails(asin: string, rapidKey: string, fallbackImage?
     const rawFeatures: unknown[] = data.keyFeatures ?? data.featureBullets ?? data.features ?? data.bulletPoints ?? []
     const features = (rawFeatures as string[])
       .filter((f): f is string => typeof f === 'string' && f.trim().length > 5)
-      .slice(0, 7)
+      .slice(0, 8)
       .map(f => f.replace(/[<>&"]/g, ' ').replace(/\s{2,}/g, ' ').trim())
 
-    return { images: allImages.length > 0 ? allImages : (fallbackImage ? [fallbackImage] : []), features }
+    // Full Amazon product description
+    const rawDesc: string = data.productDescription ?? data.description ?? data.productDetails ?? ''
+    const description = rawDesc
+      .replace(/<[^>]*>/g, ' ')   // strip any HTML tags
+      .replace(/[<>&"]/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+      .slice(0, 2000)
+
+    return {
+      images: allImages.length > 0 ? allImages : (fallbackImage ? [fallbackImage] : []),
+      features,
+      description,
+    }
   } catch {
-    return { images: fallbackImage ? [fallbackImage] : [], features: [] }
+    return { images: fallbackImage ? [fallbackImage] : [], features: [], description: '' }
   }
 }
 
@@ -275,7 +288,11 @@ export async function POST(req: NextRequest) {
     ? `<div class="features"><div class="sec-label">Product Features</div><div class="feat-list">${productFeatureRows}</div></div><div class="features"><div class="sec-label">Shipping &amp; Service</div><div class="feat-list">${sellerFeatureRows}</div></div>`
     : `<div class="features"><div class="sec-label">What You Get</div><div class="feat-list">${sellerFeatureRows}</div></div>`
 
-  const description = `<![CDATA[<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;color:#222}.wrap{max-width:680px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)}.hero{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:32px 36px}.hero-tag{font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:#c8a250;margin-bottom:10px}.hero-title{font-size:20px;font-weight:700;color:#fff;line-height:1.45;max-width:560px}.badges{display:flex;flex-wrap:wrap;gap:8px;padding:16px 36px;background:#0f172a}.badge{background:rgba(200,162,80,.15);border:1px solid rgba(200,162,80,.35);color:#e0c875;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;letter-spacing:.5px}.features{padding:28px 36px;border-bottom:1px solid #eee}.sec-label{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:18px}.feat-list{display:flex;flex-direction:column;gap:14px}.feat{display:flex;align-items:flex-start;gap:14px}.feat-dot{width:36px;height:36px;border-radius:10px;background:#f0f7ff;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;color:#2563eb;font-weight:700}.feat-copy{font-size:14px;color:#444;line-height:1.55}.feat-copy b{color:#111}.trust{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:28px 36px;border-bottom:1px solid #eee}.trust-box{padding:18px 14px;border-radius:10px;background:#fafafa;border:1px solid #eee;text-align:center}.t-icon{font-size:26px;margin-bottom:6px}.t-label{font-size:12px;font-weight:700;color:#222;margin-bottom:2px}.t-sub{font-size:11px;color:#999}.footer{background:#1a1a2e;padding:20px 36px;text-align:center;color:#888;font-size:12px;line-height:1.9}.footer b{color:#c8a250}</style></head><body><div class="wrap"><div class="hero"><div class="hero-tag">Product Listing</div><div class="hero-title">${safeTitle}</div></div><div class="badges"><span class="badge">&#10003; Brand New &amp; Sealed</span><span class="badge">&#10003; Free Shipping</span><span class="badge">&#10003; 30-Day Returns</span><span class="badge">&#10003; Fast Dispatch</span></div>${featuresSection}<div class="trust"><div class="trust-box"><div class="t-icon">&#128666;</div><div class="t-label">Free Shipping</div><div class="t-sub">No extra cost</div></div><div class="trust-box"><div class="t-icon">&#9889;</div><div class="t-label">Fast Dispatch</div><div class="t-sub">Ships in 1&ndash;3 days</div></div><div class="trust-box"><div class="t-icon">&#8617;</div><div class="t-label">30-Day Returns</div><div class="t-sub">Hassle-free policy</div></div><div class="trust-box"><div class="t-icon">&#10003;</div><div class="t-label">Satisfaction</div><div class="t-sub">100% guaranteed</div></div></div><div class="footer">Questions? Message us &mdash; we reply within 24 hours.<br><b>Save our store for exclusive deals and new arrivals!</b></div></div></body></html>]]>`
+  const descriptionSection = amazon.description
+    ? `<div class="features"><div class="sec-label">About This Item</div><p class="desc-body">${amazon.description}</p></div>`
+    : ''
+
+  const description = `<![CDATA[<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;color:#222}.wrap{max-width:680px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)}.hero{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:32px 36px}.hero-tag{font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:#c8a250;margin-bottom:10px}.hero-title{font-size:20px;font-weight:700;color:#fff;line-height:1.45;max-width:560px}.badges{display:flex;flex-wrap:wrap;gap:8px;padding:16px 36px;background:#0f172a}.badge{background:rgba(200,162,80,.15);border:1px solid rgba(200,162,80,.35);color:#e0c875;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;letter-spacing:.5px}.badge-green{background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.35);color:#4ade80;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;letter-spacing:.5px}.features{padding:28px 36px;border-bottom:1px solid #eee}.sec-label{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:18px}.feat-list{display:flex;flex-direction:column;gap:14px}.feat{display:flex;align-items:flex-start;gap:14px}.feat-dot{width:36px;height:36px;border-radius:10px;background:#f0f7ff;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;color:#2563eb;font-weight:700}.feat-copy{font-size:14px;color:#444;line-height:1.55}.feat-copy b{color:#111}.desc-body{font-size:14px;color:#444;line-height:1.75}.trust{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:28px 36px;border-bottom:1px solid #eee}.trust-box{padding:18px 14px;border-radius:10px;background:#fafafa;border:1px solid #eee;text-align:center}.t-icon{font-size:26px;margin-bottom:6px}.t-label{font-size:12px;font-weight:700;color:#222;margin-bottom:2px}.t-sub{font-size:11px;color:#999}.footer{background:#1a1a2e;padding:20px 36px;text-align:center;color:#888;font-size:12px;line-height:1.9}.footer b{color:#c8a250}</style></head><body><div class="wrap"><div class="hero"><div class="hero-tag">Product Listing</div><div class="hero-title">${safeTitle}</div></div><div class="badges"><span class="badge">&#10003; Brand New &amp; Sealed</span><span class="badge">&#10003; Free Shipping</span><span class="badge-green">&#128994; Free 1&ndash;3 Day Delivery</span><span class="badge">&#10003; 30-Day Returns</span><span class="badge">&#10003; Fast Dispatch</span></div>${featuresSection}${descriptionSection}<div class="trust"><div class="trust-box"><div class="t-icon">&#128666;</div><div class="t-label">Free Shipping</div><div class="t-sub">No extra cost</div></div><div class="trust-box"><div class="t-icon">&#9889;</div><div class="t-label">1&ndash;3 Day Delivery</div><div class="t-sub">Fast &amp; free</div></div><div class="trust-box"><div class="t-icon">&#8617;</div><div class="t-label">30-Day Returns</div><div class="t-sub">Hassle-free policy</div></div><div class="trust-box"><div class="t-icon">&#10003;</div><div class="t-label">Satisfaction</div><div class="t-sub">100% guaranteed</div></div></div><div class="footer">Questions? Message us &mdash; we reply within 24 hours.<br><b>Save our store for exclusive deals and new arrivals!</b></div></div></body></html>]]>`
 
   // All Amazon images in PictureDetails (up to 12)
   const pictureXml = amazon.images.length > 0
