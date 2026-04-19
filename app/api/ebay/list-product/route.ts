@@ -36,7 +36,7 @@ const NICHE_CATEGORY: Record<string, string> = {
   'Garden & Tools':        '2032',
   'Sporting Goods':        '15273',
   'Fishing & Hunting':     '1492',
-  'Cycling':               '7294',
+  'Cycling':               '2904',   // Bicycle Accessories & Gear
   'Fitness Equipment':     '15273',
   'Personal Care':         '26248',
   'Supplements & Vitamins':'180960',
@@ -579,23 +579,35 @@ export async function POST(req: NextRequest) {
 
   const xmlParams = { token, safeTitle, description, categoryId, price, pictureXml, extraSpecifics }
 
-  // Submit listing — 3-tier retry if category is not a leaf
-  let responseText = await submitToEbay(buildXml(xmlParams), token, appId)
+  // Helper: classify eBay error type from Short+Long messages
+  const errType = (short: string, long: string) => {
+    const t = (short + ' ' + long).toLowerCase()
+    if (t.includes('leaf') || t.includes('not a valid category') || t.includes('invalid category')) return 'leaf'
+    if (t.includes('item specific') && (t.includes('missing') || t.includes('required') || t.includes('not valid'))) return 'specific'
+    return 'other'
+  }
+  const parse = (r: string) => ({
+    short: r.match(/<ShortMessage>(.*?)<\/ShortMessage>/)?.[1] || '',
+    long:  r.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || '',
+  })
 
-  const isLeafError = (t: string) => {
-    const l = t.toLowerCase()
-    return l.includes('leaf') || l.includes('not a valid category') || l.includes('invalid category')
+  // First attempt with niche category + niche specifics
+  let responseText = await submitToEbay(buildXml(xmlParams), token, appId)
+  let { short: s1, long: l1 } = parse(responseText)
+  let type1 = errType(s1, l1)
+
+  // If a required item specific is wrong/missing, retry without niche specifics (same category)
+  if (type1 === 'specific') {
+    responseText = await submitToEbay(buildXml({ ...xmlParams, extraSpecifics: '' }), token, appId)
+    const p = parse(responseText)
+    type1 = errType(p.short, p.long)
   }
 
-  const firstShort = responseText.match(/<ShortMessage>(.*?)<\/ShortMessage>/)?.[1] || ''
-  const firstLong  = responseText.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || ''
-  if (isLeafError(firstShort) || isLeafError(firstLong)) {
-    // Tier 2: "Everything Else > Other" — verified leaf in eBay US
+  // If category is not a leaf, work through fallback leaf categories
+  if (type1 === 'leaf') {
     responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '177', extraSpecifics: '' }), token, appId)
-    const s2 = responseText.match(/<ShortMessage>(.*?)<\/ShortMessage>/)?.[1] || ''
-    const l2 = responseText.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || ''
-    if (isLeafError(s2) || isLeafError(l2)) {
-      // Tier 3: "Collectibles > Other"
+    const p2 = parse(responseText)
+    if (errType(p2.short, p2.long) === 'leaf') {
       responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '10971', extraSpecifics: '' }), token, appId)
     }
   }
