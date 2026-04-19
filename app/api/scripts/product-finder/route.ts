@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { sql } from '@/lib/db'
 
 const EBAY_FEE = 0.1335
 const MIN_PROFIT = 5
@@ -95,6 +96,10 @@ export async function GET(req: NextRequest) {
   const rapidKey = process.env.RAPIDAPI_KEY
   if (!rapidKey) return NextResponse.json({ error: 'RapidAPI key not configured' }, { status: 500 })
 
+  // Load already-listed ASINs for this user so they never appear again
+  const listedRows = await sql`SELECT asin FROM listed_asins WHERE user_id = ${session.user.id}`
+  const listedAsins = new Set(listedRows.map((r) => String(r.asin)))
+
   const queries = NICHE_QUERIES[niche] || [`${niche} bestseller`]
   const results: Array<{
     asin: string; title: string; amazonPrice: number; ebayPrice: number
@@ -116,8 +121,9 @@ export async function GET(req: NextRequest) {
       const products: SearchProduct[] = searchData.searchProductDetails || []
 
       for (const p of products) {
-        if (results.length >= 15) break
-        if (!p.asin || seenAsins.has(p.asin)) continue
+        if (results.length >= 30) break
+
+        if (!p.asin || seenAsins.has(p.asin) || listedAsins.has(p.asin)) continue
         seenAsins.add(p.asin)
 
         const price = typeof p.price === 'number' ? p.price : parseFloat(String(p.price || 0))

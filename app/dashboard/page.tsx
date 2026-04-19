@@ -55,6 +55,7 @@ export default function Dashboard() {
   const [scriptRunning, setScriptRunning] = useState<string | null>(null)
   const [scriptMsg, setScriptMsg] = useState<string | null>(null)
   const [finderView, setFinderView] = useState<'cards' | 'list'>('cards')
+  const [listAllProgress, setListAllProgress] = useState<{ done: number; total: number; errors: number } | null>(null)
   const [listModal, setListModal] = useState<{
     asin: string; title: string; amazonPrice: number; ebayPrice: number; imageUrl?: string
   } | null>(null)
@@ -832,21 +833,68 @@ export default function Dashboard() {
 
                     {finderResults && finderResults.length > 0 && (
                       <div>
-                        {/* Header + view toggle */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                        {/* Header + view toggle + list all */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
                           <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.24em', color: 'var(--dim)' }}>
                             {finderResults.length} Profitable Products · {niche}
                           </div>
-                          <div style={{ display: 'flex', gap: '4px' }}>
-                            {(['cards', 'list'] as const).map(v => (
-                              <button key={v} onClick={() => setFinderView(v)} style={{
-                                padding: '5px 12px', borderRadius: '8px', fontSize: '10px', fontWeight: 700,
-                                fontFamily: 'inherit', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.08em',
-                                border: finderView === v ? '1px solid rgba(200,162,80,0.35)' : '1px solid rgba(195,158,88,0.12)',
-                                background: finderView === v ? 'rgba(200,162,80,0.12)' : 'transparent',
-                                color: finderView === v ? 'var(--gld2)' : 'var(--dim)',
-                              }}>{v === 'cards' ? '⊞ Cards' : '☰ List'}</button>
-                            ))}
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            {/* List All button */}
+                            {!listAllProgress && (
+                              <button
+                                className="btn btn-gold btn-sm"
+                                style={{ fontSize: '10px' }}
+                                disabled={!!listAllProgress}
+                                onClick={async () => {
+                                  if (!connected) { alert('Connect eBay first in Settings.'); return }
+                                  setListAllProgress({ done: 0, total: finderResults.length, errors: 0 })
+                                  let errors = 0
+                                  const listedAsins: string[] = []
+                                  for (let i = 0; i < finderResults.length; i++) {
+                                    const p = finderResults[i]
+                                    setListAllProgress({ done: i, total: finderResults.length, errors })
+                                    try {
+                                      const res = await fetch('/api/ebay/list-product', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ asin: p.asin, title: p.title, ebayPrice: p.ebayPrice, imageUrl: p.imageUrl, niche }),
+                                      })
+                                      const data = await res.json()
+                                      if (data.success) listedAsins.push(p.asin)
+                                      else errors++
+                                    } catch { errors++ }
+                                  }
+                                  setListAllProgress({ done: finderResults.length, total: finderResults.length, errors })
+                                  // Remove listed products from results
+                                  setFinderResults(prev => prev ? prev.filter(p => !listedAsins.includes(p.asin)) : null)
+                                }}
+                              >
+                                ⚡ List All ({finderResults.length})
+                              </button>
+                            )}
+                            {listAllProgress && listAllProgress.done < listAllProgress.total && (
+                              <div style={{ fontSize: '11px', color: 'var(--gold)', padding: '5px 12px', borderRadius: '8px', background: 'rgba(200,162,80,0.08)', border: '1px solid rgba(200,162,80,0.2)' }}>
+                                Listing {listAllProgress.done + 1}/{listAllProgress.total}…
+                              </div>
+                            )}
+                            {listAllProgress && listAllProgress.done === listAllProgress.total && (
+                              <div style={{ fontSize: '11px', color: 'var(--grn)', padding: '5px 12px', borderRadius: '8px', background: 'rgba(46,207,118,0.08)', border: '1px solid rgba(46,207,118,0.2)', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                ✓ {listAllProgress.total - listAllProgress.errors} listed{listAllProgress.errors > 0 ? `, ${listAllProgress.errors} failed` : ''}
+                                <button onClick={() => setListAllProgress(null)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '13px', lineHeight: 1 }}>×</button>
+                              </div>
+                            )}
+                            {/* View toggle */}
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              {(['cards', 'list'] as const).map(v => (
+                                <button key={v} onClick={() => setFinderView(v)} style={{
+                                  padding: '5px 12px', borderRadius: '8px', fontSize: '10px', fontWeight: 700,
+                                  fontFamily: 'inherit', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.08em',
+                                  border: finderView === v ? '1px solid rgba(200,162,80,0.35)' : '1px solid rgba(195,158,88,0.12)',
+                                  background: finderView === v ? 'rgba(200,162,80,0.12)' : 'transparent',
+                                  color: finderView === v ? 'var(--gld2)' : 'var(--dim)',
+                                }}>{v === 'cards' ? '⊞ Cards' : '☰ List'}</button>
+                              ))}
+                            </div>
                           </div>
                         </div>
 
@@ -1105,6 +1153,7 @@ export default function Dashboard() {
                         const data = await res.json()
                         if (data.error) { setListError(data.error); return }
                         setListResult(data)
+                        setFinderResults(prev => prev ? prev.filter(p => p.asin !== listModal?.asin) : null)
                       } catch { setListError('Something went wrong — try again') }
                       finally { setListLoading(false) }
                     }}

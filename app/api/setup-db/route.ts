@@ -37,6 +37,17 @@ export async function GET() {
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `
+    await sql`
+      CREATE TABLE IF NOT EXISTS listed_asins (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        asin VARCHAR(20) NOT NULL,
+        title TEXT,
+        ebay_listing_id VARCHAR(50),
+        listed_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(user_id, asin)
+      )
+    `
     // Allow Google OAuth users (no password)
     await sql`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`.catch(() => {})
     // Add missing columns if they don't exist

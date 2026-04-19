@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { asin, title, ebayPrice, amazonPrice, imageUrl, niche } = await req.json()
+  const { asin, title, ebayPrice, imageUrl, niche } = await req.json()
   if (!asin || !title || !ebayPrice) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
   const rows = await sql`SELECT oauth_token FROM ebay_credentials WHERE user_id = ${session.user.id}`
@@ -148,6 +148,14 @@ export async function POST(req: NextRequest) {
   }
 
   const listingId = pubRes.data.listingId
+
+  // Save ASIN so it never shows in product finder again
+  await sql`
+    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id)
+    VALUES (${session.user.id}, ${asin}, ${title.slice(0, 200)}, ${listingId})
+    ON CONFLICT (user_id, asin) DO UPDATE SET ebay_listing_id = ${listingId}, listed_at = NOW()
+  `.catch(() => {})
+
   return NextResponse.json({
     success: true,
     listingId,
