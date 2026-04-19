@@ -206,7 +206,7 @@ function buildXml(params: {
     <Currency>USD</Currency>
     <Location>${process.env.EBAY_ITEM_LOCATION || 'New Jersey, United States'}</Location>
     <PostalCode>${process.env.EBAY_POSTAL_CODE || '07001'}</PostalCode>
-    <DispatchTimeMax>3</DispatchTimeMax>
+    <DispatchTimeMax>1</DispatchTimeMax>
     <ListingDuration>GTC</ListingDuration>
     <ListingType>FixedPriceItem</ListingType>
     <Quantity>2</Quantity>
@@ -215,7 +215,7 @@ function buildXml(params: {
       <ShippingType>Flat</ShippingType>
       <ShippingServiceOptions>
         <ShippingServicePriority>1</ShippingServicePriority>
-        <ShippingService>ShippingMethodStandard</ShippingService>
+        <ShippingService>USPSPriority</ShippingService>
         <ShippingServiceCost>0.00</ShippingServiceCost>
         <FreeShipping>true</FreeShipping>
         <ShippingServiceAdditionalCost>0.00</ShippingServiceAdditionalCost>
@@ -225,7 +225,7 @@ function buildXml(params: {
       <ReturnsAcceptedOption>ReturnsAccepted</ReturnsAcceptedOption>
       <RefundOption>MoneyBack</RefundOption>
       <ReturnsWithinOption>Days_30</ReturnsWithinOption>
-      <ShippingCostPaidByOption>Buyer</ShippingCostPaidByOption>
+      <ShippingCostPaidByOption>Seller</ShippingCostPaidByOption>
     </ReturnPolicy>
     <ItemSpecifics>
       <NameValueList><Name>Brand</Name><Value>Unbranded</Value></NameValueList>${params.extraSpecifics}
