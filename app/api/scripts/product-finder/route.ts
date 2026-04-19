@@ -154,6 +154,16 @@ export async function GET(req: NextRequest) {
     } catch { continue }
   }
 
-  results.sort((a, b) => b.profit - a.profit)
+  // Score = profit weighted by sales popularity (higher sales = more proven product)
+  const parseSales = (v?: string) => {
+    if (!v) return 1
+    const n = parseInt(v.replace(/[^0-9]/g, ''), 10)
+    return isNaN(n) ? 1 : Math.max(1, n)
+  }
+  results.sort((a, b) => {
+    const scoreA = a.profit * Math.log10(parseSales(a.salesVolume) + 1)
+    const scoreB = b.profit * Math.log10(parseSales(b.salesVolume) + 1)
+    return scoreB - scoreA
+  })
   return NextResponse.json({ niche, results, count: results.length })
 }

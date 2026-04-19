@@ -12,7 +12,7 @@ const NICHE_CATEGORY: Record<string, string> = {
   'Gaming Gear':           '117042', // Controllers & Attachments
   'Kitchen Gadgets':       '20625',  // Kitchen Tools & Gadgets
   'Home Decor':            '10033',  // Home Décor
-  'Furniture & Lighting':  '20697',  // Lamps, Lighting & Ceiling Fans
+  'Furniture & Lighting':  '95672',  // Table Lamps (verified leaf)
   'Cleaning Supplies':     '26677',  // Cleaning Supplies
   'Storage & Organization':'26677',  // Cleaning Supplies (storage adjacent)
   'Camping & Hiking':      '16034',  // Outdoor Sports
@@ -430,9 +430,21 @@ export async function POST(req: NextRequest) {
   let responseText = await submitToEbay(buildXml(xmlParams), token, appId)
 
   // Auto-retry with generic leaf category if eBay rejects as non-leaf
+  const isLeafError = (text: string) => {
+    const lower = text.toLowerCase()
+    return lower.includes('leaf') || lower.includes('not a valid category') || lower.includes('invalid category')
+  }
   const firstShort = responseText.match(/<ShortMessage>(.*?)<\/ShortMessage>/)?.[1] || ''
-  if (firstShort.toLowerCase().includes('leaf') || firstShort.toLowerCase().includes('not a valid category')) {
-    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '293', extraSpecifics: '' }), token, appId)
+  const firstLong = responseText.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || ''
+  if (isLeafError(firstShort) || isLeafError(firstLong)) {
+    // Try a broad but valid leaf: "Home & Garden > Other" (leaf in eBay US)
+    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '177', extraSpecifics: '' }), token, appId)
+    // If that still fails, fall back to "Clothing, Shoes & Accessories > Other" which is always leaf
+    const retryShort = responseText.match(/<ShortMessage>(.*?)<\/ShortMessage>/)?.[1] || ''
+    const retryLong = responseText.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || ''
+    if (isLeafError(retryShort) || isLeafError(retryLong)) {
+      responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '9355', extraSpecifics: '' }), token, appId)
+    }
   }
 
   const itemIdMatch = responseText.match(/<ItemID>(\d+)<\/ItemID>/)

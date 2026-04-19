@@ -182,27 +182,24 @@ export default function Dashboard() {
   const lookupAsin = async () => {
     const raw = asinInput.trim()
     if (!raw) return
+    if (!/^\d+$/.test(raw)) {
+      setAsinError('Please enter an eBay item ID number (digits only)')
+      return
+    }
     setAsinLoading(true)
     setAsinError(null)
     setAsinResult(null)
     try {
-      // If input looks like eBay item ID (all digits), resolve to ASIN via stored map
-      let resolvedAsin = raw
-      if (/^\d+$/.test(raw)) {
-        const entry = orderAsinMap[raw]
-        if (!entry) {
-          setAsinError(`eBay item #${raw} was not listed via the dashboard — ASIN unknown. Search Amazon manually.`)
-          return
-        }
-        resolvedAsin = entry.asin
-        setAsinInput(resolvedAsin)
+      const entry = orderAsinMap[raw]
+      if (!entry) {
+        setAsinError(`Item #${raw} was not listed through this dashboard — source product unknown.`)
+        return
       }
-      const res = await fetch(`/api/amazon/lookup?asin=${resolvedAsin}`)
+      const res = await fetch(`/api/amazon/lookup?asin=${entry.asin}`)
       const data = await res.json()
       if (data.error) { setAsinError(data.error); return }
       setAsinResult(data)
-      if (data.amazonPrice) setEbayPrice((data.amazonPrice * 1.3).toFixed(2))
-    } catch { setAsinError('Lookup failed') }
+    } catch { setAsinError('Lookup failed — try again') }
     finally { setAsinLoading(false) }
   }
   const ep = parseFloat(ebayPrice) || 0
@@ -562,111 +559,90 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ── ASIN LOOKUP ── */}
+          {/* ── ORDER FULFILLMENT ── */}
           {tab === 'asin' && (
             <div style={{ animation: 'fadein 0.22s ease' }}>
               <div style={{ padding: '56px 52px 40px' }}>
-                <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.32em', color: 'var(--gold)', marginBottom: '14px', opacity: 0.85 }}>EbayDash · Research</div>
-                <div style={{ fontFamily: 'var(--serif)', fontSize: '68px', fontWeight: 600, color: 'var(--txt)', lineHeight: 0.92, letterSpacing: '-0.015em', textShadow: '0 4px 80px rgba(200,162,80,0.18)' }}>ASIN Lookup</div>
+                <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.32em', color: 'var(--gold)', marginBottom: '14px', opacity: 0.85 }}>EbayDash · Fulfillment</div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: '60px', fontWeight: 600, color: 'var(--txt)', lineHeight: 0.92, letterSpacing: '-0.015em', textShadow: '0 4px 80px rgba(200,162,80,0.18)' }}>Order Lookup</div>
+                <div style={{ marginTop: '16px', fontSize: '14px', color: 'var(--dim)', lineHeight: 1.6 }}>Enter the eBay item ID from an order to instantly find the exact Amazon product to purchase.</div>
               </div>
 
-              <div style={{ padding: '0 44px 44px', maxWidth: '780px' }}>
+              <div style={{ padding: '0 44px 44px', maxWidth: '700px' }}>
 
                 {/* Search bar */}
                 <div className="card" style={{ padding: '28px 32px', marginBottom: '20px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '4px' }}>Enter eBay Item ID or Amazon ASIN</div>
-                  <div style={{ fontSize: '10px', color: 'var(--dim)', opacity: 0.7, marginBottom: '14px' }}>Paste the eBay item ID from an order to find the exact source product</div>
+                  <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '4px' }}>eBay Item ID</div>
+                  <div style={{ fontSize: '10px', color: 'var(--dim)', opacity: 0.7, marginBottom: '14px' }}>The numeric item ID shown on the order — e.g. 387234561234</div>
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <input
                       value={asinInput}
-                      onChange={e => { const v = e.target.value.replace(/\s/g, ''); setAsinInput(/^\d+$/.test(v) ? v : v.toUpperCase()) }}
+                      onChange={e => setAsinInput(e.target.value.replace(/\D/g, ''))}
                       onKeyDown={e => e.key === 'Enter' && lookupAsin()}
-                      placeholder="e.g. 387234561234 or B08N5WRWNW"
-                      style={{ flex: 1, fontFamily: 'monospace', fontSize: '14px', letterSpacing: '0.06em' }}
+                      placeholder="e.g. 387234561234"
+                      style={{ flex: 1, fontFamily: 'monospace', fontSize: '16px', letterSpacing: '0.08em' }}
                     />
                     <button onClick={lookupAsin} className="btn btn-gold" disabled={asinLoading || !asinInput.trim()}>
-                      {asinLoading ? 'Looking up…' : 'Look Up'}
+                      {asinLoading ? 'Finding…' : 'Find Product'}
                     </button>
                   </div>
-                  {asinError && <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--red)', lineHeight: 1.5 }}>{asinError}</div>}
+                  {asinError && <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--red)', lineHeight: 1.6 }}>{asinError}</div>}
                 </div>
 
-                {/* Orders reference list */}
+                {/* Orders list */}
                 {orders.length > 0 && !asinResult && (
                   <div className="card" style={{ padding: '20px 24px', marginBottom: '20px' }}>
-                    <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '14px' }}>Your eBay Orders — click to view on Amazon</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '300px', overflowY: 'auto' }}>
+                    <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '14px' }}>Recent Orders — click to fulfill</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '360px', overflowY: 'auto' }}>
                       {orders.map(o => {
                         const item = o.lineItems?.[0]
-                        const sku = item?.sku || ''
                         const itemId = item?.legacyItemId || ''
                         const title = item?.title || ''
-                        // 1. Best: ASIN stored at listing time (100% accurate)
                         const storedAsin = itemId ? orderAsinMap[itemId]?.asin : undefined
-                        // 2. Fallback: SKU is ASIN format
-                        const skuIsAsin = /^[A-Z0-9]{10}$/.test(sku)
-                        const resolvedAsin = storedAsin || (skuIsAsin ? sku : undefined)
+                        const canFulfill = !!storedAsin
                         return (
                           <div
                             key={o.orderId}
                             style={{
                               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                              padding: '10px 14px', borderRadius: '8px',
-                              background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(195,158,88,0.08)',
-                              gap: '10px',
+                              padding: '12px 16px', borderRadius: '10px', gap: '12px',
+                              background: canFulfill ? 'rgba(200,162,80,0.04)' : 'rgba(255,255,255,0.02)',
+                              border: `1px solid ${canFulfill ? 'rgba(200,162,80,0.18)' : 'rgba(255,255,255,0.05)'}`,
                             }}
                           >
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '3px' }}>
-                                {title.slice(0, 65) || o.orderId}
+                              <div style={{ fontSize: '13px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '4px' }}>
+                                {title.slice(0, 70) || o.orderId}
                               </div>
                               <div style={{ fontSize: '10px', color: 'var(--dim)', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <span>{o.buyer?.username} · {new Date(o.creationDate).toLocaleDateString()}</span>
-                                {itemId && <span style={{ fontFamily: 'monospace', color: 'rgba(200,162,80,0.55)' }}>Item #{itemId}</span>}
-                                {resolvedAsin && <span style={{ fontFamily: 'monospace', color: 'rgba(195,158,88,0.7)' }}>ASIN: {resolvedAsin}</span>}
+                                {itemId && <span style={{ fontFamily: 'monospace', color: 'rgba(200,162,80,0.6)' }}>#{itemId}</span>}
                               </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
-                              <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, color: 'var(--gld2)', fontSize: '12px' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                              <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, color: 'var(--gld2)', fontSize: '13px' }}>
                                 ${parseFloat(o.pricingSummary?.total?.value || '0').toFixed(2)}
                               </div>
-                              {resolvedAsin ? (
-                                <>
-                                  <button
-                                    onClick={() => { setAsinInput(resolvedAsin); setAsinResult(null); setAsinError(null) }}
-                                    className="btn btn-gold btn-sm"
-                                    style={{ fontSize: '9px', padding: '3px 8px' }}
-                                  >
-                                    Look Up
-                                  </button>
-                                  <a
-                                    href={`https://www.amazon.com/dp/${resolvedAsin}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="btn btn-ghost btn-sm"
-                                    style={{ fontSize: '9px', padding: '3px 8px', textDecoration: 'none' }}
-                                  >
-                                    Amazon ↗
-                                  </a>
-                                </>
-                              ) : (
+                              {canFulfill ? (
                                 <a
-                                  href={`https://www.amazon.com/s?k=${encodeURIComponent(title.slice(0, 80))}`}
+                                  href={`https://www.amazon.com/dp/${storedAsin}`}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="btn btn-ghost btn-sm"
-                                  style={{ fontSize: '9px', padding: '3px 8px', textDecoration: 'none' }}
+                                  className="btn btn-gold btn-sm"
+                                  style={{ fontSize: '10px', padding: '5px 12px', textDecoration: 'none', whiteSpace: 'nowrap' }}
                                 >
-                                  Search ↗
+                                  Buy on Amazon ↗
                                 </a>
+                              ) : (
+                                <span style={{ fontSize: '10px', color: 'var(--dim)', opacity: 0.5 }}>Not tracked</span>
                               )}
                             </div>
                           </div>
                         )
                       })}
                     </div>
-                    <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--dim)', opacity: 0.7 }}>
-                      <b style={{ color: 'var(--gold)' }}>Look Up</b> — load price data · <b style={{ color: 'var(--sil)' }}>Amazon ↗</b> — open exact product · <b style={{ color: 'var(--dim)' }}>Search ↗</b> — find manually (order not listed via dashboard)
+                    <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--dim)', opacity: 0.6, lineHeight: 1.6 }}>
+                      Orders listed through this dashboard show <b style={{ color: 'var(--gold)' }}>Buy on Amazon ↗</b> — takes you directly to the exact product.
                     </div>
                   </div>
                 )}
@@ -674,108 +650,36 @@ export default function Dashboard() {
                 {/* Result */}
                 {asinResult && (
                   <>
-                    {/* Product info */}
-                    <div className="card" style={{ padding: '28px 32px', marginBottom: '20px', display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
-                      {asinResult.imageUrl && (
-                        <img src={asinResult.imageUrl} alt={asinResult.title} style={{ width: '80px', height: '80px', objectFit: 'contain', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }} />
-                      )}
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px', lineHeight: 1.4 }}>{asinResult.title}</div>
-                        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-                          <div>
-                            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '4px' }}>Amazon Price</div>
-                            <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '28px', fontWeight: 800, color: 'var(--gld2)', letterSpacing: '-0.03em' }}>${asinResult.amazonPrice.toFixed(2)}</div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '4px' }}>Availability</div>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: asinResult.available ? 'var(--grn)' : 'var(--red)' }}>
-                              {asinResult.available ? 'In Stock' : 'Out of Stock'}
+                    <div className="card" style={{ padding: '28px 32px', marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', marginBottom: '20px' }}>
+                        {asinResult.imageUrl && (
+                          <img src={asinResult.imageUrl} alt={asinResult.title} style={{ width: '88px', height: '88px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', flexShrink: 0 }} />
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--gold)', marginBottom: '6px' }}>Source Product Found</div>
+                          <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4, marginBottom: '10px' }}>{asinResult.title}</div>
+                          <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <div>
+                              <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '3px' }}>Cost</div>
+                              <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '24px', fontWeight: 800, color: 'var(--gld2)' }}>${asinResult.amazonPrice.toFixed(2)}</div>
+                            </div>
+                            <div style={{ padding: '6px 12px', borderRadius: '20px', background: asinResult.available ? 'rgba(34,197,94,0.12)' : 'rgba(232,63,80,0.12)', border: `1px solid ${asinResult.available ? 'rgba(34,197,94,0.3)' : 'rgba(232,63,80,0.3)'}` }}>
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: asinResult.available ? 'var(--grn)' : 'var(--red)' }}>{asinResult.available ? '✓ In Stock' : '✗ Out of Stock'}</span>
                             </div>
                           </div>
-                          <div>
-                            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '4px' }}>ASIN</div>
-                            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--sil)', marginBottom: '6px' }}>{asinResult.asin}</div>
-                            <a
-                              href={`https://www.amazon.com/dp/${asinResult.asin}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ fontSize: '11px', color: 'var(--gold)', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              View on Amazon ↗
-                            </a>
-                          </div>
                         </div>
                       </div>
+                      <a
+                        href={`https://www.amazon.com/dp/${asinResult.asin}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn btn-gold"
+                        style={{ width: '100%', textAlign: 'center', fontSize: '15px', padding: '14px', textDecoration: 'none', display: 'block', fontWeight: 700 }}
+                      >
+                        Buy on Amazon to Fulfill Order ↗
+                      </a>
                     </div>
-
-                    {/* Profit calculator */}
-                    <div className="card" style={{ padding: '28px 32px' }}>
-                      <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 600, color: 'var(--txt)', marginBottom: '24px' }}>Profit Calculator</div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '28px' }}>
-                        <div>
-                          <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--dim)', marginBottom: '8px' }}>Your eBay Listing Price</div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ color: 'var(--gold)', fontSize: '16px', fontWeight: 700 }}>$</span>
-                            <input value={ebayPrice} onChange={e => setEbayPrice(e.target.value)} style={{ flex: 1 }} placeholder="0.00" />
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--dim)', marginBottom: '8px' }}>Shipping Cost</div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ color: 'var(--gold)', fontSize: '16px', fontWeight: 700 }}>$</span>
-                            <input value={shippingCost} onChange={e => setShippingCost(e.target.value)} style={{ flex: 1 }} />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Breakdown */}
-                      <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '14px', padding: '20px 24px', marginBottom: '20px' }}>
-                        {[
-                          { label: 'eBay Selling Price', value: `$${ep.toFixed(2)}`, color: 'var(--gld2)' },
-                          { label: 'Amazon Cost (COGS)', value: `-$${ac.toFixed(2)}`, color: 'var(--red)' },
-                          { label: `eBay Final Value Fee (13.25%)`, value: `-$${ebayFee.toFixed(2)}`, color: 'var(--red)' },
-                          { label: 'Shipping', value: `-$${sc.toFixed(2)}`, color: 'var(--red)' },
-                        ].map((row, i) => (
-                          <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: i < 3 ? '1px solid rgba(195,158,88,0.07)' : 'none' }}>
-                            <span style={{ fontSize: '13px', color: 'var(--sil)' }}>{row.label}</span>
-                            <span style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, fontSize: '13px', color: row.color }}>{row.value}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Net profit */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderRadius: '12px', background: profit > 0 ? 'rgba(46,207,118,0.08)' : 'rgba(232,63,80,0.08)', border: `1px solid ${profit > 0 ? 'rgba(46,207,118,0.2)' : 'rgba(232,63,80,0.2)'}` }}>
-                        <div>
-                          <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '4px' }}>Net Profit per Unit</div>
-                          <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '36px', fontWeight: 800, color: profit > 0 ? 'var(--grn)' : 'var(--red)', letterSpacing: '-0.04em', lineHeight: 1 }}>
-                            {profit >= 0 ? '+' : ''}{profit.toFixed(2)}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '4px' }}>Margin</div>
-                          <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '36px', fontWeight: 800, color: profit > 0 ? 'var(--grn)' : 'var(--red)', letterSpacing: '-0.04em', lineHeight: 1 }}>
-                            {margin.toFixed(1)}%
-                          </div>
-                        </div>
-                      </div>
-
-                      {profit > 0 && margin >= 15 && (
-                        <div style={{ marginTop: '14px', padding: '10px 16px', borderRadius: '8px', background: 'rgba(46,207,118,0.06)', border: '1px solid rgba(46,207,118,0.15)', fontSize: '12px', color: 'var(--grn)' }}>
-                          ✓ Good margin — worth listing. Suggested eBay price: ${ep.toFixed(2)}
-                        </div>
-                      )}
-                      {profit > 0 && margin < 15 && (
-                        <div style={{ marginTop: '14px', padding: '10px 16px', borderRadius: '8px', background: 'rgba(200,162,80,0.06)', border: '1px solid rgba(200,162,80,0.15)', fontSize: '12px', color: 'var(--gold)' }}>
-                          ⚠ Thin margin — consider raising your eBay price to ${(ac / (1 - EBAY_FEE_RATE - 0.15) + sc).toFixed(2)} for 15% margin
-                        </div>
-                      )}
-                      {profit <= 0 && (
-                        <div style={{ marginTop: '14px', padding: '10px 16px', borderRadius: '8px', background: 'rgba(232,63,80,0.06)', border: '1px solid rgba(232,63,80,0.15)', fontSize: '12px', color: 'var(--red)' }}>
-                          ✗ Not profitable at this price. Minimum break-even eBay price: ${((ac + sc) / (1 - EBAY_FEE_RATE)).toFixed(2)}
-                        </div>
-                      )}
-                    </div>
+                    <button onClick={() => { setAsinResult(null); setAsinInput('') }} className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }}>← Look up another order</button>
                   </>
                 )}
               </div>
