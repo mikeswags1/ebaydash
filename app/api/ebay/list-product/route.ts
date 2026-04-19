@@ -46,6 +46,36 @@ const NICHE_CATEGORY: Record<string, string> = {
   'Sports Memorabilia': '64482',
 }
 
+async function getFreshToken(userId: string): Promise<string | null> {
+  const rows = await sql`SELECT oauth_token, refresh_token, token_expires_at FROM ebay_credentials WHERE user_id = ${userId}`
+  if (!rows[0]) return null
+  const { oauth_token, refresh_token, token_expires_at } = rows[0]
+
+  // If token still valid (>5 min left), use it as-is
+  const expired = !token_expires_at || new Date(token_expires_at) < new Date(Date.now() + 5 * 60 * 1000)
+  if (!expired) return oauth_token as string
+
+  // Try to refresh
+  if (!refresh_token) return null
+  try {
+    const creds = Buffer.from(`${process.env.EBAY_APP_ID}:${process.env.EBAY_CERT_ID}`).toString('base64')
+    const res = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+      method: 'POST',
+      headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refresh_token as string,
+        scope: 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.fulfillment https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.account',
+      }),
+    })
+    const data = await res.json()
+    if (!data.access_token) return null
+    const expiresAt = new Date(Date.now() + data.expires_in * 1000)
+    await sql`UPDATE ebay_credentials SET oauth_token = ${data.access_token}, token_expires_at = ${expiresAt.toISOString()}, updated_at = NOW() WHERE user_id = ${userId}`
+    return data.access_token as string
+  } catch { return null }
+}
+
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -53,9 +83,8 @@ export async function POST(req: NextRequest) {
   const { asin, title, ebayPrice, imageUrl, niche } = await req.json()
   if (!asin || !title || !ebayPrice) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
-  const rows = await sql`SELECT oauth_token FROM ebay_credentials WHERE user_id = ${session.user.id}`
-  const token = rows[0]?.oauth_token
-  if (!token) return NextResponse.json({ error: 'eBay not connected — go to Settings first' }, { status: 400 })
+  const token = await getFreshToken(session.user.id)
+  if (!token) return NextResponse.json({ error: 'RECONNECT_REQUIRED' }, { status: 401 })
 
   const appId = process.env.EBAY_APP_ID || ''
   const safeTitle = title.replace(/[^\x20-\x7E]/g, '').replace(/[<>&"]/g, ' ').slice(0, 80).trim()
@@ -146,6 +175,9 @@ export async function POST(req: NextRequest) {
 
   if (!itemIdMatch || (ackMatch && ackMatch[1] === 'Failure')) {
     const errMsg = errMatch ? errMatch[1] : responseText.slice(0, 300)
+    if (errMsg.toLowerCase().includes('expired') || errMsg.toLowerCase().includes('auth token')) {
+      return NextResponse.json({ error: 'RECONNECT_REQUIRED' }, { status: 401 })
+    }
     return NextResponse.json({ error: errMsg }, { status: 400 })
   }
 

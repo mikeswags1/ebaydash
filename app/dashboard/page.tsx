@@ -794,7 +794,7 @@ export default function Dashboard() {
                 {niche && (
                   <>
                     {/* Quick actions row */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '14px', marginBottom: '24px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: finderResults && finderResults.length > 0 ? 'repeat(4,1fr)' : 'repeat(3,1fr)', gap: '14px', marginBottom: '24px' }}>
                       <button
                         className="btn btn-gold"
                         disabled={finderLoading}
@@ -820,6 +820,40 @@ export default function Dashboard() {
                       <button className="btn btn-ghost" onClick={() => setTab('scripts')} style={{ padding: '14px', fontSize: '13px' }}>
                         Run Scripts →
                       </button>
+                      {finderResults && finderResults.length > 0 && (
+                        <button
+                          className="btn btn-solid"
+                          style={{ padding: '14px', fontSize: '13px', fontWeight: 700 }}
+                          disabled={!!listAllProgress && listAllProgress.done < listAllProgress.total}
+                          onClick={async () => {
+                            if (!connected) { alert('Connect eBay first in Settings.'); return }
+                            setListAllProgress({ done: 0, total: finderResults.length, errors: 0 })
+                            let errors = 0
+                            const listedAsins: string[] = []
+                            for (let i = 0; i < finderResults.length; i++) {
+                              const p = finderResults[i]
+                              setListAllProgress({ done: i, total: finderResults.length, errors })
+                              try {
+                                const res = await fetch('/api/ebay/list-product', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ asin: p.asin, title: p.title, ebayPrice: p.ebayPrice, imageUrl: p.imageUrl, niche }),
+                                })
+                                const data = await res.json()
+                                if (data.error === 'RECONNECT_REQUIRED') { setListError('RECONNECT_REQUIRED'); break }
+                                if (data.success) listedAsins.push(p.asin)
+                                else errors++
+                              } catch { errors++ }
+                            }
+                            setListAllProgress(prev => prev ? { ...prev, done: finderResults.length, errors } : null)
+                            setFinderResults(prev => prev ? prev.filter(p => !listedAsins.includes(p.asin)) : null)
+                          }}
+                        >
+                          {listAllProgress && listAllProgress.done < listAllProgress.total
+                            ? `Listing ${listAllProgress.done + 1}/${listAllProgress.total}…`
+                            : `⚡ List All (${finderResults.length})`}
+                        </button>
+                      )}
                     </div>
 
                     {finderError && (
@@ -1132,8 +1166,15 @@ export default function Dashboard() {
                 </div>
 
                 {listError && (
-                  <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '10px', background: 'rgba(232,63,80,0.08)', border: '1px solid rgba(232,63,80,0.2)', fontSize: '12px', color: 'var(--red)', lineHeight: 1.5 }}>
-                    {listError}
+                  <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', background: 'rgba(232,63,80,0.08)', border: '1px solid rgba(232,63,80,0.2)', fontSize: '12px', color: 'var(--red)', lineHeight: 1.6 }}>
+                    {listError === 'RECONNECT_REQUIRED' ? (
+                      <div>
+                        Your eBay token has expired. You need to reconnect your account.
+                        <div style={{ marginTop: '10px' }}>
+                          <a href="/api/ebay/connect" className="btn btn-gold btn-sm" style={{ fontSize: '11px', display: 'inline-flex' }}>Reconnect eBay →</a>
+                        </div>
+                      </div>
+                    ) : listError}
                   </div>
                 )}
 
@@ -1159,6 +1200,7 @@ export default function Dashboard() {
                           }),
                         })
                         const data = await res.json()
+                        if (data.error === 'RECONNECT_REQUIRED') { setListError('RECONNECT_REQUIRED'); return }
                         if (data.error) { setListError(data.error); return }
                         setListResult(data)
                         setFinderResults(prev => prev ? prev.filter(p => p.asin !== listModal?.asin) : null)
