@@ -571,45 +571,63 @@ export default function Dashboard() {
                 {/* Orders reference list */}
                 {orders.length > 0 && !asinResult && (
                   <div className="card" style={{ padding: '20px 24px', marginBottom: '20px' }}>
-                    <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '14px' }}>Your eBay Orders — click to prefill ASIN search</div>
+                    <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '14px' }}>Your eBay Orders — click to find on Amazon</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '300px', overflowY: 'auto' }}>
                       {orders.map(o => {
                         const item = o.lineItems?.[0]
                         const sku = item?.sku || ''
                         const itemId = item?.legacyItemId || ''
                         const isAsin = /^[A-Z0-9]{10}$/.test(sku)
-                        const prefillValue = isAsin ? sku : ''
+                        const title = item?.title || ''
                         return (
-                          <button
+                          <div
                             key={o.orderId}
-                            onClick={() => { setAsinInput(prefillValue); setAsinResult(null); setAsinError(null) }}
                             style={{
                               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                              padding: '10px 14px', borderRadius: '8px', cursor: 'pointer',
+                              padding: '10px 14px', borderRadius: '8px',
                               background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(195,158,88,0.08)',
-                              textAlign: 'left', width: '100%', fontFamily: 'inherit',
-                              transition: 'background 0.15s',
+                              gap: '10px',
                             }}
                           >
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {item?.title?.slice(0, 65) || o.orderId}
+                              <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '3px' }}>
+                                {title.slice(0, 65) || o.orderId}
                               </div>
-                              <div style={{ fontSize: '10px', color: 'var(--dim)', marginTop: '3px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                              <div style={{ fontSize: '10px', color: 'var(--dim)', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <span>{o.buyer?.username} · {new Date(o.creationDate).toLocaleDateString()}</span>
-                                {itemId && <span style={{ fontFamily: 'monospace', color: 'rgba(200,162,80,0.6)' }}>Item #{itemId}</span>}
-                                {sku && <span style={{ fontFamily: 'monospace', color: isAsin ? 'var(--gold)' : 'rgba(200,162,80,0.45)' }}>SKU: {sku}{isAsin ? ' ↗' : ''}</span>}
+                                {itemId && <span style={{ fontFamily: 'monospace', color: 'rgba(200,162,80,0.55)' }}>Item #{itemId}</span>}
                               </div>
                             </div>
-                            <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, color: 'var(--gld2)', fontSize: '12px', marginLeft: '16px', flexShrink: 0 }}>
-                              ${parseFloat(o.pricingSummary?.total?.value || '0').toFixed(2)}
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                              <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, color: 'var(--gld2)', fontSize: '12px' }}>
+                                ${parseFloat(o.pricingSummary?.total?.value || '0').toFixed(2)}
+                              </div>
+                              {isAsin ? (
+                                <button
+                                  onClick={() => { setAsinInput(sku); setAsinResult(null); setAsinError(null) }}
+                                  className="btn btn-gold btn-sm"
+                                  style={{ fontSize: '9px', padding: '3px 8px' }}
+                                >
+                                  Look Up
+                                </button>
+                              ) : (
+                                <a
+                                  href={`https://www.amazon.com/s?k=${encodeURIComponent(title.slice(0, 80))}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="btn btn-ghost btn-sm"
+                                  style={{ fontSize: '9px', padding: '3px 8px', textDecoration: 'none' }}
+                                >
+                                  Find ASIN ↗
+                                </a>
+                              )}
                             </div>
-                          </button>
+                          </div>
                         )
                       })}
                     </div>
                     <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--dim)', opacity: 0.7 }}>
-                      Orders with an ASIN-format SKU (highlighted gold) will auto-fill the search box.
+                      Click <b style={{ color: 'var(--gold)' }}>Look Up</b> to check the Amazon price · <b style={{ color: 'var(--sil)' }}>Find ASIN ↗</b> searches Amazon so you can copy the ASIN and paste it above
                     </div>
                   </div>
                 )}
@@ -1213,7 +1231,7 @@ export default function Dashboard() {
                   <button onClick={() => { setListModal(null); setListError(null) }} className="btn btn-ghost" style={{ fontSize: '13px', padding: '14px 18px' }}>Cancel</button>
                 </div>
                 <div style={{ marginTop: '12px', fontSize: '10px', color: 'var(--dim)', textAlign: 'center', lineHeight: 1.6 }}>
-                  Lists as Fixed Price · Qty 99 · New condition · Uses your eBay shipping &amp; return policies
+                  Lists as Fixed Price · Qty 2 · New condition · Free shipping · 30-day returns
                 </div>
               </>
             )}

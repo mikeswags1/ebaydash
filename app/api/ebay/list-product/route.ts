@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
     <DispatchTimeMax>3</DispatchTimeMax>
     <ListingDuration>GTC</ListingDuration>
     <ListingType>FixedPriceItem</ListingType>
-    <Quantity>99</Quantity>
+    <Quantity>2</Quantity>
     ${pictureXml}
     <ShippingDetails>
       <ShippingType>Flat</ShippingType>
@@ -142,7 +142,6 @@ export async function POST(req: NextRequest) {
       <RefundOption>MoneyBack</RefundOption>
       <ReturnsWithinOption>Days_30</ReturnsWithinOption>
       <ShippingCostPaidByOption>Buyer</ShippingCostPaidByOption>
-      <Description>30-day returns accepted. Contact us and we will resolve any issue.</Description>
     </ReturnPolicy>
     <ItemSpecifics>
       <NameValueList>
