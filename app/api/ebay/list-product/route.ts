@@ -179,7 +179,7 @@ function fmtDate(d: Date): string {
 }
 
 // ── Description builder ──────────────────────────────────────────────────────
-function buildDescription(title: string, features: string[], about: string): string {
+function buildDescription(title: string, features: string[], about: string, images: string[]): string {
   const now = new Date()
   const shipDate = addBusinessDays(now, 1)
   const delivMin = fmtDate(addBusinessDays(shipDate, 2))
@@ -201,6 +201,16 @@ function buildDescription(title: string, features: string[], about: string): str
   <div class="section">
     <div class="section-title">Product Description</div>
     <div class="about-body">${about}</div>
+  </div>` : ''
+
+  // Up to 6 additional product images embedded in description so buyers see every angle
+  const galleryImgs = images.slice(0, 6)
+  const imageGallery = galleryImgs.length > 1 ? `
+  <div class="section">
+    <div class="section-title">Product Images</div>
+    <div class="img-grid">
+      ${galleryImgs.map((u, i) => `<img src="${u}" alt="Product view ${i + 1}" class="product-img" loading="lazy">`).join('\n      ')}
+    </div>
   </div>` : ''
 
   const html = `<!DOCTYPE html>
@@ -259,6 +269,10 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
 .ship-val{font-size:13px;color:#222}
 .green{color:#15803d;font-weight:700}
 
+/* Image gallery */
+.img-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.product-img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;border:1px solid #e8ecf0;padding:6px}
+
 /* Promise grid */
 .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:28px 42px;border-bottom:1px solid #eef0f3}
 .pcard{padding:18px 14px;border-radius:10px;background:#f8fafc;border:1px solid #e4e6ea;text-align:center}
@@ -299,6 +313,7 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
 
   ${featureSection}
   ${aboutSection}
+  ${imageGallery}
 
   <div class="section">
     <div class="section-title">Why Shop With Us</div>
@@ -331,30 +346,6 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
           <div class="why-sub">Tracking number provided at shipment so you always know where your order is.</div>
         </div>
       </div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Shipping &amp; Delivery Details</div>
-    <div class="ship-row">
-      <div class="ship-label">Shipping Cost</div>
-      <div class="ship-val green">FREE &mdash; Included at no extra charge</div>
-    </div>
-    <div class="ship-row">
-      <div class="ship-label">Carrier</div>
-      <div class="ship-val">USPS Priority Mail</div>
-    </div>
-    <div class="ship-row">
-      <div class="ship-label">Dispatch Time</div>
-      <div class="ship-val">Ships within 1 business day of cleared payment</div>
-    </div>
-    <div class="ship-row">
-      <div class="ship-label">Est. Delivery</div>
-      <div class="ship-val green">${delivMin} &ndash; ${delivMax}</div>
-    </div>
-    <div class="ship-row">
-      <div class="ship-label">Returns</div>
-      <div class="ship-val">Free 30-day returns &mdash; seller pays return shipping</div>
     </div>
   </div>
 
@@ -558,7 +549,7 @@ export async function POST(req: NextRequest) {
 
   const rapidKey = process.env.RAPIDAPI_KEY || ''
   const amazon = await fetchAmazonDetails(asin, rapidKey, imageUrl)
-  const description = buildDescription(safeTitle, amazon.features, amazon.description)
+  const description = buildDescription(safeTitle, amazon.features, amazon.description, amazon.images)
 
   // Upload first image with FREE SHIPPING banner to eBay's picture hosting
   // so it's permanently cached on eBay CDN (no proxy URL in the live listing)
@@ -573,7 +564,9 @@ export async function POST(req: NextRequest) {
   if (mainImage) {
     const badgeUrl = `${siteUrl}/api/image/badge?url=${encodeURIComponent(mainImage)}`
     const hostedUrl = await uploadBadgedImage(badgeUrl, token, appId)
-    if (hostedUrl) firstPictureUrl = hostedUrl
+    // Prefer eBay-hosted URL; fall back to badge proxy URL directly (not bare Amazon URL)
+    // so the FREE SHIPPING watermark always appears regardless of EPS outcome
+    firstPictureUrl = hostedUrl || badgeUrl
   }
 
   const pictureList = firstPictureUrl
