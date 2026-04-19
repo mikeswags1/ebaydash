@@ -96,9 +96,12 @@ export async function GET(req: NextRequest) {
   const rapidKey = process.env.RAPIDAPI_KEY
   if (!rapidKey) return NextResponse.json({ error: 'RapidAPI key not configured' }, { status: 500 })
 
-  // Load already-listed ASINs for this user so they never appear again
-  const listedRows = await sql`SELECT asin FROM listed_asins WHERE user_id = ${session.user.id}`
-  const listedAsins = new Set(listedRows.map((r) => String(r.asin)))
+  // Load already-listed ASINs — graceful if table not yet created
+  let listedAsins = new Set<string>()
+  try {
+    const listedRows = await sql`SELECT asin FROM listed_asins WHERE user_id = ${session.user.id}`
+    listedAsins = new Set(listedRows.map((r) => String(r.asin)))
+  } catch { /* table not yet created — run /api/setup-db */ }
 
   const queries = NICHE_QUERIES[niche] || [`${niche} bestseller`]
   const results: Array<{

@@ -637,7 +637,15 @@ export default function Dashboard() {
                           </div>
                           <div>
                             <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '4px' }}>ASIN</div>
-                            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--sil)' }}>{asinResult.asin}</div>
+                            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--sil)', marginBottom: '6px' }}>{asinResult.asin}</div>
+                            <a
+                              href={`https://www.amazon.com/dp/${asinResult.asin}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ fontSize: '11px', color: 'var(--gold)', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              View on Amazon ↗
+                            </a>
                           </div>
                         </div>
                       </div>
