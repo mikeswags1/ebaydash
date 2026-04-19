@@ -180,12 +180,24 @@ export default function Dashboard() {
 
   const EBAY_FEE_RATE = 0.1325
   const lookupAsin = async () => {
-    if (!asinInput.trim()) return
+    const raw = asinInput.trim()
+    if (!raw) return
     setAsinLoading(true)
     setAsinError(null)
     setAsinResult(null)
     try {
-      const res = await fetch(`/api/amazon/lookup?asin=${asinInput.trim()}`)
+      // If input looks like eBay item ID (all digits), resolve to ASIN via stored map
+      let resolvedAsin = raw
+      if (/^\d+$/.test(raw)) {
+        const entry = orderAsinMap[raw]
+        if (!entry) {
+          setAsinError(`eBay item #${raw} was not listed via the dashboard — ASIN unknown. Search Amazon manually.`)
+          return
+        }
+        resolvedAsin = entry.asin
+        setAsinInput(resolvedAsin)
+      }
+      const res = await fetch(`/api/amazon/lookup?asin=${resolvedAsin}`)
       const data = await res.json()
       if (data.error) { setAsinError(data.error); return }
       setAsinResult(data)
@@ -562,20 +574,21 @@ export default function Dashboard() {
 
                 {/* Search bar */}
                 <div className="card" style={{ padding: '28px 32px', marginBottom: '20px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '14px' }}>Enter Amazon ASIN</div>
+                  <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '4px' }}>Enter eBay Item ID or Amazon ASIN</div>
+                  <div style={{ fontSize: '10px', color: 'var(--dim)', opacity: 0.7, marginBottom: '14px' }}>Paste the eBay item ID from an order to find the exact source product</div>
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <input
                       value={asinInput}
-                      onChange={e => setAsinInput(e.target.value.toUpperCase().trim())}
+                      onChange={e => setAsinInput(e.target.value.replace(/\s/g, '').toUpperCase())}
                       onKeyDown={e => e.key === 'Enter' && lookupAsin()}
-                      placeholder="e.g. B08N5WRWNW"
+                      placeholder="e.g. 387234561234 or B08N5WRWNW"
                       style={{ flex: 1, fontFamily: 'monospace', fontSize: '14px', letterSpacing: '0.06em' }}
                     />
                     <button onClick={lookupAsin} className="btn btn-gold" disabled={asinLoading || !asinInput.trim()}>
                       {asinLoading ? 'Looking up…' : 'Look Up'}
                     </button>
                   </div>
-                  {asinError && <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--red)' }}>{asinError}</div>}
+                  {asinError && <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--red)', lineHeight: 1.5 }}>{asinError}</div>}
                 </div>
 
                 {/* Orders reference list */}

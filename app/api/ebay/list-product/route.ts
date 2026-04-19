@@ -169,17 +169,17 @@ export async function POST(req: NextRequest) {
 
   const responseText = await res.text()
 
-  // Extract ItemID from XML response
   const itemIdMatch = responseText.match(/<ItemID>(\d+)<\/ItemID>/)
-  const errMatch = responseText.match(/<ShortMessage>(.*?)<\/ShortMessage>/)
+  const shortMatch = responseText.match(/<ShortMessage>(.*?)<\/ShortMessage>/)
+  const longMatch = responseText.match(/<LongMessage>(.*?)<\/LongMessage>/)
   const ackMatch = responseText.match(/<Ack>(.*?)<\/Ack>/)
 
   if (!itemIdMatch || (ackMatch && ackMatch[1] === 'Failure')) {
-    const errMsg = errMatch ? errMatch[1] : responseText.slice(0, 300)
+    const errMsg = longMatch?.[1] || shortMatch?.[1] || responseText.slice(0, 400)
     if (errMsg.toLowerCase().includes('expired') || errMsg.toLowerCase().includes('auth token')) {
       return NextResponse.json({ error: 'RECONNECT_REQUIRED' }, { status: 401 })
     }
-    return NextResponse.json({ error: errMsg }, { status: 400 })
+    return NextResponse.json({ error: errMsg, short: shortMatch?.[1], ack: ackMatch?.[1] }, { status: 400 })
   }
 
   const listingId = itemIdMatch[1]
