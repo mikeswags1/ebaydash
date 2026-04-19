@@ -55,6 +55,13 @@ export default function Dashboard() {
   const [scriptRunning, setScriptRunning] = useState<string | null>(null)
   const [scriptMsg, setScriptMsg] = useState<string | null>(null)
   const [finderView, setFinderView] = useState<'cards' | 'list'>('cards')
+  const [listModal, setListModal] = useState<{
+    asin: string; title: string; amazonPrice: number; ebayPrice: number; imageUrl?: string
+  } | null>(null)
+  const [listPrice, setListPrice] = useState('')
+  const [listLoading, setListLoading] = useState(false)
+  const [listResult, setListResult] = useState<{ listingUrl: string; listingId: string } | null>(null)
+  const [listError, setListError] = useState<string | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -877,7 +884,7 @@ export default function Dashboard() {
                                     }}>{p.risk}</span>
                                     {p.salesVolume && <span style={{ fontSize: '9px', color: 'var(--dim)' }}>🔥 {p.salesVolume}</span>}
                                   </div>
-                                  <button onClick={() => { setAsinInput(p.asin); setTab('asin') }} className="btn btn-gold btn-sm" style={{ fontSize: '10px' }}>Analyze →</button>
+                                  <button onClick={() => { setListModal(p); setListPrice(p.ebayPrice.toFixed(2)); setListResult(null); setListError(null) }} className="btn btn-gold btn-sm" style={{ fontSize: '10px' }}>Sell on eBay</button>
                                 </div>
                               </div>
                             ))}
@@ -915,7 +922,7 @@ export default function Dashboard() {
                                       }}>{p.risk}</span>
                                     </td>
                                     <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                                      <button onClick={() => { setAsinInput(p.asin); setTab('asin') }} className="btn btn-gold btn-sm" style={{ fontSize: '10px', padding: '4px 10px' }}>Analyze</button>
+                                      <button onClick={() => { setListModal(p); setListPrice(p.ebayPrice.toFixed(2)); setListResult(null); setListError(null) }} className="btn btn-gold btn-sm" style={{ fontSize: '10px', padding: '4px 10px' }}>Sell on eBay</button>
                                     </td>
                                   </tr>
                                 ))}
@@ -1011,6 +1018,109 @@ export default function Dashboard() {
 
         </div>
       </main>
+
+      {/* ── SELL ON EBAY MODAL ── */}
+      {listModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.80)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
+        }} onClick={e => { if (e.target === e.currentTarget) { setListModal(null); setListResult(null); setListError(null) } }}>
+          <div style={{
+            width: '100%', maxWidth: '480px', borderRadius: '20px',
+            background: 'linear-gradient(160deg,rgba(18,13,6,1) 0%,rgba(10,8,3,1) 100%)',
+            border: '1px solid rgba(200,162,80,0.22)',
+            boxShadow: '0 40px 120px rgba(0,0,0,0.9)',
+            padding: '36px', animation: 'fadein 0.18s ease',
+          }}>
+            {listResult ? (
+              /* Success state */
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '40px', marginBottom: '16px' }}>✓</div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: '24px', fontWeight: 600, color: 'var(--grn)', marginBottom: '8px' }}>Listed on eBay!</div>
+                <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '24px' }}>Item #{listResult.listingId} is now live.</div>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                  <a href={listResult.listingUrl} target="_blank" rel="noreferrer" className="btn btn-gold" style={{ fontSize: '13px' }}>View Listing →</a>
+                  <button onClick={() => { setListModal(null); setListResult(null) }} className="btn btn-ghost btn-sm">Done</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Header */}
+                <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', marginBottom: '24px' }}>
+                  {listModal.imageUrl && <img src={listModal.imageUrl} alt={listModal.title} style={{ width: '64px', height: '64px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', flexShrink: 0 }} />}
+                  <div>
+                    <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--gold)', marginBottom: '6px' }}>Sell on eBay</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4 }}>{listModal.title.slice(0, 90)}</div>
+                    <div style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '4px' }}>{listModal.asin}</div>
+                  </div>
+                </div>
+
+                {/* Price fields */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+                  <div style={{ padding: '14px 16px', borderRadius: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(195,158,88,0.10)' }}>
+                    <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--dim)', marginBottom: '6px' }}>Amazon Cost</div>
+                    <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '22px', fontWeight: 800, color: 'var(--txt)' }}>${listModal.amazonPrice.toFixed(2)}</div>
+                  </div>
+                  <div style={{ padding: '14px 16px', borderRadius: '12px', background: 'rgba(200,162,80,0.06)', border: '1px solid rgba(200,162,80,0.20)' }}>
+                    <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--dim)', marginBottom: '4px' }}>Your eBay Price</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: 'var(--gold)', fontSize: '18px', fontWeight: 700 }}>$</span>
+                      <input
+                        value={listPrice}
+                        onChange={e => setListPrice(e.target.value)}
+                        style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Space Grotesk,sans-serif', fontSize: '22px', fontWeight: 800, color: 'var(--gld2)', padding: 0 }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {listError && (
+                  <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '10px', background: 'rgba(232,63,80,0.08)', border: '1px solid rgba(232,63,80,0.2)', fontSize: '12px', color: 'var(--red)', lineHeight: 1.5 }}>
+                    {listError}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    className="btn btn-gold"
+                    style={{ flex: 1, fontSize: '14px', padding: '14px' }}
+                    disabled={listLoading || !listPrice}
+                    onClick={async () => {
+                      setListLoading(true)
+                      setListError(null)
+                      try {
+                        const res = await fetch('/api/ebay/list-product', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            asin: listModal.asin,
+                            title: listModal.title,
+                            ebayPrice: parseFloat(listPrice),
+                            amazonPrice: listModal.amazonPrice,
+                            imageUrl: listModal.imageUrl,
+                            niche,
+                          }),
+                        })
+                        const data = await res.json()
+                        if (data.error) { setListError(data.error); return }
+                        setListResult(data)
+                      } catch { setListError('Something went wrong — try again') }
+                      finally { setListLoading(false) }
+                    }}
+                  >
+                    {listLoading ? 'Publishing…' : 'Publish to eBay'}
+                  </button>
+                  <button onClick={() => { setListModal(null); setListError(null) }} className="btn btn-ghost" style={{ fontSize: '13px', padding: '14px 18px' }}>Cancel</button>
+                </div>
+                <div style={{ marginTop: '12px', fontSize: '10px', color: 'var(--dim)', textAlign: 'center', lineHeight: 1.6 }}>
+                  Lists as Fixed Price · Qty 99 · New condition · Uses your eBay shipping &amp; return policies
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 
