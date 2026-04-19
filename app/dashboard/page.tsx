@@ -579,7 +579,7 @@ export default function Dashboard() {
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <input
                       value={asinInput}
-                      onChange={e => setAsinInput(e.target.value.replace(/\s/g, '').toUpperCase())}
+                      onChange={e => { const v = e.target.value.replace(/\s/g, ''); setAsinInput(/^\d+$/.test(v) ? v : v.toUpperCase()) }}
                       onKeyDown={e => e.key === 'Enter' && lookupAsin()}
                       placeholder="e.g. 387234561234 or B08N5WRWNW"
                       style={{ flex: 1, fontFamily: 'monospace', fontSize: '14px', letterSpacing: '0.06em' }}

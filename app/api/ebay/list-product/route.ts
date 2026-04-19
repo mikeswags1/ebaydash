@@ -3,6 +3,50 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { sql } from '@/lib/db'
 
+// Required item specifics per niche — eBay will reject listings missing these
+const NICHE_SPECIFICS: Record<string, Array<[string, string]>> = {
+  'Audio & Headphones':    [['Connectivity', 'Wireless'], ['Type', 'Bluetooth Speaker']],
+  'Phone Accessories':     [['Compatible Brand', 'Universal'], ['Type', 'Phone Accessory']],
+  'Computer Parts':        [['Interface', 'USB'], ['Type', 'Computer Accessory']],
+  'Smart Home Devices':    [['Connectivity', 'Wi-Fi'], ['Type', 'Smart Home Device']],
+  'Gaming Gear':           [['Compatible Platform', 'PC, PlayStation, Xbox, Nintendo Switch'], ['Type', 'Gaming Accessory']],
+  'Kitchen Gadgets':       [['Material', 'See Description'], ['Type', 'Kitchen Gadget']],
+  'Home Decor':            [['Theme', 'Modern'], ['Type', 'Home Decor Accent']],
+  'Furniture & Lighting':  [['Type', 'Desk Lamp'], ['Power Source', 'Electric']],
+  'Cleaning Supplies':     [['Type', 'Cleaning Kit'], ['Surface Recommendation', 'Universal']],
+  'Storage & Organization':[['Type', 'Storage Bin'], ['Material', 'Plastic']],
+  'Camping & Hiking':      [['Type', 'Outdoor Gear'], ['Activity', 'Camping, Hiking']],
+  'Garden & Tools':        [['Type', 'Garden Tool'], ['Material', 'See Description']],
+  'Sporting Goods':        [['Type', 'Sporting Goods'], ['Activity', 'Fitness']],
+  'Fishing & Hunting':     [['Type', 'Fishing Gear'], ['Activity', 'Fishing']],
+  'Cycling':               [['Type', 'Cycling Accessory'], ['Activity', 'Cycling']],
+  'Fitness Equipment':     [['Type', 'Fitness Accessory'], ['Activity', 'Exercise & Fitness']],
+  'Personal Care':         [['Type', 'Personal Care Device'], ['Power Source', 'Battery Operated']],
+  'Supplements & Vitamins':[['Type', 'Dietary Supplement'], ['Form', 'Capsule']],
+  'Medical Supplies':      [['Type', 'Medical Supply'], ['For', 'Adults']],
+  'Mental Wellness':       [['Type', 'Wellness Accessory'], ['Material', 'See Description']],
+  'Car Parts':             [['Placement on Vehicle', 'Universal'], ['Type', 'Car Accessory']],
+  'Car Accessories':       [['Placement on Vehicle', 'Universal'], ['Type', 'Car Accessory']],
+  'Motorcycle Gear':       [['Type', 'Motorcycle Accessory'], ['Material', 'See Description']],
+  'Truck & Towing':        [['Placement on Vehicle', 'Universal'], ['Type', 'Truck Accessory']],
+  'Car Care':              [['Type', 'Car Care Kit'], ['Surface Recommendation', 'All Surfaces']],
+  'Pet Supplies':          [['Animal Type', 'Dog, Cat'], ['Type', 'Pet Accessory']],
+  'Baby & Kids':           [['Age Range', '0-12 Months, Toddler'], ['Type', 'Baby Accessory']],
+  'Toys & Games':          [['Age Level', '3+'], ['Type', 'Toy']],
+  'Clothing & Accessories':[['Department', 'Unisex Adults'], ['Size Type', 'Regular']],
+  'Jewelry & Watches':     [['Metal', 'See Description'], ['Type', 'Fashion Jewelry']],
+  'Office Supplies':       [['Type', 'Office Accessory'], ['Material', 'See Description']],
+  'Industrial Equipment':  [['Type', 'Safety Equipment'], ['Material', 'See Description']],
+  'Safety Gear':           [['Type', 'Safety Gear'], ['Material', 'See Description']],
+  'Janitorial & Cleaning': [['Type', 'Cleaning Supply'], ['Surface Recommendation', 'Universal']],
+  'Packaging Materials':   [['Type', 'Packaging Supply'], ['Material', 'See Description']],
+  'Trading Cards':         [['Card Condition', 'Near Mint or Better'], ['Type', 'Card Supplies']],
+  'Vintage & Antiques':    [['Style', 'Vintage'], ['Type', 'Collectible']],
+  'Coins & Currency':      [['Type', 'Coin Collecting Supply'], ['Material', 'See Description']],
+  'Comics & Manga':        [['Type', 'Comic Storage'], ['Material', 'Plastic']],
+  'Sports Memorabilia':    [['Type', 'Display Case'], ['Material', 'See Description']],
+}
+
 const NICHE_CATEGORY: Record<string, string> = {
   'Phone Accessories': '9394',
   'Computer Parts': '175673',
@@ -90,6 +134,9 @@ export async function POST(req: NextRequest) {
   const safeTitle = title.replace(/[^\x20-\x7E]/g, '').replace(/[<>&"]/g, ' ').slice(0, 80).trim()
   const categoryId = NICHE_CATEGORY[niche] || '293'
   const price = parseFloat(ebayPrice).toFixed(2)
+  const extraSpecifics = (NICHE_SPECIFICS[niche] || [])
+    .map(([n, v]) => `\n      <NameValueList><Name>${n}</Name><Value>${v}</Value></NameValueList>`)
+    .join('')
 
   const description = `<![CDATA[
 <div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;padding:20px;color:#333">
@@ -146,10 +193,7 @@ export async function POST(req: NextRequest) {
       <ShippingCostPaidByOption>Buyer</ShippingCostPaidByOption>
     </ReturnPolicy>
     <ItemSpecifics>
-      <NameValueList>
-        <Name>Brand</Name>
-        <Value>Unbranded</Value>
-      </NameValueList>
+      <NameValueList><Name>Brand</Name><Value>Unbranded</Value></NameValueList>${extraSpecifics}
     </ItemSpecifics>
   </Item>
 </AddFixedPriceItemRequest>`
