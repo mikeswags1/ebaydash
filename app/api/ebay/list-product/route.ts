@@ -120,8 +120,10 @@ function sanitizeContent(text: string): string {
     .replace(/\b(amazon\.?com?|amazon prime|prime\s+shipping|prime\s+eligible|prime\s+member|fulfilled\s+by\s+amazon|ships\s+from\s+amazon|sold\s+by\s+amazon|amazon\s+basics|amazon\s+brand|buy\s+on\s+amazon|visit\s+the\s+\S+\s+store|fba)\b/gi, '')
     .replace(/<[^>]*>/g, ' ')
     .replace(/[<>&"]/g, ' ')
-    // Strip leading emoji (e.g. ✅, 🔹) that Amazon includes in bullet points
+    // Strip leading emoji that Amazon includes in bullet points
     .replace(/^[\u{1F300}-\u{1FFFF}\u{2600}-\u{27FF}\s]+/u, '')
+    // Strip control characters invalid in XML 1.0 (causes XML Parse error)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim()
 }
@@ -406,7 +408,10 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
 </body>
 </html>`
 
-  return `<![CDATA[${html.replace(/]]>/g, ']] >')}]]>`
+  const safeHtml = html
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/]]>/g, ']] >')
+  return `<![CDATA[${safeHtml}]]>`
 }
 
 // ── eBay Picture Services — upload badge image so it's permanently hosted ────
@@ -509,7 +514,7 @@ function buildXml(params: {
     <ConditionID>1000</ConditionID>
     <Country>US</Country>
     <Currency>USD</Currency>
-    <Location>${process.env.EBAY_ITEM_LOCATION || 'New Jersey, United States'}</Location>
+    <Location>${(process.env.EBAY_ITEM_LOCATION || 'New Jersey, United States').replace(/&/g, '&amp;')}</Location>
     <PostalCode>${process.env.EBAY_POSTAL_CODE || '07001'}</PostalCode>
     <DispatchTimeMax>0</DispatchTimeMax>
     <ListingDuration>GTC</ListingDuration>
