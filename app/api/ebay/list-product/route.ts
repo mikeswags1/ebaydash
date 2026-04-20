@@ -406,7 +406,7 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
 </body>
 </html>`
 
-  return `<![CDATA[${html}]]>`
+  return `<![CDATA[${html.replace(/]]>/g, ']] >')}]]>`
 }
 
 // ── eBay Picture Services — upload badge image so it's permanently hosted ────
@@ -562,7 +562,8 @@ export async function POST(req: NextRequest) {
 
   const cleanTitle = title
     .replace(/[^\x20-\x7E]/g, '')
-    .replace(/[<>&"]/g, '')
+    .replace(/[<>"]/g, '')
+    .replace(/&/g, '&amp;')
     .replace(/\s*[-|,]\s*(Pack of|Pack|Count|Piece|Pcs|Units?|Set of)\s*\d+/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim()
@@ -602,8 +603,9 @@ export async function POST(req: NextRequest) {
     ? [firstPictureUrl, ...restImages]
     : restImages
 
+  const xmlEncodeUrl = (u: string) => u.replace(/&/g, '&amp;').replace(/</g, '').replace(/>/g, '')
   const pictureXml = pictureList.length > 0
-    ? `<PictureDetails><GalleryType>Gallery</GalleryType>${pictureList.map(u => `<PictureURL>${u}</PictureURL>`).join('')}</PictureDetails>`
+    ? `<PictureDetails><GalleryType>Gallery</GalleryType>${pictureList.map(u => `<PictureURL>${xmlEncodeUrl(u)}</PictureURL>`).join('')}</PictureDetails>`
     : ''
 
   const xmlParams = { token, safeTitle, description, categoryId, price, pictureXml, extraSpecifics }
