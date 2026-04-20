@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import sharp from 'sharp'
+import { existsSync, readFileSync } from 'fs'
+import { join } from 'path'
 
-// Clean professional FREE SHIPPING banner — bottom strip on product image
-// Font stack targets fonts available on Vercel's Amazon Linux (librsvg/fontconfig):
-// FreeSans (GNU FreeFont), Liberation Sans, DejaVu Sans — no letter-spacing or
-// non-ASCII chars which can cause rendering issues on minimal server environments
+// Fallback green banner used when stamp PNG is not present
 const BANNER_SVG = Buffer.from(
   `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="68">
     <rect width="800" height="68" fill="#15803d"/>
@@ -32,16 +31,36 @@ export async function GET(req: NextRequest) {
     const img = sharp(imgBuffer)
     const { width = 600, height = 600 } = await img.metadata()
 
-    const bannerH = Math.round(68 * (width / 800))
-    const bannerTop = height - bannerH
+    // Use the FREE SHIPPING stamp PNG if the file exists in /public
+    const stampPath = join(process.cwd(), 'public', 'free-shipping-stamp.png')
+    let composite: sharp.OverlayOptions
 
-    const scaledBanner = await sharp(BANNER_SVG)
-      .resize(width, bannerH)
-      .png()
-      .toBuffer()
+    if (existsSync(stampPath)) {
+      // Stamp: 30% of image width, placed bottom-left with a small margin
+      const stampSize = Math.round(width * 0.30)
+      const margin = Math.round(width * 0.02)
+      const stampBuf = await sharp(readFileSync(stampPath))
+        .resize(stampSize, stampSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png()
+        .toBuffer()
+      composite = {
+        input: stampBuf,
+        top: height - stampSize - margin,
+        left: margin,
+        blend: 'over',
+      }
+    } else {
+      // Fallback: full-width green banner at bottom
+      const bannerH = Math.round(68 * (width / 800))
+      const scaledBanner = await sharp(BANNER_SVG)
+        .resize(width, bannerH)
+        .png()
+        .toBuffer()
+      composite = { input: scaledBanner, top: height - bannerH, left: 0 }
+    }
 
     const result = await img
-      .composite([{ input: scaledBanner, top: bannerTop, left: 0 }])
+      .composite([composite])
       .jpeg({ quality: 93 })
       .toBuffer()
 

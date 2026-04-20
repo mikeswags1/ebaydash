@@ -119,8 +119,22 @@ function sanitizeContent(text: string): string {
     .replace(/\b(amazon\.?com?|amazon prime|prime\s+shipping|prime\s+eligible|prime\s+member|fulfilled\s+by\s+amazon|ships\s+from\s+amazon|sold\s+by\s+amazon|amazon\s+basics|amazon\s+brand|buy\s+on\s+amazon|visit\s+the\s+\S+\s+store|fba)\b/gi, '')
     .replace(/<[^>]*>/g, ' ')
     .replace(/[<>&"]/g, ' ')
+    // Strip leading emoji (e.g. ✅, 🔹) that Amazon includes in bullet points
+    .replace(/^[\u{1F300}-\u{1FFFF}\u{2600}-\u{27FF}\s]+/u, '')
     .replace(/\s{2,}/g, ' ')
     .trim()
+}
+
+// Breaks a long description into short readable paragraphs (max 2 sentences each)
+function formatAbout(text: string): string {
+  if (text.length < 30) return ''
+  const sentences = text.match(/[^.!?]+[.!?]+["']?/g) || [text]
+  const paras: string[] = []
+  for (let i = 0; i < sentences.length; i += 2) {
+    const chunk = sentences.slice(i, i + 2).join(' ').trim()
+    if (chunk.length > 15) paras.push(`<p>${chunk}</p>`)
+  }
+  return paras.length ? paras.join('\n      ') : `<p>${text}</p>`
 }
 
 async function fetchAmazonDetails(
@@ -178,10 +192,11 @@ function buildDescription(title: string, features: string[], about: string, imag
     </tbody></table>
   </div>` : ''
 
-  const aboutSection = about.length > 30 ? `
+  const formattedAbout = formatAbout(about)
+  const aboutSection = formattedAbout ? `
   <div class="section">
     <div class="section-title">Product Description</div>
-    <div class="about-body">${about}</div>
+    <div class="about-body">${formattedAbout}</div>
   </div>` : ''
 
   // Up to 6 additional product images embedded in description so buyers see every angle
@@ -234,7 +249,9 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
 .feat-table tr td:last-child{padding:9px 15px;background:#f8fafc;border-radius:8px}
 
 /* About */
-.about-body{font-size:14px;color:#444;line-height:1.85;padding:18px 22px;background:#f8fafc;border-radius:8px;border-left:4px solid #c8a250}
+.about-body{font-size:14px;color:#444;line-height:1.75;padding:18px 22px;background:#f8fafc;border-radius:8px;border-left:4px solid #c8a250}
+.about-body p{margin:0 0 12px 0}
+.about-body p:last-child{margin-bottom:0}
 
 /* Why us */
 .why-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -477,7 +494,6 @@ function buildXml(params: {
         <ShippingServiceCost>0.00</ShippingServiceCost>
         <FreeShipping>true</FreeShipping>
         <ShippingServiceAdditionalCost>0.00</ShippingServiceAdditionalCost>
-        <Expedited>true</Expedited>
       </ShippingServiceOptions>
     </ShippingDetails>
     <ReturnPolicy>
