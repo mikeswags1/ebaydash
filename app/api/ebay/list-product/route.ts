@@ -160,20 +160,25 @@ async function fetchAmazonDetails(
       new Set([mainImg, ...(rawPhotos as string[])].filter((u): u is string => typeof u === 'string' && u.startsWith('http')))
     ).slice(0, 12)
 
-    // Try every possible field name for bullet features
+    // Try every possible field name for bullet features — use || so empty arrays fall through
     const rawFeatures: unknown[] = (
-      data.about_product ?? data.feature_bullets ?? data.bullet_points ??
-      data.product_features ?? data.highlights ?? data.key_features ?? []
+      data.about_product ||
+      data.feature_bullets ||
+      data.bullet_points ||
+      data.product_features ||
+      data.highlights ||
+      data.key_features ||
+      []
     )
-    const features = (rawFeatures as string[])
+    const features = (Array.isArray(rawFeatures) ? rawFeatures as string[] : [])
       .filter((f): f is string => typeof f === 'string' && f.trim().length > 5)
       .map(f => sanitizeContent(f).slice(0, 500))
       .filter(f => f.length > 5)
 
-    // Try every possible field name for long description
+    // Try every possible field name for long description — use || so empty strings fall through
     const rawDesc: string = (
-      data.product_description ?? data.description ?? data.synopsis ??
-      data.product_information ?? data.full_description ?? ''
+      data.product_description || data.description || data.synopsis ||
+      data.product_information || data.full_description || ''
     )
     const description = sanitizeContent(rawDesc).slice(0, 6000)
 
@@ -483,11 +488,13 @@ function buildXml(params: {
     <Quantity>2</Quantity>
     ${params.pictureXml}
     <ShippingDetails>
-      <ShippingType>Free</ShippingType>
+      <ShippingType>Flat</ShippingType>
       <ShippingServiceOptions>
         <ShippingServicePriority>1</ShippingServicePriority>
         <ShippingService>USPSPriority</ShippingService>
         <ShippingServiceCost>0.00</ShippingServiceCost>
+        <FreeShipping>true</FreeShipping>
+        <ShippingServiceAdditionalCost>0.00</ShippingServiceAdditionalCost>
       </ShippingServiceOptions>
     </ShippingDetails>
     <ReturnPolicy>
