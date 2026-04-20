@@ -483,13 +483,11 @@ function buildXml(params: {
     <Quantity>2</Quantity>
     ${params.pictureXml}
     <ShippingDetails>
-      <ShippingType>Flat</ShippingType>
+      <ShippingType>Free</ShippingType>
       <ShippingServiceOptions>
         <ShippingServicePriority>1</ShippingServicePriority>
         <ShippingService>USPSPriority</ShippingService>
         <ShippingServiceCost>0.00</ShippingServiceCost>
-        <FreeShipping>true</FreeShipping>
-        <ShippingServiceAdditionalCost>0.00</ShippingServiceAdditionalCost>
       </ShippingServiceOptions>
     </ShippingDetails>
     <ReturnPolicy>
