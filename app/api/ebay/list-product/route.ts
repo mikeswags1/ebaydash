@@ -414,35 +414,7 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
   return `<![CDATA[${safeHtml}]]>`
 }
 
-// ── eBay Picture Services — upload badge image so it's permanently hosted ────
-async function uploadBadgedImage(
-  badgeUrl: string, token: string, appId: string
-): Promise<string | null> {
-  try {
-    const xml = `<?xml version="1.0" encoding="utf-8"?>
-<UploadSiteHostedPicturesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
-  <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
-  <ExternalPictureURL>${badgeUrl}</ExternalPictureURL>
-</UploadSiteHostedPicturesRequest>`
 
-    const res = await fetch('https://api.ebay.com/ws/api.dll', {
-      method: 'POST',
-      headers: {
-        'X-EBAY-API-CALL-NAME': 'UploadSiteHostedPictures',
-        'X-EBAY-API-SITEID': '0',
-        'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
-        'X-EBAY-API-APP-NAME': appId,
-        'Content-Type': 'text/xml',
-      },
-      body: xml,
-    })
-    const text = await res.text()
-    const match = text.match(/<FullURL>(.*?)<\/FullURL>/)
-    return match?.[1] || null
-  } catch {
-    return null
-  }
-}
 
 // ── Auth helper ──────────────────────────────────────────────────────────────
 async function getFreshToken(userId: string): Promise<string | null> {
@@ -580,8 +552,8 @@ export async function POST(req: NextRequest) {
   const amazon = await fetchAmazonDetails(asin, rapidKey, imageUrl)
   const description = buildDescription(safeTitle, amazon.features, amazon.description, amazon.images, amazon.specs)
 
-  // Upload first image with FREE SHIPPING banner to eBay's picture hosting
-  // so it's permanently cached on eBay CDN (no proxy URL in the live listing)
+  // Use badge proxy for first image (FREE SHIPPING stamp), raw Amazon URLs for the rest.
+  // All URLs are self-hosted — mixing EPS and self-hosted is not allowed by eBay.
   const host = req.headers.get('host') || ''
   const proto = host.startsWith('localhost') ? 'http' : 'https'
   const siteUrl = `${proto}://${host}`
@@ -589,14 +561,9 @@ export async function POST(req: NextRequest) {
   const mainImage = amazon.images[0] || imageUrl || ''
   const restImages = amazon.images.slice(1)
 
-  let firstPictureUrl = mainImage
-  if (mainImage) {
-    const badgeUrl = `${siteUrl}/api/image/badge?url=${encodeURIComponent(mainImage)}`
-    const hostedUrl = await uploadBadgedImage(badgeUrl, token, appId)
-    // Prefer eBay-hosted URL; fall back to badge proxy URL directly (not bare Amazon URL)
-    // so the FREE SHIPPING watermark always appears regardless of EPS outcome
-    firstPictureUrl = hostedUrl || badgeUrl
-  }
+  const firstPictureUrl = mainImage
+    ? `${siteUrl}/api/image/badge?url=${encodeURIComponent(mainImage)}`
+    : ''
 
   const pictureList = firstPictureUrl
     ? [firstPictureUrl, ...restImages]
