@@ -131,7 +131,7 @@ function sanitizeContent(text: string): string {
 
 async function fetchAmazonDetails(
   asin: string, rapidKey: string, fallbackImage?: string
-): Promise<AmazonDetails> {
+): Promise<AmazonDetails & { _apiError?: string }> {
   try {
     const url = `https://real-time-amazon-data.p.rapidapi.com/product-details?asin=${asin}&country=US`
     const res = await fetch(url, {
@@ -139,6 +139,7 @@ async function fetchAmazonDetails(
         'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com',
         'x-rapidapi-key': rapidKey,
       },
+      signal: AbortSignal.timeout(8000),
     })
     const json = await res.json()
     const data = json?.data ?? json
@@ -146,14 +147,27 @@ async function fetchAmazonDetails(
     const rawPhotos: unknown[] = (Array.isArray(data.product_photos) && data.product_photos.length > 0)
       ? data.product_photos
       : []
-    const mainImg: string = (typeof rawPhotos[0] === 'string' ? rawPhotos[0] : null)
-      ?? (typeof data.product_photo === 'string' ? data.product_photo : null)
-      ?? fallbackImage ?? ''
+    // Also accept object-form photos: {url: "..."} or {large: "..."}
+    const extractUrl = (v: unknown): string => {
+      if (typeof v === 'string') return v
+      if (v && typeof v === 'object') {
+        const o = v as Record<string, unknown>
+        return String(o.url || o.large || o.hiRes || o.main || o.thumb || '')
+      }
+      return ''
+    }
+    const mainImg: string =
+      extractUrl(rawPhotos[0]) ||
+      (typeof data.product_photo === 'string' ? data.product_photo : '') ||
+      fallbackImage || ''
     const allImages = Array.from(
-      new Set([mainImg, ...(rawPhotos as string[])].filter((u): u is string => typeof u === 'string' && u.startsWith('http')))
+      new Set(
+        [mainImg, ...rawPhotos.map(extractUrl)]
+          .filter((u): u is string => typeof u === 'string' && u.startsWith('http'))
+      )
     ).slice(0, 12)
 
-    // Try every possible field name for bullet features — use || so empty arrays fall through
+    // Try every possible field name for bullet features
     const rawFeatures: unknown[] = (
       data.about_product ||
       data.feature_bullets ||
@@ -168,14 +182,12 @@ async function fetchAmazonDetails(
       .map(f => sanitizeContent(f).slice(0, 500))
       .filter(f => f.length > 5)
 
-    // Try every possible field name for long description — use || so empty strings fall through
     const rawDesc: string = (
       data.product_description || data.description || data.synopsis ||
       data.product_information || data.full_description || ''
     )
-    const description = sanitizeContent(rawDesc).slice(0, 6000)
+    const description = typeof rawDesc === 'string' ? sanitizeContent(rawDesc).slice(0, 6000) : ''
 
-    // Merge product_overview + product_details, filter Amazon-only metadata
     const rawSpecs: Record<string, unknown> = {
       ...(data.product_overview ?? {}),
       ...(data.product_details ?? {}),
@@ -187,7 +199,6 @@ async function fetchAmazonDetails(
       .map(([k, v]) => [sanitizeContent(k).slice(0, 80), sanitizeContent(String(v)).slice(0, 200)])
       .filter(([k, v]) => k.length > 1 && v.length > 1) as Array<[string, string]>
 
-    // Build features: from API → from specs → from generic fallback (Amazon API often returns empty data on free tier)
     let finalFeatures = features.length > 0
       ? features
       : specs.slice(0, 8).map(([k, v]) => `${k}: ${v}`)
@@ -210,9 +221,49 @@ async function fetchAmazonDetails(
       description,
       specs,
     }
-  } catch {
-    return { images: fallbackImage ? [fallbackImage] : [], features: [], description: '', specs: [] }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[fetchAmazonDetails] failed:', msg)
+    return {
+      images: fallbackImage ? [fallbackImage] : [],
+      features: [],
+      description: '',
+      specs: [],
+      _apiError: msg,
+    }
   }
+}
+
+// Upload a single image to eBay's own picture hosting (EPS).
+// Returns the eBay-hosted URL on success, or the original URL as fallback.
+async function uploadToEPS(imageUrl: string, token: string, appId: string): Promise<string> {
+  try {
+    const xml = `<?xml version="1.0" encoding="utf-8"?>
+<UploadSiteHostedPicturesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
+  <ExternalPictureURL>${imageUrl.replace(/&/g, '&amp;').replace(/</g, '').replace(/>/g, '')}</ExternalPictureURL>
+  <PictureSet>Supersize</PictureSet>
+</UploadSiteHostedPicturesRequest>`
+    const res = await fetch('https://api.ebay.com/ws/api.dll', {
+      method: 'POST',
+      headers: {
+        'X-EBAY-API-CALL-NAME': 'UploadSiteHostedPictures',
+        'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
+        'X-EBAY-API-APP-NAME': appId,
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'text/xml',
+      },
+      body: xml,
+      signal: AbortSignal.timeout(12000),
+    })
+    const text = await res.text()
+    const m = text.match(/<FullURL>(.*?)<\/FullURL>/)
+    if (m?.[1]) return m[1]
+  } catch (e) {
+    console.error('[uploadToEPS] failed for', imageUrl.slice(0, 60), e instanceof Error ? e.message : e)
+  }
+  return imageUrl
 }
 
 // ── Description builder — matches Infinitybot style ─────────────────────────
@@ -460,26 +511,21 @@ export async function POST(req: NextRequest) {
 
   const filteredImages = allImages
     .filter(u => typeof u === 'string' && u.startsWith('http'))
-    .slice(0, 12)
+    .slice(0, 8)
 
-  // Sidebar images for eBay:
-  // - Image 0: badge proxy (Node.js, adds FREE SHIPPING stamp via sharp)
-  // - Images 1+: edge proxy (zero cold-start, so eBay EPS can fetch all images quickly)
-  //   Direct Amazon CDN URLs won't work — eBay's EPS crawler is blocked by Amazon CDN.
-  const pictureList = filteredImages.map((u, i) =>
+  // Build proxy URLs for each image (used for EPS upload + description inline images)
+  const proxyUrls = filteredImages.map((u, i) =>
     i === 0
       ? `${siteUrl}/api/image/badge?url=${encodeURIComponent(u)}`
       : `${siteUrl}/api/image/proxy?url=${encodeURIComponent(u)}`
   )
 
-  // Description inline images: all proxied (loads when buyer views the listing page)
-  const descImages = filteredImages.map((u, i) =>
-    i === 0
-      ? `${siteUrl}/api/image/badge?url=${encodeURIComponent(u)}`
-      : `${siteUrl}/api/image/proxy?url=${encodeURIComponent(u)}`
-  )
+  // Upload all images to eBay's own CDN (EPS) so they're guaranteed accessible in the listing.
+  // Falls back to the proxy URL if any individual upload fails.
+  const pictureList = await Promise.all(proxyUrls.map(u => uploadToEPS(u, token, appId)))
 
-  const description = buildDescription(safeTitle, amazon.features, amazon.description, descImages, amazon.specs)
+  // Description inline images use proxy URLs (loaded by buyer's browser, not eBay EPS)
+  const description = buildDescription(safeTitle, amazon.features, amazon.description, proxyUrls, amazon.specs)
 
   const xmlEncodeUrl = (u: string) => u.replace(/&/g, '&amp;').replace(/</g, '').replace(/>/g, '')
   const pictureXml = pictureList.length > 0
@@ -600,6 +646,13 @@ export async function POST(req: NextRequest) {
     success: true,
     listingId,
     listingUrl: `https://www.ebay.com/itm/${listingId}`,
-    imagesSubmitted: pictureList.length,
+    _debug: {
+      amazonImages: amazon.images.length,
+      featuresCount: amazon.features.length,
+      featuresSource: amazon.features.length > 0 && amazon.features[0].startsWith('Brand new') ? 'fallback' : 'amazon',
+      epsUploaded: pictureList.filter(u => u.includes('ebayimg.com')).length,
+      pictureListLength: pictureList.length,
+      apiError: (amazon as { _apiError?: string })._apiError,
+    },
   })
 }
