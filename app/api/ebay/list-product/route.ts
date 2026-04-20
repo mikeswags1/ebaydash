@@ -163,18 +163,23 @@ async function fetchAmazonDetails(
     const rawFeatures: unknown[] = data.about_product ?? data.product_features ?? []
     const features = (rawFeatures as string[])
       .filter((f): f is string => typeof f === 'string' && f.trim().length > 5)
-      .slice(0, 15)
-      .map(f => sanitizeContent(f).slice(0, 400))
+      .map(f => sanitizeContent(f).slice(0, 500))
       .filter(f => f.length > 5)
 
     const rawDesc: string = data.product_description ?? data.description ?? ''
-    const description = sanitizeContent(rawDesc).slice(0, 4000)
+    const description = sanitizeContent(rawDesc).slice(0, 6000)
 
-    const rawSpecs: unknown = data.product_details ?? data.product_specification ?? {}
-    const specs: Array<[string, string]> = Object.entries(rawSpecs as Record<string, unknown>)
-      .filter(([k, v]) => k && v && String(v).length > 0)
-      .slice(0, 20)
-      .map(([k, v]) => [sanitizeContent(k).slice(0, 60), sanitizeContent(String(v)).slice(0, 120)])
+    // Merge product_details + product_overview for maximum spec coverage
+    const rawSpecs: Record<string, unknown> = {
+      ...(data.product_overview ?? {}),
+      ...(data.product_details ?? {}),
+    }
+    // Filter out review/rating/customer-sentiment keys
+    const skipKeys = /customer|review|rating|star|bought|month|seller|return|warranty/i
+    const specs: Array<[string, string]> = Object.entries(rawSpecs)
+      .filter(([k, v]) => k && v && String(v).length > 0 && !skipKeys.test(k))
+      .slice(0, 30)
+      .map(([k, v]) => [sanitizeContent(k).slice(0, 80), sanitizeContent(String(v)).slice(0, 200)])
       .filter(([k, v]) => k.length > 1 && v.length > 1) as Array<[string, string]>
 
     return {
@@ -191,43 +196,38 @@ async function fetchAmazonDetails(
 // ── Description builder ──────────────────────────────────────────────────────
 function buildDescription(title: string, features: string[], about: string, images: string[], specs: Array<[string, string]> = []): string {
 
-  const featureRows = features
-    .map(f => `<tr><td class="check">&#10003;</td><td>${f}</td></tr>`)
-    .join('\n          ')
+  const featureItems = features.map(f =>
+    `<li class="feat-item"><span class="feat-check">&#10003;</span><span>${f}</span></li>`
+  ).join('\n')
 
-  const featureSection = featureRows ? `
+  const featureSection = featureItems ? `
   <div class="section">
-    <div class="section-title">Key Features &amp; Benefits</div>
-    <table class="feat-table"><tbody>
-      ${featureRows}
-    </tbody></table>
+    <div class="section-title">What's Included &amp; Key Features</div>
+    <ul class="feat-list">${featureItems}</ul>
   </div>` : ''
 
   const formattedAbout = formatAbout(about)
   const aboutSection = formattedAbout ? `
   <div class="section">
-    <div class="section-title">Product Description</div>
+    <div class="section-title">About This Product</div>
     <div class="about-body">${formattedAbout}</div>
   </div>` : ''
 
-  const specRows = specs
-    .map(([k, v]) => `<tr><td class="spec-key">${k}</td><td class="spec-val">${v}</td></tr>`)
-    .join('\n          ')
+  const specRows = specs.map(([k, v]) =>
+    `<tr><td class="spec-key">${k}</td><td class="spec-val">${v}</td></tr>`
+  ).join('\n')
   const specsSection = specRows ? `
   <div class="section">
-    <div class="section-title">Product Specifications</div>
-    <table class="spec-table"><tbody>
-      ${specRows}
-    </tbody></table>
+    <div class="section-title">Product Details &amp; Specifications</div>
+    <table class="spec-table"><tbody>${specRows}</tbody></table>
   </div>` : ''
 
-  // Up to 6 additional product images embedded in description so buyers see every angle
-  const galleryImgs = images.slice(0, 6)
+  const galleryImgs = images.slice(0, 9)
   const imageGallery = galleryImgs.length > 1 ? `
   <div class="section">
     <div class="section-title">Product Images</div>
     <div class="img-grid">
-      ${galleryImgs.map((u, i) => `<img src="${u}" alt="Product view ${i + 1}" class="product-img" loading="lazy">`).join('\n      ')}
+      ${galleryImgs.map((u, i) => `<img src="${u}" alt="View ${i + 1}" class="product-img" loading="lazy">`).join('\n      ')}
     </div>
   </div>` : ''
 
@@ -238,102 +238,92 @@ function buildDescription(title: string, features: string[], about: string, imag
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
-.wrap{max-width:680px;margin:0 auto;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 6px 40px rgba(0,0,0,.13)}
+body{font-family:Arial,Helvetica,sans-serif;background:#f5f5f5;color:#111}
+.wrap{max-width:700px;margin:0 auto;background:#fff;border:1px solid #ddd}
 
 /* Hero */
-.hero{background:linear-gradient(140deg,#0f1628 0%,#1a2744 100%);padding:38px 42px 30px}
-.hero-tag{font-size:10px;font-weight:700;letter-spacing:3.5px;text-transform:uppercase;color:#c8a250;margin-bottom:10px;opacity:.9}
-.hero-title{font-size:21px;font-weight:800;color:#fff;line-height:1.42;margin-bottom:10px}
-.hero-sub{font-size:12px;color:#94a3b8;letter-spacing:.4px}
+.hero{background:linear-gradient(135deg,#0f1628 0%,#1e3a5f 100%);padding:32px 36px 26px}
+.hero-tag{font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#f0a500;margin-bottom:8px}
+.hero-title{font-size:22px;font-weight:800;color:#fff;line-height:1.4;margin-bottom:8px}
+.hero-sub{font-size:12px;color:#9bb}
 
 /* Delivery bar */
-.dbar{background:#15803d;padding:17px 42px;display:flex;align-items:center;gap:14px}
-.dbar-icon{font-size:26px;flex-shrink:0}
-.dbar-head{font-size:15px;font-weight:800;color:#fff;letter-spacing:.3px}
-.dbar-eta{font-size:12px;color:#bbf7d0;margin-top:4px}
-.dbar-eta strong{color:#fff}
+.dbar{background:#007600;padding:14px 36px;display:flex;align-items:center;gap:12px}
+.dbar-icon{font-size:24px}
+.dbar-head{font-size:14px;font-weight:700;color:#fff}
+.dbar-sub{font-size:12px;color:#9de09d;margin-top:2px}
 
 /* Badges */
-.badges{display:flex;flex-wrap:wrap;gap:8px;padding:14px 42px;background:#0f172a}
-.badge{padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.4px}
-.bg{background:rgba(200,162,80,.15);border:1px solid rgba(200,162,80,.35);color:#e0c875}
-.bgg{background:rgba(22,163,74,.18);border:1px solid rgba(34,197,94,.4);color:#4ade80}
+.badges{display:flex;flex-wrap:wrap;gap:6px;padding:12px 36px;background:#111}
+.badge{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700}
+.bg{background:rgba(240,165,0,.15);border:1px solid rgba(240,165,0,.4);color:#f0c040}
+.bgg{background:rgba(0,150,0,.2);border:1px solid rgba(0,200,0,.4);color:#4cff4c}
 
 /* Sections */
-.section{padding:28px 42px;border-bottom:1px solid #eef0f3}
-.section-title{font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:#aaa;margin-bottom:18px}
+.section{padding:24px 36px;border-bottom:1px solid #e8e8e8}
+.section-title{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:14px}
 
-/* Feature table */
-.feat-table{width:100%;border-collapse:separate;border-spacing:0 6px}
-.feat-table td{vertical-align:top;font-size:14px;color:#2d3748;line-height:1.7}
-.check{width:26px;padding:8px 4px;color:#16a34a;font-size:16px;font-weight:700}
-.feat-table tr td:last-child{padding:9px 15px;background:#f8fafc;border-radius:8px}
+/* Features */
+.feat-list{list-style:none;display:flex;flex-direction:column;gap:8px}
+.feat-item{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;background:#f9f9f9;border-radius:6px;border-left:3px solid #007600;font-size:14px;line-height:1.6;color:#333}
+.feat-check{color:#007600;font-size:15px;font-weight:700;flex-shrink:0;margin-top:1px}
 
 /* About */
-.about-body{font-size:14px;color:#444;line-height:1.75;padding:18px 22px;background:#f8fafc;border-radius:8px;border-left:4px solid #c8a250}
-.about-body p{margin:0 0 12px 0}
+.about-body{font-size:14px;color:#333;line-height:1.8;padding:16px 20px;background:#fafafa;border-radius:6px;border-left:4px solid #f0a500}
+.about-body p{margin:0 0 14px}
 .about-body p:last-child{margin-bottom:0}
+
+/* Specs */
+.spec-table{width:100%;border-collapse:collapse}
+.spec-key{font-size:13px;font-weight:700;color:#555;padding:9px 14px 9px 0;width:38%;vertical-align:top;border-bottom:1px solid #eee}
+.spec-val{font-size:13px;color:#111;padding:9px 0;border-bottom:1px solid #eee;line-height:1.5}
+
+/* Images */
+.img-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.product-img{width:100%;aspect-ratio:1;object-fit:contain;background:#f9f9f9;border-radius:6px;border:1px solid #e5e5e5;padding:6px}
 
 /* Why us */
 .why-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.why-card{display:flex;align-items:flex-start;gap:10px;padding:14px;background:#f8fafc;border-radius:9px;border:1px solid #e8ecf0}
-.why-icon{font-size:22px;flex-shrink:0;margin-top:1px}
-.why-title{font-size:13px;font-weight:700;color:#111;margin-bottom:3px}
-.why-sub{font-size:11px;color:#888;line-height:1.55}
-
-/* Shipping table */
-.ship-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #f2f2f2}
-.ship-row:last-child{border:none}
-.ship-label{font-size:12px;font-weight:700;color:#666;min-width:110px;flex-shrink:0}
-.ship-val{font-size:13px;color:#222}
-.green{color:#15803d;font-weight:700}
-
-/* Spec table */
-.spec-table{width:100%;border-collapse:collapse}
-.spec-key{font-size:12px;font-weight:700;color:#555;padding:8px 12px 8px 0;width:40%;vertical-align:top;border-bottom:1px solid #f0f0f0}
-.spec-val{font-size:13px;color:#222;padding:8px 0;border-bottom:1px solid #f0f0f0}
-
-/* Image gallery */
-.img-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.product-img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;border:1px solid #e8ecf0;padding:6px}
+.why-card{padding:14px;background:#f9f9f9;border-radius:8px;border:1px solid #e5e5e5}
+.why-icon{font-size:22px;margin-bottom:6px}
+.why-title{font-size:13px;font-weight:700;color:#111;margin-bottom:4px}
+.why-sub{font-size:12px;color:#777;line-height:1.5}
 
 /* Promise grid */
-.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:28px 42px;border-bottom:1px solid #eef0f3}
-.pcard{padding:18px 14px;border-radius:10px;background:#f8fafc;border:1px solid #e4e6ea;text-align:center}
-.p-icon{font-size:28px;margin-bottom:8px}
-.p-title{font-size:12px;font-weight:700;color:#111;margin-bottom:3px}
-.p-sub{font-size:11px;color:#888;line-height:1.5}
+.pgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:20px 36px;border-bottom:1px solid #e8e8e8;background:#fafafa}
+.pcard{padding:14px 10px;text-align:center}
+.p-icon{font-size:26px;margin-bottom:6px}
+.p-title{font-size:11px;font-weight:700;color:#111;margin-bottom:3px}
+.p-sub{font-size:10px;color:#888;line-height:1.4}
 
 /* Footer */
-.footer{background:#0f1628;padding:22px 42px;text-align:center;color:#556;font-size:12px;line-height:2.1}
-.footer strong{color:#c8a250}
-.stars{color:#f59e0b;font-size:14px}
+.footer{background:#111;padding:20px 36px;text-align:center;color:#666;font-size:12px;line-height:2}
+.footer strong{color:#f0a500}
 </style>
 </head>
 <body>
 <div class="wrap">
 
   <div class="hero">
-    <div class="hero-tag">Premium Quality Product</div>
+    <div class="hero-tag">Premium Quality &bull; Brand New &bull; Fast Shipping</div>
     <div class="hero-title">${title}</div>
-    <div class="hero-sub">Brand New &amp; Factory Sealed &nbsp;&middot;&nbsp; Fast Shipping &nbsp;&middot;&nbsp; Free 30-Day Returns</div>
+    <div class="hero-sub">Factory Sealed &nbsp;&middot;&nbsp; Free 2&ndash;3 Day Delivery &nbsp;&middot;&nbsp; 30-Day Free Returns</div>
   </div>
 
   <div class="dbar">
     <div class="dbar-icon">&#128666;</div>
     <div>
-      <div class="dbar-head">FREE 2&ndash;3 DAY DELIVERY INCLUDED</div>
-      <div class="dbar-eta">Ships within 1 business day &bull; USPS Priority Mail &bull; Typically arrives in 2&ndash;3 days</div>
+      <div class="dbar-head">FREE 2&ndash;3 DAY DELIVERY</div>
+      <div class="dbar-sub">Ships same or next business day &bull; USPS Priority Mail &bull; Full tracking included</div>
     </div>
   </div>
 
   <div class="badges">
-    <span class="badge bgg">&#10003; Free 2&ndash;3 Day Delivery</span>
+    <span class="badge bgg">&#10003; Free 2&ndash;3 Day Shipping</span>
     <span class="badge bg">&#10003; Brand New &amp; Sealed</span>
-    <span class="badge bg">&#10003; Free Shipping</span>
     <span class="badge bg">&#10003; 30-Day Free Returns</span>
-    <span class="badge bg">&#10003; Secure Purchase</span>
+    <span class="badge bg">&#10003; Order Tracking</span>
+    <span class="badge bg">&#10003; Secure Checkout</span>
   </div>
 
   ${featureSection}
@@ -342,35 +332,27 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
   ${imageGallery}
 
   <div class="section">
-    <div class="section-title">Why Shop With Us</div>
+    <div class="section-title">Why Buy From Us</div>
     <div class="why-grid">
       <div class="why-card">
         <div class="why-icon">&#9889;</div>
-        <div>
-          <div class="why-title">Lightning-Fast Shipping</div>
-          <div class="why-sub">Ships within 1 business day via USPS Priority Mail. Delivered in 2&ndash;3 days.</div>
-        </div>
+        <div class="why-title">Fast 2&ndash;3 Day Delivery</div>
+        <div class="why-sub">Ships same or next business day via USPS Priority Mail. Arrives in 2&ndash;3 days.</div>
       </div>
       <div class="why-card">
         <div class="why-icon">&#128230;</div>
-        <div>
-          <div class="why-title">100% Genuine Product</div>
-          <div class="why-sub">Every item is brand new, factory sealed, and arrives in original packaging.</div>
-        </div>
+        <div class="why-title">100% Genuine &amp; New</div>
+        <div class="why-sub">Brand new, factory sealed in original manufacturer packaging. Never opened.</div>
       </div>
       <div class="why-card">
         <div class="why-icon">&#8617;</div>
-        <div>
-          <div class="why-title">Hassle-Free Returns</div>
-          <div class="why-sub">Full 30-day return window. We cover return shipping — no questions asked.</div>
-        </div>
+        <div class="why-title">Easy 30-Day Returns</div>
+        <div class="why-sub">Not satisfied? Return within 30 days. We cover return shipping — no hassle.</div>
       </div>
       <div class="why-card">
         <div class="why-icon">&#128205;</div>
-        <div>
-          <div class="why-title">Full Order Tracking</div>
-          <div class="why-sub">Tracking number provided at shipment so you always know where your order is.</div>
-        </div>
+        <div class="why-title">Full Order Tracking</div>
+        <div class="why-sub">Tracking number emailed at shipment. Monitor your delivery every step of the way.</div>
       </div>
     </div>
   </div>
@@ -378,30 +360,30 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
   <div class="pgrid">
     <div class="pcard">
       <div class="p-icon">&#128230;</div>
-      <div class="p-title">Brand New &amp; Sealed</div>
-      <div class="p-sub">100% genuine, original factory packaging</div>
+      <div class="p-title">Brand New</div>
+      <div class="p-sub">Factory sealed, original packaging</div>
     </div>
     <div class="pcard">
       <div class="p-icon">&#128666;</div>
-      <div class="p-title">Free 2&ndash;3 Day Shipping</div>
-      <div class="p-sub">USPS Priority Mail at zero extra cost</div>
+      <div class="p-title">Free Shipping</div>
+      <div class="p-sub">USPS Priority 2&ndash;3 days</div>
     </div>
     <div class="pcard">
       <div class="p-icon">&#8617;</div>
       <div class="p-title">30-Day Returns</div>
-      <div class="p-sub">Seller covers all return shipping costs</div>
+      <div class="p-sub">Free return shipping</div>
     </div>
     <div class="pcard">
       <div class="p-icon">&#9733;</div>
-      <div class="p-title">Trusted Seller</div>
-      <div class="p-sub">Verified store &bull; Top-rated service</div>
+      <div class="p-title">Top Seller</div>
+      <div class="p-sub">Trusted store</div>
     </div>
   </div>
 
   <div class="footer">
-    <span class="stars">&#9733;&#9733;&#9733;&#9733;&#9733;</span> &nbsp; Thank you for shopping with us &nbsp; <span class="stars">&#9733;&#9733;&#9733;&#9733;&#9733;</span><br>
-    Have a question? Message us — we respond within 24 hours<br>
-    <strong>&#128276; Save our store for exclusive deals and new arrivals</strong>
+    Thank you for shopping with us &mdash; we appreciate your business!<br>
+    Questions? Message us and we&rsquo;ll respond within hours.<br>
+    <strong>Follow our store for new deals every week</strong>
   </div>
 
 </div>
