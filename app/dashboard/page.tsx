@@ -180,25 +180,34 @@ export default function Dashboard() {
 
   const EBAY_FEE_RATE = 0.1325
   const lookupAsin = async () => {
-    const raw = asinInput.trim()
+    const raw = asinInput.trim().toUpperCase()
     if (!raw) return
-    if (!/^\d+$/.test(raw)) {
-      setAsinError('Please enter an eBay item ID number (digits only)')
-      return
-    }
     setAsinLoading(true)
     setAsinError(null)
     setAsinResult(null)
     try {
-      const entry = orderAsinMap[raw]
-      if (!entry) {
-        setAsinError(`Item #${raw} was not listed through this dashboard — source product unknown.`)
+      // Direct ASIN input (10-char alphanumeric)
+      if (/^[A-Z0-9]{10}$/.test(raw)) {
+        const res = await fetch(`/api/amazon/lookup?asin=${raw}`)
+        const data = await res.json()
+        if (data.error) { setAsinError(data.error); return }
+        setAsinResult(data)
         return
       }
-      const res = await fetch(`/api/amazon/lookup?asin=${entry.asin}`)
-      const data = await res.json()
-      if (data.error) { setAsinError(data.error); return }
-      setAsinResult(data)
+      // eBay item ID (numeric) — check DB map first
+      if (/^\d+$/.test(raw)) {
+        const entry = orderAsinMap[raw]
+        if (!entry) {
+          setAsinError(`Item #${raw} was not found in your listing history.\n\nIf this was listed through a different tool (e.g. Infinitybot), enter the Amazon ASIN directly instead — it's a 10-character code like B08N5WRWNW, found in the Amazon product URL.`)
+          return
+        }
+        const res = await fetch(`/api/amazon/lookup?asin=${entry.asin}`)
+        const data = await res.json()
+        if (data.error) { setAsinError(data.error); return }
+        setAsinResult(data)
+        return
+      }
+      setAsinError('Enter an eBay item ID (numbers only) or an Amazon ASIN (10-character code like B08N5WRWNW)')
     } catch { setAsinError('Lookup failed — try again') }
     finally { setAsinLoading(false) }
   }
@@ -572,14 +581,14 @@ export default function Dashboard() {
 
                 {/* Search bar */}
                 <div className="card" style={{ padding: '28px 32px', marginBottom: '20px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '4px' }}>eBay Item ID</div>
-                  <div style={{ fontSize: '10px', color: 'var(--dim)', opacity: 0.7, marginBottom: '14px' }}>The numeric item ID shown on the order — e.g. 387234561234</div>
+                  <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '4px' }}>eBay Item ID or Amazon ASIN</div>
+                  <div style={{ fontSize: '10px', color: 'var(--dim)', opacity: 0.7, marginBottom: '14px' }}>Enter the eBay item ID from your order (e.g. 387234561234) — or paste an Amazon ASIN directly (e.g. B08N5WRWNW)</div>
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <input
                       value={asinInput}
-                      onChange={e => setAsinInput(e.target.value.replace(/\D/g, ''))}
+                      onChange={e => setAsinInput(e.target.value.trim())}
                       onKeyDown={e => e.key === 'Enter' && lookupAsin()}
-                      placeholder="e.g. 387234561234"
+                      placeholder="eBay item ID or Amazon ASIN"
                       style={{ flex: 1, fontFamily: 'monospace', fontSize: '16px', letterSpacing: '0.08em' }}
                     />
                     <button onClick={lookupAsin} className="btn btn-gold" disabled={asinLoading || !asinInput.trim()}>

@@ -458,17 +458,28 @@ export async function POST(req: NextRequest) {
     ? amazon.images
     : (imageUrl ? [imageUrl] : [])
 
-  const pictureList = allImages
+  const filteredImages = allImages
     .filter(u => typeof u === 'string' && u.startsWith('http'))
     .slice(0, 12)
-    .map((u, i) =>
-      i === 0
-        ? `${siteUrl}/api/image/badge?url=${encodeURIComponent(u)}`
-        : `${siteUrl}/api/image/badge?stamp=0&url=${encodeURIComponent(u)}`
-    )
 
-  // Pass proxied URLs into description so inline images actually load on eBay
-  const description = buildDescription(safeTitle, amazon.features, amazon.description, pictureList, amazon.specs)
+  // Sidebar images for eBay:
+  // - Image 0: badge proxy (Node.js, adds FREE SHIPPING stamp via sharp)
+  // - Images 1+: edge proxy (zero cold-start, so eBay EPS can fetch all images quickly)
+  //   Direct Amazon CDN URLs won't work — eBay's EPS crawler is blocked by Amazon CDN.
+  const pictureList = filteredImages.map((u, i) =>
+    i === 0
+      ? `${siteUrl}/api/image/badge?url=${encodeURIComponent(u)}`
+      : `${siteUrl}/api/image/proxy?url=${encodeURIComponent(u)}`
+  )
+
+  // Description inline images: all proxied (loads when buyer views the listing page)
+  const descImages = filteredImages.map((u, i) =>
+    i === 0
+      ? `${siteUrl}/api/image/badge?url=${encodeURIComponent(u)}`
+      : `${siteUrl}/api/image/proxy?url=${encodeURIComponent(u)}`
+  )
+
+  const description = buildDescription(safeTitle, amazon.features, amazon.description, descImages, amazon.specs)
 
   const xmlEncodeUrl = (u: string) => u.replace(/&/g, '&amp;').replace(/</g, '').replace(/>/g, '')
   const pictureXml = pictureList.length > 0
@@ -589,5 +600,6 @@ export async function POST(req: NextRequest) {
     success: true,
     listingId,
     listingUrl: `https://www.ebay.com/itm/${listingId}`,
+    imagesSubmitted: pictureList.length,
   })
 }
