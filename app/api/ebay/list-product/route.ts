@@ -599,9 +599,11 @@ export async function POST(req: NextRequest) {
     responseText = await submitToEbay(buildXml({ ...xmlParams, extraSpecifics: '' }), token, appId)
     const p = parse(responseText)
     type1 = errType(p.short, p.long)
+    // Category itself requires a specific we can't provide — treat same as bad category
+    if (type1 === 'specific') type1 = 'leaf'
   }
 
-  // If category is not a leaf, work through fallback leaf categories
+  // If category is not a leaf (or item-specific error persists), work through fallback leaf categories
   if (type1 === 'leaf') {
     responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '177', extraSpecifics: '' }), token, appId)
     const p2 = parse(responseText)
