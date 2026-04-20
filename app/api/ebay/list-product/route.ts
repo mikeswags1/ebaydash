@@ -432,9 +432,6 @@ async function uploadBadgedImage(
         'X-EBAY-API-SITEID': '0',
         'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
         'X-EBAY-API-APP-NAME': appId,
-        'X-EBAY-API-DEV-NAME': process.env.EBAY_DEV_ID || '',
-        'X-EBAY-API-CERT-NAME': process.env.EBAY_CERT_ID || '',
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'text/xml',
       },
       body: xml,
@@ -477,7 +474,7 @@ async function getFreshToken(userId: string): Promise<string | null> {
 }
 
 // ── eBay API call ────────────────────────────────────────────────────────────
-async function submitToEbay(xml: string, token: string, appId: string): Promise<string> {
+async function submitToEbay(xml: string, appId: string): Promise<string> {
   const res = await fetch('https://api.ebay.com/ws/api.dll', {
     method: 'POST',
     headers: {
@@ -485,9 +482,6 @@ async function submitToEbay(xml: string, token: string, appId: string): Promise<
       'X-EBAY-API-SITEID': '0',
       'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
       'X-EBAY-API-APP-NAME': appId,
-      'X-EBAY-API-DEV-NAME': process.env.EBAY_DEV_ID || '',
-      'X-EBAY-API-CERT-NAME': process.env.EBAY_CERT_ID || '',
-      'Authorization': `Bearer ${token}`,
       'Content-Type': 'text/xml',
     },
     body: xml,
@@ -633,25 +627,25 @@ export async function POST(req: NextRequest) {
   }
 
   // Attempt 1: niche category + niche specifics
-  let responseText = await submitToEbay(buildXml(xmlParams), token, appId)
+  let responseText = await submitToEbay(buildXml(xmlParams), appId)
   let { short: s1, long: l1 } = parse(responseText)
   let et = errType(s1, l1)
 
   // Attempt 2: same category, no specifics (fixes "item specific X missing/not valid")
   if (et === 'specific') {
-    responseText = await submitToEbay(buildXml({ ...xmlParams, extraSpecifics: '' }), token, appId)
+    responseText = await submitToEbay(buildXml({ ...xmlParams, extraSpecifics: '' }), appId)
     const p = parse(responseText)
     et = errType(p.short, p.long)
   }
 
   // Attempt 3: fallback to category 177 (Everything Else) for leaf or unresolvable specific errors
   if (et === 'leaf' || et === 'specific') {
-    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '177', extraSpecifics: '' }), token, appId)
+    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '177', extraSpecifics: '' }), appId)
     const p2 = parse(responseText)
     et = errType(p2.short, p2.long)
     // Attempt 4: last resort category (262024 = eBay's current catch-all, replaces deprecated 10971)
     if (et === 'leaf' || et === 'specific') {
-      responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '262024', extraSpecifics: '' }), token, appId)
+      responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '262024', extraSpecifics: '' }), appId)
     }
   }
 
