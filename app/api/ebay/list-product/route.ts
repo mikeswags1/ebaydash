@@ -477,7 +477,7 @@ function buildXml(params: {
     <Currency>USD</Currency>
     <Location>${(process.env.EBAY_ITEM_LOCATION || 'New Jersey, United States').replace(/&/g, '&amp;')}</Location>
     <PostalCode>${process.env.EBAY_POSTAL_CODE || '07001'}</PostalCode>
-    <DispatchTimeMax>0</DispatchTimeMax>
+    <DispatchTimeMax>1</DispatchTimeMax>
     <ListingDuration>GTC</ListingDuration>
     <ListingType>FixedPriceItem</ListingType>
     <Quantity>2</Quantity>
