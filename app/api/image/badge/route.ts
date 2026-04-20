@@ -19,6 +19,8 @@ const BANNER_SVG = Buffer.from(
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get('url')
   if (!url) return new NextResponse('Missing url', { status: 400 })
+  // stamp=0 means plain proxy — just fetch and return the image, no badge overlay
+  const addStamp = req.nextUrl.searchParams.get('stamp') !== '0'
 
   try {
     const imgRes = await fetch(url, {
@@ -26,6 +28,15 @@ export async function GET(req: NextRequest) {
       signal: AbortSignal.timeout(8000),
     })
     if (!imgRes.ok) return new NextResponse('Image fetch failed', { status: 502 })
+
+    // Plain proxy mode — return image as-is
+    if (!addStamp) {
+      const buf = Buffer.from(await imgRes.arrayBuffer())
+      const ct = imgRes.headers.get('content-type') || 'image/jpeg'
+      return new NextResponse(buf as unknown as BodyInit, {
+        headers: { 'Content-Type': ct, 'Cache-Control': 'public, max-age=2592000' },
+      })
+    }
     const imgBuffer = Buffer.from(await imgRes.arrayBuffer())
 
     const img = sharp(imgBuffer)

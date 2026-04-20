@@ -154,8 +154,12 @@ async function fetchAmazonDetails(
     const json = await res.json()
     const data = json?.data ?? json
 
-    const rawPhotos: unknown[] = data.product_photos ?? []
-    const mainImg: string = (rawPhotos[0] as string) ?? data.product_photo ?? fallbackImage ?? ''
+    const rawPhotos: unknown[] = (Array.isArray(data.product_photos) && data.product_photos.length > 0)
+      ? data.product_photos
+      : []
+    const mainImg: string = (typeof rawPhotos[0] === 'string' ? rawPhotos[0] : null)
+      ?? (typeof data.product_photo === 'string' ? data.product_photo : null)
+      ?? fallbackImage ?? ''
     const allImages = Array.from(
       new Set([mainImg, ...(rawPhotos as string[])].filter((u): u is string => typeof u === 'string' && u.startsWith('http')))
     ).slice(0, 12)
@@ -563,22 +567,26 @@ export async function POST(req: NextRequest) {
   const amazon = await fetchAmazonDetails(asin, rapidKey, imageUrl)
   const description = buildDescription(safeTitle, amazon.features, amazon.description, amazon.images, amazon.specs)
 
-  // Use badge proxy for first image (FREE SHIPPING stamp), raw Amazon URLs for the rest.
-  // All URLs are self-hosted — mixing EPS and self-hosted is not allowed by eBay.
+  // Route ALL images through our proxy so eBay can access them.
+  // eBay's crawlers cannot fetch Amazon CDN images directly — they get blocked.
+  // First image gets the FREE SHIPPING stamp (badge proxy).
+  // All others go through the plain proxy (?stamp=0) — same domain, no mixing issues.
   const host = req.headers.get('host') || ''
   const proto = host.startsWith('localhost') ? 'http' : 'https'
   const siteUrl = `${proto}://${host}`
 
-  const mainImage = amazon.images[0] || imageUrl || ''
-  const restImages = amazon.images.slice(1)
+  const allImages = amazon.images.length > 0
+    ? amazon.images
+    : (imageUrl ? [imageUrl] : [])
 
-  const firstPictureUrl = mainImage
-    ? `${siteUrl}/api/image/badge?url=${encodeURIComponent(mainImage)}`
-    : ''
-
-  const pictureList = firstPictureUrl
-    ? [firstPictureUrl, ...restImages]
-    : restImages
+  const pictureList = allImages
+    .filter(u => typeof u === 'string' && u.startsWith('http'))
+    .slice(0, 12)
+    .map((u, i) =>
+      i === 0
+        ? `${siteUrl}/api/image/badge?url=${encodeURIComponent(u)}`
+        : `${siteUrl}/api/image/badge?stamp=0&url=${encodeURIComponent(u)}`
+    )
 
   const xmlEncodeUrl = (u: string) => u.replace(/&/g, '&amp;').replace(/</g, '').replace(/>/g, '')
   const pictureXml = pictureList.length > 0
