@@ -622,10 +622,15 @@ export async function POST(req: NextRequest) {
     if (t.includes('item specific') && (t.includes('missing') || t.includes('required') || t.includes('not valid'))) return 'specific'
     return 'other'
   }
-  const parse = (r: string) => ({
-    short: r.match(/<ShortMessage>(.*?)<\/ShortMessage>/)?.[1] || '',
-    long:  r.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || '',
-  })
+  const parse = (r: string) => {
+    const shorts = [...r.matchAll(/<ShortMessage>(.*?)<\/ShortMessage>/g)].map(m => m[1])
+    const longs  = [...r.matchAll(/<LongMessage>(.*?)<\/LongMessage>/g)].map(m => m[1])
+    const notWarn = (s: string) => !s.toLowerCase().includes('deprecated')
+    return {
+      short: shorts.find(notWarn) || shorts[0] || '',
+      long:  longs.find(notWarn)  || longs[0]  || '',
+    }
+  }
 
   // Attempt 1: niche category + niche specifics
   let responseText = await submitToEbay(buildXml(xmlParams), token, appId)
@@ -651,12 +656,19 @@ export async function POST(req: NextRequest) {
   }
 
   const itemIdMatch = responseText.match(/<ItemID>(\d+)<\/ItemID>/)
-  const shortMatch  = responseText.match(/<ShortMessage>(.*?)<\/ShortMessage>/)
-  const longMatch   = responseText.match(/<LongMessage>(.*?)<\/LongMessage>/)
   const ackMatch    = responseText.match(/<Ack>(.*?)<\/Ack>/)
 
   if (!itemIdMatch || ackMatch?.[1] === 'Failure') {
-    const errMsg = longMatch?.[1] || shortMatch?.[1] || responseText.slice(0, 400)
+    // Collect all messages, skip pure deprecation warnings to surface the real error
+    const allLong  = [...responseText.matchAll(/<LongMessage>(.*?)<\/LongMessage>/g)].map(m => m[1])
+    const allShort = [...responseText.matchAll(/<ShortMessage>(.*?)<\/ShortMessage>/g)].map(m => m[1])
+    const isWarningOnly = (s: string) =>
+      s.toLowerCase().includes('deprecated') || s.toLowerCase().includes('will be deprecated')
+    const errMsg =
+      allLong.find(m => !isWarningOnly(m)) ||
+      allShort.find(m => !isWarningOnly(m)) ||
+      allLong[0] || allShort[0] ||
+      responseText.slice(0, 400)
     if (errMsg.toLowerCase().includes('expired') || errMsg.toLowerCase().includes('auth token')) {
       return NextResponse.json({ error: 'RECONNECT_REQUIRED' }, { status: 401 })
     }
