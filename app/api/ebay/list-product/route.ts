@@ -142,36 +142,35 @@ async function fetchAmazonDetails(
   asin: string, rapidKey: string, fallbackImage?: string
 ): Promise<AmazonDetails> {
   try {
-    const url = `https://axesso-axesso-amazon-data-service-v1.p.rapidapi.com/amz/amazon-lookup-product?url=https%3A%2F%2Fwww.amazon.com%2Fdp%2F${asin}`
+    const url = `https://real-time-amazon-data.p.rapidapi.com/product-details?asin=${asin}&country=US`
     const res = await fetch(url, {
       headers: {
-        'x-rapidapi-host': 'axesso-axesso-amazon-data-service-v1.p.rapidapi.com',
+        'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com',
         'x-rapidapi-key': rapidKey,
       },
     })
-    const data = await res.json()
+    const json = await res.json()
+    const data = json?.data ?? json
 
-    const rawImages: string[] = (
-      data.imageUrlList ?? data.imageList ?? data.images ?? []
-    ).filter((u: unknown): u is string => typeof u === 'string' && u.startsWith('http'))
+    const rawPhotos: unknown[] = data.product_photos ?? []
+    const mainImg: string = (rawPhotos[0] as string) ?? data.product_photo ?? fallbackImage ?? ''
+    const allImages = Array.from(
+      new Set([mainImg, ...(rawPhotos as string[])].filter((u): u is string => typeof u === 'string' && u.startsWith('http')))
+    ).slice(0, 12)
 
-    const mainImg: string = data.mainImageUrl ?? data.imageUrl ?? fallbackImage ?? ''
-    const allImages = Array.from(new Set([mainImg, ...rawImages].filter(Boolean))).slice(0, 12)
-
-    const rawFeatures: unknown[] = data.keyFeatures ?? data.featureBullets ?? data.features ?? data.bulletPoints ?? []
+    const rawFeatures: unknown[] = data.about_product ?? data.product_features ?? []
     const features = (rawFeatures as string[])
       .filter((f): f is string => typeof f === 'string' && f.trim().length > 5)
       .slice(0, 15)
       .map(f => sanitizeContent(f).slice(0, 400))
       .filter(f => f.length > 5)
 
-    const rawDesc: string = data.productDescription ?? data.description ?? ''
+    const rawDesc: string = data.product_description ?? data.description ?? ''
     const description = sanitizeContent(rawDesc).slice(0, 4000)
 
-    // Pull product specs/technical details table if available
-    const rawSpecs: unknown = data.productDetails ?? data.technicalDetails ?? data.specifications ?? data.productOverview ?? {}
+    const rawSpecs: unknown = data.product_details ?? data.product_specification ?? {}
     const specs: Array<[string, string]> = Object.entries(rawSpecs as Record<string, unknown>)
-      .filter(([k, v]) => k && v && typeof v === 'string' && (v as string).length > 0)
+      .filter(([k, v]) => k && v && String(v).length > 0)
       .slice(0, 20)
       .map(([k, v]) => [sanitizeContent(k).slice(0, 60), sanitizeContent(String(v)).slice(0, 120)])
       .filter(([k, v]) => k.length > 1 && v.length > 1) as Array<[string, string]>

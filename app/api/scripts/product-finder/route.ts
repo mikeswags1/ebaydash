@@ -9,11 +9,9 @@ const MIN_ROI = 20
 const MAX_COST = 300
 
 const REJECT_KEYWORDS = [
-  // Oversized / hard to ship
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
   'treadmill','elliptical','mattress','sofa','couch','generator','chainsaw',
   'television',' tv ','monitor','e-bike','pressure washer',
-  // VeRO brands — listing these risks account suspension
   'louis vuitton','lv bag','gucci','chanel','prada','burberry','versace','fendi',
   'christian dior','yves saint laurent','hermes','hermès','balenciaga','givenchy',
   'rolex','omega watch','patek philippe','audemars piguet','hublot','cartier watch',
@@ -39,6 +37,13 @@ function calcMetrics(amazonPrice: number) {
 function isRejected(title: string) {
   const t = title.toLowerCase()
   return REJECT_KEYWORDS.some(k => t.includes(k))
+}
+
+function parsePrice(v: unknown): number {
+  if (!v) return 0
+  if (typeof v === 'number') return v
+  const n = parseFloat(String(v).replace(/[^0-9.]/g, ''))
+  return isNaN(n) ? 0 : n
 }
 
 const NICHE_QUERIES: Record<string, string[]> = {
@@ -84,23 +89,6 @@ const NICHE_QUERIES: Record<string, string[]> = {
   'Sports Memorabilia': ['sports card display case', 'autograph frame display'],
 }
 
-interface SearchProduct {
-  asin?: string
-  productDescription?: string
-  title?: string
-  name?: string
-  price?: number | string
-  retailPrice?: number | string
-  amazonPrice?: number | string
-  salePrice?: number | string
-  listPrice?: number | string
-  imgUrl?: string
-  imageUrl?: string
-  thumbnailImage?: string
-  salesVolume?: string
-  soldLastMonth?: string
-}
-
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -111,12 +99,11 @@ export async function GET(req: NextRequest) {
   const rapidKey = process.env.RAPIDAPI_KEY
   if (!rapidKey) return NextResponse.json({ error: 'RapidAPI key not configured' }, { status: 500 })
 
-  // Load already-listed ASINs — graceful if table not yet created
   let listedAsins = new Set<string>()
   try {
     const listedRows = await sql`SELECT asin FROM listed_asins WHERE user_id = ${session.user.id}`
     listedAsins = new Set(listedRows.map((r) => String(r.asin)))
-  } catch { /* table not yet created — run /api/setup-db */ }
+  } catch { /* table not yet created */ }
 
   const queries = NICHE_QUERIES[niche] || [`${niche} bestseller`]
   const results: Array<{
@@ -130,42 +117,28 @@ export async function GET(req: NextRequest) {
     if (results.length >= 15) break
     try {
       const searchRes = await fetch(
-        `https://axesso-axesso-amazon-data-service-v1.p.rapidapi.com/amz/amazon-search-by-keyword-asin?keyword=${encodeURIComponent(query)}&domainCode=com&sortBy=relevanceblender&numberOfProducts=20&page=1`,
-        { headers: { 'x-rapidapi-host': 'axesso-axesso-amazon-data-service-v1.p.rapidapi.com', 'x-rapidapi-key': rapidKey } }
+        `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(query)}&country=US&category_id=aps&page=1`,
+        {
+          headers: {
+            'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com',
+            'x-rapidapi-key': rapidKey,
+          },
+        }
       )
       const searchData = await searchRes.json()
-
-      // Support multiple possible response shapes from the API
-      const products: SearchProduct[] = (
-        searchData.searchProductDetails ||
-        searchData.products ||
-        searchData.items ||
-        searchData.results ||
-        []
-      )
+      const products: Record<string, unknown>[] = searchData?.data?.products || []
 
       for (const p of products) {
         if (results.length >= 30) break
 
-        if (!p.asin || seenAsins.has(p.asin) || listedAsins.has(p.asin)) continue
-        seenAsins.add(p.asin)
+        const asin = String(p.asin || '')
+        if (!asin || seenAsins.has(asin) || listedAsins.has(asin)) continue
+        seenAsins.add(asin)
 
-        // Try every possible price field; strip currency symbols and commas
-        const parsePrice = (v: unknown) => {
-          if (!v) return 0
-          if (typeof v === 'number') return v
-          const n = parseFloat(String(v).replace(/[^0-9.]/g, ''))
-          return isNaN(n) ? 0 : n
-        }
-        const price = parsePrice(p.price) ||
-          parsePrice(p.retailPrice) ||
-          parsePrice(p.amazonPrice) ||
-          parsePrice(p.salePrice) ||
-          parsePrice(p.listPrice)
-
-        const title = p.productDescription || p.title || p.name || ''
-        const imageUrl = p.imgUrl || p.imageUrl || p.thumbnailImage || ''
-        const salesVolume = p.salesVolume || p.soldLastMonth || ''
+        const price = parsePrice(p.product_price) || parsePrice(p.product_original_price)
+        const title = String(p.product_title || '')
+        const imageUrl = String(p.product_photo || '')
+        const salesVolume = String(p.sales_volume || '')
 
         if (!price || price <= 0 || price > MAX_COST) continue
         if (!title || isRejected(title)) continue
@@ -174,22 +147,11 @@ export async function GET(req: NextRequest) {
         if (profit < MIN_PROFIT || roi < MIN_ROI) continue
 
         const risk = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
-        results.push({
-          asin: p.asin,
-          title,
-          amazonPrice: price,
-          ebayPrice,
-          profit,
-          roi,
-          imageUrl,
-          risk,
-          salesVolume,
-        })
+        results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk, salesVolume })
       }
     } catch { continue }
   }
 
-  // Score = profit weighted by sales popularity (higher sales = more proven product)
   const parseSales = (v?: string) => {
     if (!v) return 1
     const n = parseInt(v.replace(/[^0-9]/g, ''), 10)
