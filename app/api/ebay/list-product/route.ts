@@ -112,6 +112,7 @@ interface AmazonDetails {
   images: string[]
   features: string[]
   description: string
+  specs: Array<[string, string]>
 }
 
 function sanitizeContent(text: string): string {
@@ -160,25 +161,34 @@ async function fetchAmazonDetails(
     const rawFeatures: unknown[] = data.keyFeatures ?? data.featureBullets ?? data.features ?? data.bulletPoints ?? []
     const features = (rawFeatures as string[])
       .filter((f): f is string => typeof f === 'string' && f.trim().length > 5)
-      .slice(0, 10)
+      .slice(0, 15)
       .map(f => sanitizeContent(f).slice(0, 400))
       .filter(f => f.length > 5)
 
-    const rawDesc: string = data.productDescription ?? data.description ?? data.productDetails ?? ''
-    const description = sanitizeContent(rawDesc).slice(0, 3000)
+    const rawDesc: string = data.productDescription ?? data.description ?? ''
+    const description = sanitizeContent(rawDesc).slice(0, 4000)
+
+    // Pull product specs/technical details table if available
+    const rawSpecs: unknown = data.productDetails ?? data.technicalDetails ?? data.specifications ?? data.productOverview ?? {}
+    const specs: Array<[string, string]> = Object.entries(rawSpecs as Record<string, unknown>)
+      .filter(([k, v]) => k && v && typeof v === 'string' && (v as string).length > 0)
+      .slice(0, 20)
+      .map(([k, v]) => [sanitizeContent(k).slice(0, 60), sanitizeContent(String(v)).slice(0, 120)])
+      .filter(([k, v]) => k.length > 1 && v.length > 1) as Array<[string, string]>
 
     return {
       images: allImages.length > 0 ? allImages : (fallbackImage ? [fallbackImage] : []),
       features,
       description,
+      specs,
     }
   } catch {
-    return { images: fallbackImage ? [fallbackImage] : [], features: [], description: '' }
+    return { images: fallbackImage ? [fallbackImage] : [], features: [], description: '', specs: [] }
   }
 }
 
 // ── Description builder ──────────────────────────────────────────────────────
-function buildDescription(title: string, features: string[], about: string, images: string[]): string {
+function buildDescription(title: string, features: string[], about: string, images: string[], specs: Array<[string, string]> = []): string {
 
   const featureRows = features
     .map(f => `<tr><td class="check">&#10003;</td><td>${f}</td></tr>`)
@@ -197,6 +207,17 @@ function buildDescription(title: string, features: string[], about: string, imag
   <div class="section">
     <div class="section-title">Product Description</div>
     <div class="about-body">${formattedAbout}</div>
+  </div>` : ''
+
+  const specRows = specs
+    .map(([k, v]) => `<tr><td class="spec-key">${k}</td><td class="spec-val">${v}</td></tr>`)
+    .join('\n          ')
+  const specsSection = specRows ? `
+  <div class="section">
+    <div class="section-title">Product Specifications</div>
+    <table class="spec-table"><tbody>
+      ${specRows}
+    </tbody></table>
   </div>` : ''
 
   // Up to 6 additional product images embedded in description so buyers see every angle
@@ -267,6 +288,11 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
 .ship-val{font-size:13px;color:#222}
 .green{color:#15803d;font-weight:700}
 
+/* Spec table */
+.spec-table{width:100%;border-collapse:collapse}
+.spec-key{font-size:12px;font-weight:700;color:#555;padding:8px 12px 8px 0;width:40%;vertical-align:top;border-bottom:1px solid #f0f0f0}
+.spec-val{font-size:13px;color:#222;padding:8px 0;border-bottom:1px solid #f0f0f0}
+
 /* Image gallery */
 .img-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .product-img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;border:1px solid #e8ecf0;padding:6px}
@@ -311,6 +337,7 @@ body{font-family:Arial,Helvetica,sans-serif;background:#f0f2f5;color:#222}
 
   ${featureSection}
   ${aboutSection}
+  ${specsSection}
   ${imageGallery}
 
   <div class="section">
@@ -493,6 +520,7 @@ function buildXml(params: {
         <ShippingService>USPSPriority</ShippingService>
         <ShippingServiceCost>0.00</ShippingServiceCost>
         <FreeShipping>true</FreeShipping>
+        <ExpeditedService>true</ExpeditedService>
         <ShippingServiceAdditionalCost>0.00</ShippingServiceAdditionalCost>
       </ShippingServiceOptions>
     </ShippingDetails>
@@ -547,7 +575,7 @@ export async function POST(req: NextRequest) {
 
   const rapidKey = process.env.RAPIDAPI_KEY || ''
   const amazon = await fetchAmazonDetails(asin, rapidKey, imageUrl)
-  const description = buildDescription(safeTitle, amazon.features, amazon.description, amazon.images)
+  const description = buildDescription(safeTitle, amazon.features, amazon.description, amazon.images, amazon.specs)
 
   // Upload first image with FREE SHIPPING banner to eBay's picture hosting
   // so it's permanently cached on eBay CDN (no proxy URL in the live listing)
@@ -606,9 +634,9 @@ export async function POST(req: NextRequest) {
     responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '177', extraSpecifics: '' }), token, appId)
     const p2 = parse(responseText)
     et = errType(p2.short, p2.long)
-    // Attempt 4: last resort category
+    // Attempt 4: last resort category (262024 = eBay's current catch-all, replaces deprecated 10971)
     if (et === 'leaf' || et === 'specific') {
-      responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '10971', extraSpecifics: '' }), token, appId)
+      responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '262024', extraSpecifics: '' }), token, appId)
     }
   }
 

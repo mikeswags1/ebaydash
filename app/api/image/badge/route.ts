@@ -36,8 +36,8 @@ export async function GET(req: NextRequest) {
     let composite: sharp.OverlayOptions
 
     if (existsSync(stampPath)) {
-      // Stamp: 30% of image width, placed bottom-left with a small margin
-      const stampSize = Math.round(width * 0.30)
+      // Stamp: 42% of image width, placed bottom-right with a small margin
+      const stampSize = Math.round(width * 0.42)
       const margin = Math.round(width * 0.02)
       const stampBuf = await sharp(readFileSync(stampPath))
         .resize(stampSize, stampSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
       composite = {
         input: stampBuf,
         top: height - stampSize - margin,
-        left: margin,
+        left: width - stampSize - margin,
         blend: 'over',
       }
     } else {
