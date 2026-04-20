@@ -4,8 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { sql } from '@/lib/db'
 
 const EBAY_FEE = 0.1335
-const MIN_PROFIT = 5
-const MIN_ROI = 30
+const MIN_PROFIT = 4
+const MIN_ROI = 20
 const MAX_COST = 300
 
 const REJECT_KEYWORDS = [
@@ -87,10 +87,18 @@ const NICHE_QUERIES: Record<string, string[]> = {
 interface SearchProduct {
   asin?: string
   productDescription?: string
-  price?: number
-  retailPrice?: number
+  title?: string
+  name?: string
+  price?: number | string
+  retailPrice?: number | string
+  amazonPrice?: number | string
+  salePrice?: number | string
+  listPrice?: number | string
   imgUrl?: string
+  imageUrl?: string
+  thumbnailImage?: string
   salesVolume?: string
+  soldLastMonth?: string
 }
 
 export async function GET(req: NextRequest) {
@@ -127,8 +135,14 @@ export async function GET(req: NextRequest) {
       )
       const searchData = await searchRes.json()
 
-      // Use searchProductDetails directly — already has price, title, image
-      const products: SearchProduct[] = searchData.searchProductDetails || []
+      // Support multiple possible response shapes from the API
+      const products: SearchProduct[] = (
+        searchData.searchProductDetails ||
+        searchData.products ||
+        searchData.items ||
+        searchData.results ||
+        []
+      )
 
       for (const p of products) {
         if (results.length >= 30) break
@@ -136,8 +150,22 @@ export async function GET(req: NextRequest) {
         if (!p.asin || seenAsins.has(p.asin) || listedAsins.has(p.asin)) continue
         seenAsins.add(p.asin)
 
-        const price = typeof p.price === 'number' ? p.price : parseFloat(String(p.price || 0))
-        const title = p.productDescription || ''
+        // Try every possible price field; strip currency symbols and commas
+        const parsePrice = (v: unknown) => {
+          if (!v) return 0
+          if (typeof v === 'number') return v
+          const n = parseFloat(String(v).replace(/[^0-9.]/g, ''))
+          return isNaN(n) ? 0 : n
+        }
+        const price = parsePrice(p.price) ||
+          parsePrice(p.retailPrice) ||
+          parsePrice(p.amazonPrice) ||
+          parsePrice(p.salePrice) ||
+          parsePrice(p.listPrice)
+
+        const title = p.productDescription || p.title || p.name || ''
+        const imageUrl = p.imgUrl || p.imageUrl || p.thumbnailImage || ''
+        const salesVolume = p.salesVolume || p.soldLastMonth || ''
 
         if (!price || price <= 0 || price > MAX_COST) continue
         if (!title || isRejected(title)) continue
@@ -153,9 +181,9 @@ export async function GET(req: NextRequest) {
           ebayPrice,
           profit,
           roi,
-          imageUrl: p.imgUrl,
+          imageUrl,
           risk,
-          salesVolume: p.salesVolume,
+          salesVolume,
         })
       }
     } catch { continue }
