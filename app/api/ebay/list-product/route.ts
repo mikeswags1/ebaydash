@@ -128,17 +128,6 @@ function sanitizeContent(text: string): string {
     .trim()
 }
 
-// Breaks a long description into short readable paragraphs (max 2 sentences each)
-function formatAbout(text: string): string {
-  if (text.length < 30) return ''
-  const sentences = text.match(/[^.!?]+[.!?]+["']?/g) || [text]
-  const paras: string[] = []
-  for (let i = 0; i < sentences.length; i += 2) {
-    const chunk = sentences.slice(i, i + 2).join(' ').trim()
-    if (chunk.length > 15) paras.push(`<p>${chunk}</p>`)
-  }
-  return paras.length ? paras.join('\n      ') : `<p>${text}</p>`
-}
 
 async function fetchAmazonDetails(
   asin: string, rapidKey: string, fallbackImage?: string
@@ -226,198 +215,91 @@ async function fetchAmazonDetails(
   }
 }
 
-// ── Description builder ──────────────────────────────────────────────────────
-function buildDescription(title: string, features: string[], about: string, images: string[], specs: Array<[string, string]> = []): string {
+// ── Description builder — matches Infinitybot style ─────────────────────────
+function buildDescription(title: string, features: string[], _about: string, images: string[], specs: Array<[string, string]> = []): string {
 
-  const featureItems = features.map(f =>
-    `<li class="feat-item"><span class="feat-check">&#10003;</span><span>${f}</span></li>`
-  ).join('\n')
+  // Feature bullets — preserve 【bold label】 format from Amazon as-is
+  const featureBullets = features.map(f => `<li>${f}</li>`).join('\n')
 
-  const featureSection = featureItems ? `
-  <div class="section">
-    <div class="section-title">What's Included &amp; Key Features</div>
-    <ul class="feat-list">${featureItems}</ul>
-  </div>` : ''
+  // Inline product images (skip first — that's the main listing photo)
+  const inlineImgs = images.slice(1, 9)
+  const imageBlock = inlineImgs.length > 0
+    ? inlineImgs.map(u => `<img src="${u}" alt="" style="max-width:100%;display:block;margin:10px auto;">`).join('\n')
+    : ''
 
-  const formattedAbout = formatAbout(about)
-  const aboutSection = formattedAbout ? `
-  <div class="section">
-    <div class="section-title">About This Product</div>
-    <div class="about-body">${formattedAbout}</div>
-  </div>` : ''
-
-  const specRows = specs.map(([k, v]) =>
-    `<tr><td class="spec-key">${k}</td><td class="spec-val">${v}</td></tr>`
-  ).join('\n')
-  const specsSection = specRows ? `
-  <div class="section">
-    <div class="section-title">Product Details &amp; Specifications</div>
-    <table class="spec-table"><tbody>${specRows}</tbody></table>
-  </div>` : ''
-
-  const galleryImgs = images.slice(0, 9)
-  const imageGallery = galleryImgs.length > 1 ? `
-  <div class="section">
-    <div class="section-title">Product Images</div>
-    <div class="img-grid">
-      ${galleryImgs.map((u, i) => `<img src="${u}" alt="View ${i + 1}" class="product-img" loading="lazy">`).join('\n      ')}
-    </div>
-  </div>` : ''
+  // Spec table rows
+  const skipKeys = /customer|review|rating|star|bought|month|seller|return|warranty|asin|date first|best seller|discontinued|department|item model|upc|ean|isbn/i
+  const specRows = specs
+    .filter(([k]) => !skipKeys.test(k))
+    .slice(0, 20)
+    .map(([k, v]) => `<tr><td style="font-weight:bold;padding:6px 10px;width:35%;border-bottom:1px solid #ddd;">${k}</td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">${v}</td></tr>`)
+    .join('\n')
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial,Helvetica,sans-serif;background:#f5f5f5;color:#111}
-.wrap{max-width:700px;margin:0 auto;background:#fff;border:1px solid #ddd}
-
-/* Hero */
-.hero{background:linear-gradient(135deg,#0f1628 0%,#1e3a5f 100%);padding:32px 36px 26px}
-.hero-tag{font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#f0a500;margin-bottom:8px}
-.hero-title{font-size:22px;font-weight:800;color:#fff;line-height:1.4;margin-bottom:8px}
-.hero-sub{font-size:12px;color:#9bb}
-
-/* Delivery bar */
-.dbar{background:#007600;padding:14px 36px;display:flex;align-items:center;gap:12px}
-.dbar-icon{font-size:24px}
-.dbar-head{font-size:14px;font-weight:700;color:#fff}
-.dbar-sub{font-size:12px;color:#9de09d;margin-top:2px}
-
-/* Badges */
-.badges{display:flex;flex-wrap:wrap;gap:6px;padding:12px 36px;background:#111}
-.badge{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700}
-.bg{background:rgba(240,165,0,.15);border:1px solid rgba(240,165,0,.4);color:#f0c040}
-.bgg{background:rgba(0,150,0,.2);border:1px solid rgba(0,200,0,.4);color:#4cff4c}
-
-/* Sections */
-.section{padding:24px 36px;border-bottom:1px solid #e8e8e8}
-.section-title{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:14px}
-
-/* Features */
-.feat-list{list-style:none;display:flex;flex-direction:column;gap:8px}
-.feat-item{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;background:#f9f9f9;border-radius:6px;border-left:3px solid #007600;font-size:14px;line-height:1.6;color:#333}
-.feat-check{color:#007600;font-size:15px;font-weight:700;flex-shrink:0;margin-top:1px}
-
-/* About */
-.about-body{font-size:14px;color:#333;line-height:1.8;padding:16px 20px;background:#fafafa;border-radius:6px;border-left:4px solid #f0a500}
-.about-body p{margin:0 0 14px}
-.about-body p:last-child{margin-bottom:0}
-
-/* Specs */
-.spec-table{width:100%;border-collapse:collapse}
-.spec-key{font-size:13px;font-weight:700;color:#555;padding:9px 14px 9px 0;width:38%;vertical-align:top;border-bottom:1px solid #eee}
-.spec-val{font-size:13px;color:#111;padding:9px 0;border-bottom:1px solid #eee;line-height:1.5}
-
-/* Images */
-.img-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.product-img{width:100%;aspect-ratio:1;object-fit:contain;background:#f9f9f9;border-radius:6px;border:1px solid #e5e5e5;padding:6px}
-
-/* Why us */
-.why-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.why-card{padding:14px;background:#f9f9f9;border-radius:8px;border:1px solid #e5e5e5}
-.why-icon{font-size:22px;margin-bottom:6px}
-.why-title{font-size:13px;font-weight:700;color:#111;margin-bottom:4px}
-.why-sub{font-size:12px;color:#777;line-height:1.5}
-
-/* Promise grid */
-.pgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:20px 36px;border-bottom:1px solid #e8e8e8;background:#fafafa}
-.pcard{padding:14px 10px;text-align:center}
-.p-icon{font-size:26px;margin-bottom:6px}
-.p-title{font-size:11px;font-weight:700;color:#111;margin-bottom:3px}
-.p-sub{font-size:10px;color:#888;line-height:1.4}
-
-/* Footer */
-.footer{background:#111;padding:20px 36px;text-align:center;color:#666;font-size:12px;line-height:2}
-.footer strong{color:#f0a500}
-</style>
 </head>
-<body>
-<div class="wrap">
+<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;color:#222;background:#fff;">
+<div style="max-width:750px;margin:0 auto;padding:0;">
 
-  <div class="hero">
-    <div class="hero-tag">Premium Quality &bull; Brand New &bull; Fast Shipping</div>
-    <div class="hero-title">${title}</div>
-    <div class="hero-sub">Factory Sealed &nbsp;&middot;&nbsp; Free 2&ndash;3 Day Delivery &nbsp;&middot;&nbsp; 30-Day Free Returns</div>
-  </div>
+  <!-- Title -->
+  <h1 style="font-size:20px;font-weight:bold;padding:16px 12px 10px;margin:0;border-bottom:2px solid #eee;">${title}</h1>
 
-  <div class="dbar">
-    <div class="dbar-icon">&#128666;</div>
-    <div>
-      <div class="dbar-head">FREE 2&ndash;3 DAY DELIVERY</div>
-      <div class="dbar-sub">Ships same or next business day &bull; USPS Priority Mail &bull; Full tracking included</div>
-    </div>
-  </div>
+  <!-- Features -->
+  <div style="background:#666;color:#fff;text-align:center;padding:10px;font-size:16px;font-weight:bold;margin-top:16px;">Features</div>
+  <ul style="font-size:14px;line-height:1.8;padding:14px 14px 14px 30px;margin:0;">
+    ${featureBullets}
+  </ul>
 
-  <div class="badges">
-    <span class="badge bgg">&#10003; Free 2&ndash;3 Day Shipping</span>
-    <span class="badge bg">&#10003; Brand New &amp; Sealed</span>
-    <span class="badge bg">&#10003; 30-Day Free Returns</span>
-    <span class="badge bg">&#10003; Order Tracking</span>
-    <span class="badge bg">&#10003; Secure Checkout</span>
-  </div>
+  <!-- Inline product images -->
+  ${imageBlock ? `<div style="padding:10px 0;">${imageBlock}</div>` : ''}
 
-  ${featureSection}
-  ${aboutSection}
-  ${specsSection}
-  ${imageGallery}
+  <!-- Specs table (if available) -->
+  ${specRows ? `
+  <div style="background:#666;color:#fff;text-align:center;padding:10px;font-size:16px;font-weight:bold;margin-top:16px;">Specifications</div>
+  <table style="width:100%;border-collapse:collapse;font-size:14px;">
+    <tbody>${specRows}</tbody>
+  </table>` : ''}
 
-  <div class="section">
-    <div class="section-title">Why Buy From Us</div>
-    <div class="why-grid">
-      <div class="why-card">
-        <div class="why-icon">&#9889;</div>
-        <div class="why-title">Fast 2&ndash;3 Day Delivery</div>
-        <div class="why-sub">Ships same or next business day via USPS Priority Mail. Arrives in 2&ndash;3 days.</div>
-      </div>
-      <div class="why-card">
-        <div class="why-icon">&#128230;</div>
-        <div class="why-title">100% Genuine &amp; New</div>
-        <div class="why-sub">Brand new, factory sealed in original manufacturer packaging. Never opened.</div>
-      </div>
-      <div class="why-card">
-        <div class="why-icon">&#8617;</div>
-        <div class="why-title">Easy 30-Day Returns</div>
-        <div class="why-sub">Not satisfied? Return within 30 days. We cover return shipping — no hassle.</div>
-      </div>
-      <div class="why-card">
-        <div class="why-icon">&#128205;</div>
-        <div class="why-title">Full Order Tracking</div>
-        <div class="why-sub">Tracking number emailed at shipment. Monitor your delivery every step of the way.</div>
-      </div>
-    </div>
-  </div>
+  <!-- Shipping -->
+  <div style="background:#666;color:#fff;text-align:center;padding:10px;font-size:16px;font-weight:bold;margin-top:20px;">Shipping</div>
+  <ul style="font-size:14px;line-height:1.9;padding:14px 14px 14px 30px;margin:0;">
+    <li><strong>Free &amp; Fast Shipping:</strong> We offer free USPS Priority Mail shipping. Estimated delivery 2&ndash;4 business days.</li>
+    <li><strong>Handling Time:</strong> Orders are processed and shipped within 1&ndash;2 business days of receiving cleared payment.</li>
+    <li><strong>Order Tracking:</strong> A tracking number will be emailed to you as soon as your order ships.</li>
+    <li><strong>State Restrictions:</strong> Shipping to Alaska, Hawaii, Puerto Rico, and other US territories may incur additional charges. Please contact us before ordering.</li>
+  </ul>
 
-  <div class="pgrid">
-    <div class="pcard">
-      <div class="p-icon">&#128230;</div>
-      <div class="p-title">Brand New</div>
-      <div class="p-sub">Factory sealed, original packaging</div>
-    </div>
-    <div class="pcard">
-      <div class="p-icon">&#128666;</div>
-      <div class="p-title">Free Shipping</div>
-      <div class="p-sub">USPS Priority 2&ndash;3 days</div>
-    </div>
-    <div class="pcard">
-      <div class="p-icon">&#8617;</div>
-      <div class="p-title">30-Day Returns</div>
-      <div class="p-sub">Free return shipping</div>
-    </div>
-    <div class="pcard">
-      <div class="p-icon">&#9733;</div>
-      <div class="p-title">Top Seller</div>
-      <div class="p-sub">Trusted store</div>
-    </div>
-  </div>
+  <!-- Return Policy -->
+  <div style="background:#666;color:#fff;text-align:center;padding:10px;font-size:16px;font-weight:bold;margin-top:4px;">Return Policy</div>
+  <ul style="font-size:14px;line-height:1.9;padding:14px 14px 14px 30px;margin:0;">
+    <li><strong>30-Day Hassle-Free Returns:</strong> If you are not completely satisfied, return the item within 30 days for a full refund or exchange.</li>
+    <li><strong>Easy Return Process:</strong> Contact us and we will provide a prepaid return shipping label and detailed instructions.</li>
+    <li><strong>No Restocking Fee:</strong> We do not charge restocking fees for returns.</li>
+    <li><strong>Refund Processing:</strong> Refunds are processed within 1 business day of receiving the returned item.</li>
+  </ul>
 
-  <div class="footer">
-    Thank you for shopping with us &mdash; we appreciate your business!<br>
-    Questions? Message us and we&rsquo;ll respond within hours.<br>
-    <strong>Follow our store for new deals every week</strong>
-  </div>
+  <!-- Feedback -->
+  <div style="background:#666;color:#fff;text-align:center;padding:10px;font-size:16px;font-weight:bold;margin-top:4px;">Feedback</div>
+  <p style="font-size:14px;line-height:1.8;padding:14px;margin:0;">
+    Your feedback is extremely important to us. We strive to provide the best products and customer service possible.
+    If you are satisfied with your purchase, please take a moment to leave us a positive review.
+    If you have any concerns, please contact us <em>before</em> leaving negative feedback &mdash; we are committed to resolving any issue quickly.
+  </p>
+
+  <!-- Contact Us -->
+  <div style="background:#666;color:#fff;text-align:center;padding:10px;font-size:16px;font-weight:bold;margin-top:4px;">Contact Us</div>
+  <p style="font-size:14px;line-height:1.8;padding:14px;margin:0;">
+    If you have any questions or concerns, please feel free to reach out through the eBay messaging system.
+    We are available Monday to Friday, 9:00 am &ndash; 5:00 pm EST, and will respond to your inquiry within 24 hours.
+  </p>
+
+  <!-- Footer -->
+  <p style="text-align:center;font-size:16px;font-weight:bold;padding:20px 12px;margin:0;border-top:2px solid #eee;">
+    Thank you for supporting our small family business!
+  </p>
 
 </div>
 </body>
