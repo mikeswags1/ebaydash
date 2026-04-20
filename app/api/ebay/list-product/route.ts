@@ -221,8 +221,8 @@ function buildDescription(title: string, features: string[], _about: string, ima
   // Feature bullets — preserve 【bold label】 format from Amazon as-is
   const featureBullets = features.map(f => `<li>${f}</li>`).join('\n')
 
-  // Inline product images (skip first — that's the main listing photo)
-  const inlineImgs = images.slice(1, 9)
+  // Inline product images — show ALL (including first) so even single-image products show something
+  const inlineImgs = images.slice(0, 9)
   const imageBlock = inlineImgs.length > 0
     ? inlineImgs.map(u => `<img src="${u}" alt="" style="max-width:100%;display:block;margin:10px auto;">`).join('\n')
     : ''
@@ -447,12 +447,9 @@ export async function POST(req: NextRequest) {
 
   const rapidKey = process.env.RAPIDAPI_KEY || ''
   const amazon = await fetchAmazonDetails(asin, rapidKey, imageUrl)
-  const description = buildDescription(safeTitle, amazon.features, amazon.description, amazon.images, amazon.specs)
 
-  // Route ALL images through our proxy so eBay can access them.
-  // eBay's crawlers cannot fetch Amazon CDN images directly — they get blocked.
-  // First image gets the FREE SHIPPING stamp (badge proxy).
-  // All others go through the plain proxy (?stamp=0) — same domain, no mixing issues.
+  // Build proxied picture list FIRST — all images route through our server
+  // so eBay can load them (Amazon CDN blocks eBay's crawlers directly).
   const host = req.headers.get('host') || ''
   const proto = host.startsWith('localhost') ? 'http' : 'https'
   const siteUrl = `${proto}://${host}`
@@ -469,6 +466,9 @@ export async function POST(req: NextRequest) {
         ? `${siteUrl}/api/image/badge?url=${encodeURIComponent(u)}`
         : `${siteUrl}/api/image/badge?stamp=0&url=${encodeURIComponent(u)}`
     )
+
+  // Pass proxied URLs into description so inline images actually load on eBay
+  const description = buildDescription(safeTitle, amazon.features, amazon.description, pictureList, amazon.specs)
 
   const xmlEncodeUrl = (u: string) => u.replace(/&/g, '&amp;').replace(/</g, '').replace(/>/g, '')
   const pictureXml = pictureList.length > 0
