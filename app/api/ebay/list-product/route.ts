@@ -160,31 +160,43 @@ async function fetchAmazonDetails(
       new Set([mainImg, ...(rawPhotos as string[])].filter((u): u is string => typeof u === 'string' && u.startsWith('http')))
     ).slice(0, 12)
 
-    const rawFeatures: unknown[] = data.about_product ?? data.product_features ?? []
+    // Try every possible field name for bullet features
+    const rawFeatures: unknown[] = (
+      data.about_product ?? data.feature_bullets ?? data.bullet_points ??
+      data.product_features ?? data.highlights ?? data.key_features ?? []
+    )
     const features = (rawFeatures as string[])
       .filter((f): f is string => typeof f === 'string' && f.trim().length > 5)
       .map(f => sanitizeContent(f).slice(0, 500))
       .filter(f => f.length > 5)
 
-    const rawDesc: string = data.product_description ?? data.description ?? ''
+    // Try every possible field name for long description
+    const rawDesc: string = (
+      data.product_description ?? data.description ?? data.synopsis ??
+      data.product_information ?? data.full_description ?? ''
+    )
     const description = sanitizeContent(rawDesc).slice(0, 6000)
 
-    // Merge product_details + product_overview for maximum spec coverage
+    // Merge product_overview + product_details, filter Amazon-only metadata
     const rawSpecs: Record<string, unknown> = {
       ...(data.product_overview ?? {}),
       ...(data.product_details ?? {}),
     }
-    // Filter out review/rating/customer-sentiment keys
-    const skipKeys = /customer|review|rating|star|bought|month|seller|return|warranty/i
+    const skipKeys = /customer|review|rating|star|bought|month|seller|return|warranty|asin|date first|best seller|discontinued|department|item model|upc|ean|isbn/i
     const specs: Array<[string, string]> = Object.entries(rawSpecs)
       .filter(([k, v]) => k && v && String(v).length > 0 && !skipKeys.test(k))
       .slice(0, 30)
       .map(([k, v]) => [sanitizeContent(k).slice(0, 80), sanitizeContent(String(v)).slice(0, 200)])
       .filter(([k, v]) => k.length > 1 && v.length > 1) as Array<[string, string]>
 
+    // If API returned no bullet features, build them from specs so there's always content
+    const finalFeatures = features.length > 0
+      ? features
+      : specs.slice(0, 8).map(([k, v]) => `${k}: ${v}`)
+
     return {
       images: allImages.length > 0 ? allImages : (fallbackImage ? [fallbackImage] : []),
-      features,
+      features: finalFeatures,
       description,
       specs,
     }
@@ -471,7 +483,7 @@ function buildXml(params: {
     <Quantity>2</Quantity>
     ${params.pictureXml}
     <ShippingDetails>
-      <ShippingType>Free</ShippingType>
+      <ShippingType>Flat</ShippingType>
       <ShippingServiceOptions>
         <ShippingServicePriority>1</ShippingServicePriority>
         <ShippingService>USPSPriority</ShippingService>
