@@ -589,25 +589,25 @@ export async function POST(req: NextRequest) {
     long:  r.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || '',
   })
 
-  // First attempt with niche category + niche specifics
+  // Attempt 1: niche category + niche specifics
   let responseText = await submitToEbay(buildXml(xmlParams), token, appId)
   let { short: s1, long: l1 } = parse(responseText)
-  let type1 = errType(s1, l1)
+  let et = errType(s1, l1)
 
-  // If a required item specific is wrong/missing, retry without niche specifics (same category)
-  if (type1 === 'specific') {
+  // Attempt 2: same category, no specifics (fixes "item specific X missing/not valid")
+  if (et === 'specific') {
     responseText = await submitToEbay(buildXml({ ...xmlParams, extraSpecifics: '' }), token, appId)
     const p = parse(responseText)
-    type1 = errType(p.short, p.long)
-    // Category itself requires a specific we can't provide — treat same as bad category
-    if (type1 === 'specific') type1 = 'leaf'
+    et = errType(p.short, p.long)
   }
 
-  // If category is not a leaf (or item-specific error persists), work through fallback leaf categories
-  if (type1 === 'leaf') {
+  // Attempt 3: fallback to category 177 (Everything Else) for leaf or unresolvable specific errors
+  if (et === 'leaf' || et === 'specific') {
     responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '177', extraSpecifics: '' }), token, appId)
     const p2 = parse(responseText)
-    if (errType(p2.short, p2.long) === 'leaf') {
+    et = errType(p2.short, p2.long)
+    // Attempt 4: last resort category
+    if (et === 'leaf' || et === 'specific') {
       responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '10971', extraSpecifics: '' }), token, appId)
     }
   }
