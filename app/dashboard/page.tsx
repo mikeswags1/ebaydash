@@ -11,7 +11,9 @@ interface AsinResult {
   amazonPrice: number
   imageUrl?: string
   available: boolean
-  source: 'api' | 'manual'
+  amazonUrl?: string
+  ebayTitle?: string
+  source: 'api' | 'manual' | 'db' | 'search'
 }
 
 interface EbayOrder {
@@ -190,13 +192,9 @@ export default function Dashboard() {
     setAsinError(null)
     setAsinResult(null)
     try {
-      const entry = orderAsinMap[raw]
-      if (!entry) {
-        setAsinError(`Item #${raw} was not found in your listing history. Only items listed through this dashboard are tracked. Items listed through other tools are not in the system.`)
-        return
-      }
-      const res = await fetch(`/api/amazon/lookup?asin=${entry.asin}`)
+      const res = await fetch(`/api/fulfillment/lookup?itemId=${raw}`)
       const data = await res.json()
+      if (data.error === 'RECONNECT_REQUIRED') { setAsinError('Your eBay connection expired — reconnect in Settings.'); return }
       if (data.error) { setAsinError(data.error); return }
       setAsinResult(data)
     } catch { setAsinError('Lookup failed — try again') }
@@ -642,7 +640,7 @@ export default function Dashboard() {
                       })}
                     </div>
                     <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--dim)', opacity: 0.6, lineHeight: 1.6 }}>
-                      Orders listed through this dashboard show <b style={{ color: 'var(--gold)' }}>Buy on Amazon ↗</b> — takes you directly to the exact product.
+                      Works for <b style={{ color: 'var(--gold)' }}>all your listings</b> — enter any eBay item ID to instantly find the Amazon product to purchase.
                     </div>
                   </div>
                 )}
@@ -656,11 +654,18 @@ export default function Dashboard() {
                           <img src={asinResult.imageUrl} alt={asinResult.title} style={{ width: '88px', height: '88px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', flexShrink: 0 }} />
                         )}
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--gold)', marginBottom: '6px' }}>Source Product Found</div>
+                          <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--gold)', marginBottom: '6px' }}>
+                            Amazon Source Product Found
+                          </div>
                           <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4, marginBottom: '10px' }}>{asinResult.title}</div>
+                          {asinResult.ebayTitle && asinResult.ebayTitle !== asinResult.title && (
+                            <div style={{ fontSize: '11px', color: 'var(--dim)', marginBottom: '10px', fontStyle: 'italic' }}>
+                              Matched from eBay listing: "{asinResult.ebayTitle.slice(0, 70)}"
+                            </div>
+                          )}
                           <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
                             <div>
-                              <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '3px' }}>Cost</div>
+                              <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '3px' }}>Amazon Cost</div>
                               <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '24px', fontWeight: 800, color: 'var(--gld2)' }}>${asinResult.amazonPrice.toFixed(2)}</div>
                             </div>
                             <div style={{ padding: '6px 12px', borderRadius: '20px', background: asinResult.available ? 'rgba(34,197,94,0.12)' : 'rgba(232,63,80,0.12)', border: `1px solid ${asinResult.available ? 'rgba(34,197,94,0.3)' : 'rgba(232,63,80,0.3)'}` }}>
@@ -670,7 +675,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <a
-                        href={`https://www.amazon.com/dp/${asinResult.asin}`}
+                        href={asinResult.amazonUrl || `https://www.amazon.com/dp/${asinResult.asin}`}
                         target="_blank"
                         rel="noreferrer"
                         className="btn btn-gold"
