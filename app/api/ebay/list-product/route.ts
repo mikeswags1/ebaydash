@@ -251,17 +251,39 @@ async function fetchAmazonDetails(
   }
 }
 
-// Upload a single image to eBay's own picture hosting (EPS).
-// Returns the eBay-hosted URL on success, or the original URL as fallback.
+// Download image ourselves then upload as binary to eBay EPS.
+// This bypasses any Amazon CDN restrictions on eBay's IP addresses.
 async function uploadToEPS(imageUrl: string, token: string, appId: string): Promise<string> {
   try {
-    const safeUrl = imageUrl.replace(/&/g, '&amp;').replace(/</g, '').replace(/>/g, '')
-    const xml = `<?xml version="1.0" encoding="utf-8"?>
-<UploadSiteHostedPicturesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
-  <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
-  <ExternalPictureURL>${safeUrl}</ExternalPictureURL>
-  <PictureSet>Supersize</PictureSet>
-</UploadSiteHostedPicturesRequest>`
+    // Step 1: download the image with browser-like headers
+    const imgRes = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+        'Referer': 'https://www.amazon.com/',
+      },
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!imgRes.ok) { console.error('[uploadToEPS] image download failed', imgRes.status, imageUrl.slice(0, 80)); return imageUrl }
+
+    const imageBuffer = Buffer.from(await imgRes.arrayBuffer())
+    const contentType = imgRes.headers.get('content-type') || 'image/jpeg'
+
+    // Step 2: upload binary to eBay EPS via multipart form
+    const boundary = `EPS${Date.now()}BOUNDARY`
+    const xmlPayload = `<?xml version="1.0" encoding="utf-8"?>\n<UploadSiteHostedPicturesRequest xmlns="urn:ebay:apis:eBLBaseComponents"><PictureSet>Supersize</PictureSet></UploadSiteHostedPicturesRequest>`
+
+    const xmlPart = Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="XML Payload"\r\nContent-Type: text/xml;charset=utf-8\r\n\r\n${xmlPayload}\r\n`,
+      'utf-8'
+    )
+    const imgHeader = Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="image.jpg"\r\nContent-Type: ${contentType}\r\nContent-Transfer-Encoding: binary\r\n\r\n`,
+      'utf-8'
+    )
+    const closing = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf-8')
+    const body = Buffer.concat([xmlPart, imgHeader, imageBuffer, closing])
+
     const res = await fetch('https://api.ebay.com/ws/api.dll', {
       method: 'POST',
       headers: {
@@ -272,18 +294,18 @@ async function uploadToEPS(imageUrl: string, token: string, appId: string): Prom
         'X-EBAY-API-DEV-NAME': process.env.EBAY_DEV_ID || '',
         'X-EBAY-API-CERT-NAME': process.env.EBAY_CERT_ID || '',
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'text/xml',
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
       },
-      body: xml,
-      signal: AbortSignal.timeout(15000),
+      body,
+      signal: AbortSignal.timeout(20000),
     })
     const text = await res.text()
     const fullUrl = text.match(/<FullURL>(.*?)<\/FullURL>/)?.[1]
     if (fullUrl) return fullUrl
-    const epsErr = text.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || ''
-    console.error('[uploadToEPS] no FullURL for', imageUrl.slice(0, 80), epsErr.slice(0, 120))
+    const epsErr = text.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || text.slice(0, 200)
+    console.error('[uploadToEPS] no FullURL:', epsErr.slice(0, 150))
   } catch (e) {
-    console.error('[uploadToEPS] fetch failed', e instanceof Error ? e.message : e)
+    console.error('[uploadToEPS] failed:', e instanceof Error ? e.message : e)
   }
   return imageUrl
 }
@@ -539,7 +561,7 @@ export async function POST(req: NextRequest) {
 
   const filteredImages = allImages
     .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
-    .slice(0, 8)
+    .slice(0, 3)
 
   // Proxy URLs used only inside the HTML description (fetched by buyer's browser, not eBay)
   const proxyUrls = filteredImages.map((u, i) =>
