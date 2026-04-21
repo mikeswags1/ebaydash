@@ -530,6 +530,13 @@ export async function POST(req: NextRequest) {
     .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
     .slice(0, 3)
 
+  if (filteredImages.length === 0) {
+    return apiError('This product does not have a usable source image yet. Run ASIN Lookup or choose a product with a valid Amazon image before publishing.', {
+      status: 400,
+      code: 'MISSING_LISTING_IMAGES',
+    })
+  }
+
   // Proxy URLs used only inside the HTML description (fetched by buyer's browser, not eBay)
   const proxyUrls = filteredImages.map((u, i) =>
     i === 0

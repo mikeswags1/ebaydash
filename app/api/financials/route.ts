@@ -33,6 +33,16 @@ function parseMoney(value: unknown) {
   return Number.isFinite(amount) ? amount : 0
 }
 
+function normalizeTitle(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/&amp;/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(pack|set|piece|pcs|count|for|with|and|the|a|an)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
@@ -99,11 +109,21 @@ export async function GET() {
         .filter((row) => row.ebay_listing_id)
         .map((row) => [String(row.ebay_listing_id), row] as const)
     )
+    const listingsByTitle = new Map<string, ListedAsinRow[]>()
+    for (const row of listingRows) {
+      const normalized = normalizeTitle(String(row.title || ''))
+      if (!normalized) continue
+      const current = listingsByTitle.get(normalized) || []
+      current.push(row)
+      listingsByTitle.set(normalized, current)
+    }
 
     const items = orders.flatMap((order) =>
       (order.lineItems || []).map((lineItem, index) => {
         const listingId = lineItem.legacyItemId ? String(lineItem.legacyItemId) : ''
-        const listing = listingId ? listingById.get(listingId) : undefined
+        const normalizedTitle = normalizeTitle(String(lineItem.title || ''))
+        const titleMatches = normalizedTitle ? listingsByTitle.get(normalizedTitle) || [] : []
+        const listing = listingId ? listingById.get(listingId) : titleMatches.length === 1 ? titleMatches[0] : undefined
         const quantity = Math.max(1, Number(lineItem.quantity || 1))
         const fallbackRevenue = (order.lineItems?.length || 0) <= 1 ? parseMoney(order.pricingSummary?.total?.value) : 0
         const revenue = parseMoney(lineItem.lineItemCost?.value) || fallbackRevenue

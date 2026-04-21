@@ -2,8 +2,10 @@ import { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
-import { queryRows } from '@/lib/db'
+import { queryRows, sql } from '@/lib/db'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
+import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
+import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 
 async function getEbayItemTitle(itemId: string, token: string, appId: string): Promise<string | null> {
   const xml = `<?xml version="1.0" encoding="utf-8"?>
@@ -33,6 +35,25 @@ async function getEbayItemTitle(itemId: string, token: string, appId: string): P
   const text = await res.text()
   const titleMatch = text.match(/<Title>(.*?)<\/Title>/)
   return titleMatch?.[1]?.trim() || null
+}
+
+async function saveRecoveredMapping(args: {
+  userId: string
+  itemId: string
+  asin: string
+  title: string
+  amazonPrice: number
+}) {
+  await ensureListedAsinsFinancialColumns()
+  await sql`
+    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price)
+    VALUES (${args.userId}, ${args.asin}, ${args.title.slice(0, 200)}, ${args.itemId}, ${args.amazonPrice.toFixed(2)})
+    ON CONFLICT (user_id, asin) DO UPDATE SET
+      title = ${args.title.slice(0, 200)},
+      ebay_listing_id = ${args.itemId},
+      amazon_price = ${args.amazonPrice.toFixed(2)},
+      listed_at = NOW()
+  `.catch(() => {})
 }
 
 export async function GET(req: NextRequest) {
@@ -85,6 +106,16 @@ export async function GET(req: NextRequest) {
       const data = amzJson?.data ?? amzJson
       const price = parseFloat(String(data.product_price || '0').replace(/[^0-9.]/g, '')) || 0
 
+      if (price > 0) {
+        await saveRecoveredMapping({
+          userId: session.user.id,
+          itemId,
+          asin,
+          title: String(data.product_title || rows[0].title || asin),
+          amazonPrice: price,
+        })
+      }
+
       return apiOk({
         asin,
         title: String(data.product_title || rows[0].title || asin),
@@ -127,36 +158,67 @@ export async function GET(req: NextRequest) {
     }
   )
 
-  if (!searchRes.ok) {
-    return apiError('Amazon search failed for this listing title.', {
-      status: 502,
-      code: 'AMAZON_SEARCH_FAILED',
-      details: `status=${searchRes.status}`,
+  let products: Record<string, unknown>[] = []
+  if (searchRes.ok) {
+    const searchJson = await searchRes.json()
+    products = searchJson?.data?.products || []
+  }
+
+  if (products.length > 0) {
+    const top = products[0]
+    const asin = String(top.asin || '')
+    const price = parseFloat(String(top.product_price || '0').replace(/[^0-9.]/g, '')) || 0
+
+    if (asin && price > 0) {
+      await saveRecoveredMapping({
+        userId: session.user.id,
+        itemId,
+        asin,
+        title: String(top.product_title || ebayTitle),
+        amazonPrice: price,
+      })
+    }
+
+    return apiOk({
+      asin,
+      title: String(top.product_title || ebayTitle),
+      amazonPrice: price,
+      imageUrl: String(top.product_photo || '') || undefined,
+      amazonUrl: `https://www.amazon.com/dp/${asin}`,
+      available: price > 0,
+      ebayTitle,
+      source: 'search' as const,
     })
   }
 
-  const searchJson = await searchRes.json()
-  const products: Record<string, unknown>[] = searchJson?.data?.products || []
+  const scraped = await scrapeAmazonSearch(ebayTitle)
+  if (scraped.length > 0) {
+    const top = scraped[0]
 
-  if (products.length === 0) {
-    return apiError(`No Amazon match was found for "${ebayTitle.slice(0, 60)}".`, {
-      status: 404,
-      code: 'AMAZON_MATCH_NOT_FOUND',
+    if (top.asin && top.price > 0) {
+      await saveRecoveredMapping({
+        userId: session.user.id,
+        itemId,
+        asin: top.asin,
+        title: top.title,
+        amazonPrice: top.price,
+      })
+    }
+
+    return apiOk({
+      asin: top.asin,
+      title: top.title,
+      amazonPrice: top.price,
+      imageUrl: top.imageUrl || undefined,
+      amazonUrl: `https://www.amazon.com/dp/${top.asin}`,
+      available: top.price > 0,
+      ebayTitle,
+      source: 'search' as const,
     })
   }
 
-  const top = products[0]
-  const asin = String(top.asin || '')
-  const price = parseFloat(String(top.product_price || '0').replace(/[^0-9.]/g, '')) || 0
-
-  return apiOk({
-    asin,
-    title: String(top.product_title || ebayTitle),
-    amazonPrice: price,
-    imageUrl: String(top.product_photo || '') || undefined,
-    amazonUrl: `https://www.amazon.com/dp/${asin}`,
-    available: price > 0,
-    ebayTitle,
-    source: 'search' as const,
+  return apiError(`No Amazon match was found for "${ebayTitle.slice(0, 60)}". Try the title manually if this listing uses custom wording.`, {
+    status: 404,
+    code: 'AMAZON_MATCH_NOT_FOUND',
   })
 }

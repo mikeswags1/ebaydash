@@ -111,6 +111,13 @@ export function SellOnEbayModal({
                       </a>
                     </div>
                   </div>
+                ) : listError.includes('usable source image') ? (
+                  <div>
+                    {listError}
+                    <div style={{ marginTop: '8px', color: 'var(--dim)' }}>
+                      Tip: run ASIN Lookup first or pick a sourcing result that includes a strong Amazon product image.
+                    </div>
+                  </div>
                 ) : (
                   listError
                 )}
