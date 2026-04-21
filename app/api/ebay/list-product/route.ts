@@ -435,6 +435,8 @@ function buildXml(params: {
     <ListingType>FixedPriceItem</ListingType>
     <Quantity>2</Quantity>
     ${params.pictureXml}
+    <ShipToLocations>US</ShipToLocations>
+    <GlobalShipping>false</GlobalShipping>
     <ShippingDetails>
       <ShippingType>Flat</ShippingType>
       <ShippingServiceOptions>
@@ -442,6 +444,7 @@ function buildXml(params: {
         <ShippingService>USPSPriority</ShippingService>
         <ShippingServiceCost>0.00</ShippingServiceCost>
         <FreeShipping>true</FreeShipping>
+        <ExpeditedService>true</ExpeditedService>
         <ShippingServiceAdditionalCost>0.00</ShippingServiceAdditionalCost>
       </ShippingServiceOptions>
     </ShippingDetails>
