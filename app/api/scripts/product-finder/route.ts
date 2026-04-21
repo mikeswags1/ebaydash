@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { sql } from '@/lib/db'
+import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 
 const EBAY_FEE   = 0.1335
 const MIN_PROFIT = 3
@@ -226,12 +227,49 @@ export async function GET(req: NextRequest) {
     } catch { /* non-fatal */ }
   }
 
-  // ── API failed — fall back to existing cache ─────────────────────────────────
+  // ── API failed — try direct Amazon scrape, then fall back to cache ──────────
   if (apiQuotaExceeded && results.length === 0) {
     if (cacheRow) {
       const filtered = (cacheRow.results as Product[]).filter(p => !listedAsins.has(p.asin))
       return NextResponse.json({ niche, results: filtered, count: filtered.length, source: 'stale_cache' })
     }
+
+    // No cache at all — scrape Amazon search directly (free, no quota)
+    const scrapeQueries = (NICHE_QUERIES[niche] || [`${niche} bestseller`]).slice(0, 2)
+    for (const query of scrapeQueries) {
+      if (results.length >= 20) break
+      try {
+        const scraped = await scrapeAmazonSearch(query)
+        for (const p of scraped) {
+          if (results.length >= 20) break
+          if (!p.asin || seenAsins.has(p.asin) || listedAsins.has(p.asin)) continue
+          seenAsins.add(p.asin)
+          if (!p.price || p.price <= 0 || p.price > MAX_COST) continue
+          if (!p.title || isRejected(p.title)) continue
+          const { ebayPrice, profit, roi } = calcMetrics(p.price)
+          if (profit < MIN_PROFIT || roi < MIN_ROI) continue
+          const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
+          results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
+            imageUrl: p.imageUrl, risk, salesVolume: undefined, _rating: p.rating, _numRatings: p.reviewCount })
+        }
+      } catch { /* ignore */ }
+    }
+
+    if (results.length > 0) {
+      results.sort((a, b) => {
+        const score = (p: Product) =>
+          p.profit * Math.log10(parseSales(p.salesVolume) + 1) *
+          (p._rating ? p._rating / 5 : 0.6) * Math.log10((p._numRatings ?? 0) + 10)
+        return score(b) - score(a)
+      })
+      try {
+        await sql`INSERT INTO product_cache (niche, results) VALUES (${niche}, ${JSON.stringify(results)})
+          ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, cached_at = NOW()`
+      } catch { /* non-fatal */ }
+      const filtered = results.filter(p => !listedAsins.has(p.asin))
+      return NextResponse.json({ niche, results: filtered, count: filtered.length, source: 'scrape' })
+    }
+
     return NextResponse.json({
       error: 'Product search is temporarily unavailable. Results will refresh automatically.',
       niche, results: [], count: 0,

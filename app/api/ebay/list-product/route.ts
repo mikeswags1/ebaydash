@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { sql } from '@/lib/db'
+import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
 
 // ── VeRO Protection ──────────────────────────────────────────────────────────
 const VERO_BRANDS = [
@@ -132,105 +133,121 @@ function sanitizeContent(text: string): string {
 async function fetchAmazonDetails(
   asin: string, rapidKey: string, fallbackImage?: string
 ): Promise<AmazonDetails & { _apiError?: string }> {
-  try {
-    const url = `https://real-time-amazon-data.p.rapidapi.com/product-details?asin=${asin}&country=US`
-    const res = await fetch(url, {
-      headers: {
-        'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com',
-        'x-rapidapi-key': rapidKey,
-      },
-      signal: AbortSignal.timeout(8000),
-    })
-    const json = await res.json()
-    const data = json?.data ?? json
+  const DEFAULT_FEATURES = [
+    'Brand new and factory sealed in original manufacturer packaging',
+    'Premium quality — built to meet or exceed manufacturer specifications',
+    'Simple setup, ready to use straight out of the box',
+    'Compact, lightweight design — easy to store and carry',
+    'Makes an excellent gift for any occasion',
+    'Ships fast via USPS Priority Mail — arrives in 2-3 business days',
+    '30-day hassle-free returns — your satisfaction is 100% guaranteed',
+  ]
 
-    const rawPhotos: unknown[] = (Array.isArray(data.product_photos) && data.product_photos.length > 0)
-      ? data.product_photos
-      : []
-    // Also accept object-form photos: {url: "..."} or {large: "..."}
-    const extractUrl = (v: unknown): string => {
-      if (typeof v === 'string') return v
-      if (v && typeof v === 'object') {
-        const o = v as Record<string, unknown>
-        return String(o.url || o.large || o.hiRes || o.main || o.thumb || '')
+  // Try RapidAPI first
+  if (rapidKey) {
+    try {
+      const url = `https://real-time-amazon-data.p.rapidapi.com/product-details?asin=${asin}&country=US`
+      const res = await fetch(url, {
+        headers: {
+          'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com',
+          'x-rapidapi-key': rapidKey,
+        },
+        signal: AbortSignal.timeout(8000),
+      })
+
+      // If quota/rate-limit hit, fall through to scraper
+      if (res.status !== 429 && res.status !== 403) {
+        const json = await res.json()
+        const data = json?.data ?? json
+        const quotaMsg = String(data?.message || '').toLowerCase()
+        if (!quotaMsg.match(/limit|quota|exceed/)) {
+          const rawPhotos: unknown[] = (Array.isArray(data.product_photos) && data.product_photos.length > 0)
+            ? data.product_photos
+            : []
+          const extractUrl = (v: unknown): string => {
+            if (typeof v === 'string') return v
+            if (v && typeof v === 'object') {
+              const o = v as Record<string, unknown>
+              return String(o.url || o.large || o.hiRes || o.main || o.thumb || '')
+            }
+            return ''
+          }
+          const mainImg: string =
+            extractUrl(rawPhotos[0]) ||
+            (typeof data.product_photo === 'string' ? data.product_photo : '') ||
+            fallbackImage || ''
+          const allImages = Array.from(
+            new Set(
+              [mainImg, ...rawPhotos.map(extractUrl)]
+                .filter((u): u is string => typeof u === 'string' && u.startsWith('http'))
+            )
+          ).slice(0, 12)
+
+          const rawFeatures: unknown[] = (
+            data.about_product || data.feature_bullets || data.bullet_points ||
+            data.product_features || data.highlights || data.key_features || []
+          )
+          const features = (Array.isArray(rawFeatures) ? rawFeatures as string[] : [])
+            .filter((f): f is string => typeof f === 'string' && f.trim().length > 5)
+            .map(f => sanitizeContent(f).slice(0, 500))
+            .filter(f => f.length > 5)
+
+          const rawDesc: string = (
+            data.product_description || data.description || data.synopsis ||
+            data.product_information || data.full_description || ''
+          )
+          const description = typeof rawDesc === 'string' ? sanitizeContent(rawDesc).slice(0, 6000) : ''
+
+          const rawSpecs: Record<string, unknown> = {
+            ...(data.product_overview ?? {}),
+            ...(data.product_details ?? {}),
+          }
+          const skipKeys = /customer|review|rating|star|bought|month|seller|return|warranty|asin|date first|best seller|discontinued|department|item model|upc|ean|isbn/i
+          const specs: Array<[string, string]> = Object.entries(rawSpecs)
+            .filter(([k, v]) => k && v && String(v).length > 0 && !skipKeys.test(k))
+            .slice(0, 30)
+            .map(([k, v]) => [sanitizeContent(k).slice(0, 80), sanitizeContent(String(v)).slice(0, 200)])
+            .filter(([k, v]) => k.length > 1 && v.length > 1) as Array<[string, string]>
+
+          const finalFeatures = features.length > 0
+            ? features
+            : specs.length > 0 ? specs.slice(0, 8).map(([k, v]) => `${k}: ${v}`) : DEFAULT_FEATURES
+
+          return {
+            images: allImages.length > 0 ? allImages : (fallbackImage ? [fallbackImage] : []),
+            features: finalFeatures,
+            description,
+            specs,
+          }
+        }
       }
-      return ''
+    } catch { /* fall through to scraper */ }
+  }
+
+  // Fallback: scrape Amazon directly (free, no quota)
+  try {
+    const scraped = await scrapeAmazonProduct(asin)
+    if (scraped) {
+      const features = scraped.features.length > 0
+        ? scraped.features.map(f => sanitizeContent(f))
+        : scraped.specs.length > 0
+          ? scraped.specs.slice(0, 8).map(([k, v]) => `${k}: ${v}`)
+          : DEFAULT_FEATURES
+      return {
+        images: scraped.images.length > 0 ? scraped.images : (fallbackImage ? [fallbackImage] : []),
+        features,
+        description: '',
+        specs: scraped.specs,
+      }
     }
-    const mainImg: string =
-      extractUrl(rawPhotos[0]) ||
-      (typeof data.product_photo === 'string' ? data.product_photo : '') ||
-      fallbackImage || ''
-    const allImages = Array.from(
-      new Set(
-        [mainImg, ...rawPhotos.map(extractUrl)]
-          .filter((u): u is string => typeof u === 'string' && u.startsWith('http'))
-      )
-    ).slice(0, 12)
+  } catch { /* ignore scrape errors */ }
 
-    // Try every possible field name for bullet features
-    const rawFeatures: unknown[] = (
-      data.about_product ||
-      data.feature_bullets ||
-      data.bullet_points ||
-      data.product_features ||
-      data.highlights ||
-      data.key_features ||
-      []
-    )
-    const features = (Array.isArray(rawFeatures) ? rawFeatures as string[] : [])
-      .filter((f): f is string => typeof f === 'string' && f.trim().length > 5)
-      .map(f => sanitizeContent(f).slice(0, 500))
-      .filter(f => f.length > 5)
-
-    const rawDesc: string = (
-      data.product_description || data.description || data.synopsis ||
-      data.product_information || data.full_description || ''
-    )
-    const description = typeof rawDesc === 'string' ? sanitizeContent(rawDesc).slice(0, 6000) : ''
-
-    const rawSpecs: Record<string, unknown> = {
-      ...(data.product_overview ?? {}),
-      ...(data.product_details ?? {}),
-    }
-    const skipKeys = /customer|review|rating|star|bought|month|seller|return|warranty|asin|date first|best seller|discontinued|department|item model|upc|ean|isbn/i
-    const specs: Array<[string, string]> = Object.entries(rawSpecs)
-      .filter(([k, v]) => k && v && String(v).length > 0 && !skipKeys.test(k))
-      .slice(0, 30)
-      .map(([k, v]) => [sanitizeContent(k).slice(0, 80), sanitizeContent(String(v)).slice(0, 200)])
-      .filter(([k, v]) => k.length > 1 && v.length > 1) as Array<[string, string]>
-
-    let finalFeatures = features.length > 0
-      ? features
-      : specs.slice(0, 8).map(([k, v]) => `${k}: ${v}`)
-
-    if (finalFeatures.length === 0) {
-      finalFeatures = [
-        'Brand new and factory sealed in original manufacturer packaging',
-        'Premium quality — built to meet or exceed manufacturer specifications',
-        'Simple setup, ready to use straight out of the box',
-        'Compact, lightweight design — easy to store and carry',
-        'Makes an excellent gift for any occasion',
-        'Ships fast via USPS Priority Mail — arrives in 2-3 business days',
-        '30-day hassle-free returns — your satisfaction is 100% guaranteed',
-      ]
-    }
-
-    return {
-      images: allImages.length > 0 ? allImages : (fallbackImage ? [fallbackImage] : []),
-      features: finalFeatures,
-      description,
-      specs,
-    }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    console.error('[fetchAmazonDetails] failed:', msg)
-    return {
-      images: fallbackImage ? [fallbackImage] : [],
-      features: [],
-      description: '',
-      specs: [],
-      _apiError: msg,
-    }
+  return {
+    images: fallbackImage ? [fallbackImage] : [],
+    features: DEFAULT_FEATURES,
+    description: '',
+    specs: [],
+    _apiError: 'quota_exceeded_scrape_failed',
   }
 }
 

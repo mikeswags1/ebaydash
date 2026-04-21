@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
+import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 
 export const maxDuration = 300
 
@@ -98,6 +99,7 @@ async function refreshNiche(niche: string, rapidKey: string): Promise<number> {
         `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(query)}&country=US&category_id=aps&page=1`,
         { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey }, signal: AbortSignal.timeout(8000) }
       )
+      if (res.status === 429 || res.status === 403) return -1
       if (!res.ok) break
       const data = await res.json()
       if (String(data?.message || '').toLowerCase().match(/limit|quota|exceed/)) return -1
@@ -130,6 +132,42 @@ async function refreshNiche(niche: string, rapidKey: string): Promise<number> {
     return s(b) - s(a)
   })
 
+  try {
+    await sql`INSERT INTO product_cache (niche, results) VALUES (${niche}, ${JSON.stringify(results)})
+              ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, cached_at = NOW()`
+  } catch { return 0 }
+  return results.length
+}
+
+// ── Refresh one niche using direct Amazon scraping (no API key needed) ───────
+async function refreshNicheScrape(niche: string): Promise<number> {
+  const queries = (NICHE_QUERIES[niche] || [`${niche} bestseller`]).slice(0, 2)
+  const results: Record<string, unknown>[] = []
+  const seen = new Set<string>()
+
+  for (const query of queries) {
+    if (results.length >= 30) break
+    try {
+      const scraped = await scrapeAmazonSearch(query)
+      for (const p of scraped) {
+        if (!p.asin || seen.has(p.asin)) continue
+        seen.add(p.asin)
+        if (!p.price || p.price <= 0 || p.price > MAX_COST || !p.title || isRejected(p.title)) continue
+        const { ebayPrice, profit, roi } = calcMetrics(p.price)
+        if (profit < MIN_PROFIT || roi < MIN_ROI) continue
+        const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
+        results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
+          imageUrl: p.imageUrl, risk, salesVolume: '', _rating: p.rating, _numRatings: p.reviewCount })
+      }
+    } catch { continue }
+  }
+
+  if (results.length === 0) return 0
+  results.sort((a, b) => {
+    const s = (p: Record<string, unknown>) =>
+      (p.profit as number) * ((p._rating as number || 3) / 5) * Math.log10((p._numRatings as number || 0) + 10)
+    return s(b) - s(a)
+  })
   try {
     await sql`INSERT INTO product_cache (niche, results) VALUES (${niche}, ${JSON.stringify(results)})
               ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, cached_at = NOW()`
@@ -220,19 +258,35 @@ export async function GET(req: NextRequest) {
 
   // 2. Refresh product cache for all niches
   const rapidKey = process.env.RAPIDAPI_KEY
+  const niches = Object.keys(NICHE_QUERIES)
+  let refreshed = 0, quotaHit = false
+
   if (rapidKey) {
-    const niches = Object.keys(NICHE_QUERIES)
-    let refreshed = 0, quotaHit = false
     for (const niche of niches) {
-      if (quotaHit || Date.now() - startedAt > 240_000) break
+      if (quotaHit || Date.now() - startedAt > 200_000) break
       const count = await refreshNiche(niche, rapidKey)
       if (count === -1) { quotaHit = true; break }
       if (count > 0) refreshed++
-      await new Promise(r => setTimeout(r, 200)) // gentle rate spacing
+      await new Promise(r => setTimeout(r, 200))
     }
-    report.nichesRefreshed = refreshed
-    report.quotaHit = quotaHit
+  } else {
+    quotaHit = true // no key = treat same as quota hit
   }
+
+  // If quota hit, fill remaining niches via direct Amazon scrape
+  if (quotaHit) {
+    for (const niche of niches) {
+      if (Date.now() - startedAt > 270_000) break
+      try {
+        const count = await refreshNicheScrape(niche)
+        if (count > 0) refreshed++
+      } catch { /* skip */ }
+      await new Promise(r => setTimeout(r, 500))
+    }
+  }
+
+  report.nichesRefreshed = refreshed
+  report.quotaHit = quotaHit
 
   report.durationMs = Date.now() - startedAt
   return NextResponse.json({ success: true, ...report })
