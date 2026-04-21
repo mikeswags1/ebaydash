@@ -3,10 +3,11 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { sql } from '@/lib/db'
 
-const EBAY_FEE = 0.1335
+const EBAY_FEE   = 0.1335
 const MIN_PROFIT = 3
-const MIN_ROI = 15
-const MAX_COST = 300
+const MIN_ROI    = 15
+const MAX_COST   = 300
+const CACHE_TTL  = 23 * 60 * 60 * 1000 // 23 hours — refresh once per day
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -19,6 +20,11 @@ const REJECT_KEYWORDS = [
   'lego set','lego technic','lego duplo',
 ]
 
+type Product = {
+  asin: string; title: string; amazonPrice: number; ebayPrice: number
+  profit: number; roi: number; imageUrl?: string; risk: string; salesVolume?: string
+}
+
 function calcMetrics(amazonPrice: number) {
   const markup = amazonPrice < 15  ? 2.4
     : amazonPrice < 25  ? 2.1
@@ -28,9 +34,9 @@ function calcMetrics(amazonPrice: number) {
     : amazonPrice < 200 ? 1.45
     : 1.38
   const ebayPrice = parseFloat((amazonPrice * markup).toFixed(2))
-  const fees = parseFloat((ebayPrice * EBAY_FEE).toFixed(2))
-  const profit = parseFloat((ebayPrice - amazonPrice - fees).toFixed(2))
-  const roi = parseFloat(((profit / amazonPrice) * 100).toFixed(0))
+  const fees      = parseFloat((ebayPrice * EBAY_FEE).toFixed(2))
+  const profit    = parseFloat((ebayPrice - amazonPrice - fees).toFixed(2))
+  const roi       = parseFloat(((profit / amazonPrice) * 100).toFixed(0))
   return { ebayPrice, fees, profit, roi }
 }
 
@@ -46,47 +52,63 @@ function parsePrice(v: unknown): number {
   return isNaN(n) ? 0 : n
 }
 
+const parseSales = (v?: string) => {
+  if (!v) return 1
+  const n = parseInt(v.replace(/[^0-9]/g, ''), 10)
+  return isNaN(n) ? 1 : Math.max(1, n)
+}
+
 const NICHE_QUERIES: Record<string, string[]> = {
-  'Phone Accessories': ['phone case wireless charger', 'screen protector tempered glass phone'],
-  'Computer Parts': ['usb c hub multiport adapter', 'laptop stand ergonomic adjustable'],
-  'Audio & Headphones': ['wireless earbuds bluetooth', 'portable bluetooth speaker'],
-  'Smart Home Devices': ['smart plug wifi outlet', 'smart home security camera indoor'],
-  'Gaming Gear': ['gaming accessories rgb keyboard', 'gaming headset pc console'],
-  'Kitchen Gadgets': ['kitchen gadgets silicone utensils', 'air fryer accessories baking'],
-  'Home Decor': ['wall art prints framed bedroom', 'decorative vase home accent', 'throw blanket couch sofa'],
-  'Furniture & Lighting': ['led desk lamp usb charging', 'wall art canvas prints bedroom'],
-  'Cleaning Supplies': ['cleaning supplies microfiber cloths', 'cleaning brush kit bathroom'],
-  'Storage & Organization': ['storage bins organizer closet', 'cable management organizer desk'],
-  'Camping & Hiking': ['camping lantern led rechargeable', 'tactical flashlight rechargeable'],
-  'Garden & Tools': ['garden tools set planting kit', 'pruning shears garden scissors', 'garden hose nozzle spray', 'waterproof dry bag outdoor', 'garden gloves heavy duty'],
-  'Sporting Goods': ['resistance bands workout set', 'jump rope speed fitness'],
-  'Fishing & Hunting': ['fishing lure kit bass trout', 'braided fishing line 30lb'],
-  'Cycling': ['bike accessories cycling light', 'cycling gloves padded'],
-  'Fitness Equipment': ['resistance bands set workout', 'ab roller wheel core'],
-  'Personal Care': ['electric facial cleansing brush', 'facial roller jade gua sha'],
-  'Supplements & Vitamins': ['turmeric curcumin black pepper capsules', 'magnesium glycinate sleep supplement', 'elderberry immune support gummies'],
-  'Medical Supplies': ['pulse oximeter fingertip blood oxygen', 'digital thermometer forehead'],
-  'Mental Wellness': ['essential oil diffuser ultrasonic', 'meditation cushion zafu'],
-  'Car Parts': ['car accessories seat organizer', 'dash cam front rear camera'],
-  'Car Accessories': ['magnetic phone mount car dashboard', 'car cleaning kit detailing'],
-  'Motorcycle Gear': ['motorcycle gloves touchscreen riding', 'helmet visor sunshield'],
-  'Truck & Towing': ['truck bed organizer storage', 'towing hitch cover ball'],
-  'Car Care': ['car wash kit microfiber towels', 'windshield wiper blades universal'],
-  'Pet Supplies': ['dog dental chews tartar control', 'cat interactive toys feather wand', 'pet deshedding brush dog cat'],
-  'Baby & Kids': ['baby carrier wrap ergonomic', 'toddler activity toy learning'],
-  'Toys & Games': ['fidget toys sensory pack', 'card games family fun'],
-  'Clothing & Accessories': ['compression socks athletic women men', 'sun hat wide brim women'],
-  'Jewelry & Watches': ['minimalist bracelet set women', 'watch band replacement silicone'],
-  'Office Supplies': ['desk organizer accessories office', 'ergonomic wrist rest mouse pad'],
-  'Industrial Equipment': ['safety glasses protective eyewear', 'work gloves mechanic heavy duty'],
-  'Safety Gear': ['safety vest reflective high visibility', 'hard hat construction'],
-  'Janitorial & Cleaning': ['heavy duty trash bags industrial', 'floor scrubber brush commercial'],
-  'Packaging Materials': ['bubble mailers padded envelopes', 'shipping boxes packing tape'],
-  'Trading Cards': ['card sleeves deck protector', 'card storage binder pokemon'],
-  'Vintage & Antiques': ['vintage style wall clock decor', 'retro tin signs man cave'],
-  'Coins & Currency': ['coin holder album collection', 'magnifying glass loupe jeweler'],
-  'Comics & Manga': ['manga book storage box', 'comic book bags boards'],
-  'Sports Memorabilia': ['sports card display case', 'autograph frame display'],
+  'Phone Accessories':      ['phone case wireless charger', 'screen protector tempered glass', 'phone stand holder desk', 'portable battery pack charger'],
+  'Computer Parts':         ['usb c hub multiport adapter', 'laptop stand ergonomic adjustable', 'mechanical keyboard compact', 'wireless mouse ergonomic'],
+  'Audio & Headphones':     ['wireless earbuds bluetooth noise cancelling', 'portable bluetooth speaker waterproof', 'headphone stand holder', 'aux cable audio'],
+  'Smart Home Devices':     ['smart plug wifi outlet alexa', 'smart home security camera indoor', 'smart led bulb color', 'motion sensor alarm'],
+  'Gaming Gear':            ['gaming accessories rgb keyboard', 'gaming headset pc ps4', 'gaming chair lumbar support', 'controller grip thumb caps'],
+  'Kitchen Gadgets':        ['kitchen gadgets silicone utensils set', 'air fryer accessories baking', 'mandoline slicer vegetables', 'can opener electric automatic'],
+  'Home Decor':             ['wall art prints framed bedroom', 'decorative vase home accent', 'throw blanket couch soft', 'scented candle set home'],
+  'Furniture & Lighting':   ['led desk lamp usb charging', 'floor lamp living room', 'wall sconce light plug in', 'curtain rod adjustable'],
+  'Cleaning Supplies':      ['microfiber cleaning cloths pack', 'cleaning brush kit bathroom', 'mop replacement head flat', 'squeegee window cleaner'],
+  'Storage & Organization': ['storage bins organizer closet', 'cable management organizer desk', 'drawer divider organizer bamboo', 'vacuum storage bags space saver'],
+  'Camping & Hiking':       ['camping lantern led rechargeable', 'tactical flashlight rechargeable', 'hiking water bottle insulated', 'fire starter emergency kit'],
+  'Garden & Tools':         ['garden tools set planting kit', 'pruning shears garden scissors', 'garden hose nozzle spray', 'garden gloves heavy duty', 'kneeling pad gardening foam'],
+  'Sporting Goods':         ['resistance bands workout set', 'jump rope speed fitness', 'knee brace support sports', 'wrist wraps gym weightlifting'],
+  'Fishing & Hunting':      ['fishing lure kit bass trout', 'braided fishing line 30lb', 'fishing tackle box organizer', 'hunting game camera trail'],
+  'Cycling':                ['bike accessories cycling light usb', 'cycling gloves padded gel', 'bike lock combination', 'handlebar grip ergonomic'],
+  'Fitness Equipment':      ['resistance bands set workout loop', 'ab roller wheel core', 'foam roller muscle recovery', 'yoga mat non slip thick'],
+  'Personal Care':          ['electric facial cleansing brush', 'facial roller jade gua sha', 'hair turban towel microfiber', 'cuticle pusher nail care kit'],
+  'Supplements & Vitamins': ['vitamin d3 k2 supplement', 'magnesium glycinate sleep supplement', 'elderberry immune support gummies', 'collagen peptides powder unflavored'],
+  'Medical Supplies':       ['pulse oximeter fingertip blood oxygen', 'digital thermometer forehead', 'blood pressure cuff wrist monitor', 'pill organizer weekly daily'],
+  'Mental Wellness':        ['essential oil diffuser ultrasonic', 'meditation cushion zafu floor', 'weighted sleep mask eye', 'aromatherapy stress relief'],
+  'Car Parts':              ['dash cam front rear camera', 'car phone mount magnetic vent', 'obd2 scanner bluetooth diagnostic', 'jump starter portable battery'],
+  'Car Accessories':        ['car organizer back seat trunk', 'car cleaning kit detailing', 'air freshener vent clip', 'seat cover protector universal'],
+  'Motorcycle Gear':        ['motorcycle gloves touchscreen riding', 'helmet bluetooth headset', 'motorcycle lock disc brake', 'balaclava face mask riding'],
+  'Truck & Towing':         ['truck bed organizer storage', 'towing hitch receiver cover', 'truck tailgate pad cycling', 'bed liner mat rubber'],
+  'Car Care':               ['car wash kit microfiber towels', 'windshield wiper blades universal', 'tire pressure gauge digital', 'clay bar detailing kit'],
+  'Pet Supplies':           ['dog dental chews tartar control', 'cat interactive toys feather wand', 'pet deshedding brush dog cat', 'dog harness no pull adjustable'],
+  'Baby & Kids':            ['baby carrier wrap ergonomic newborn', 'toddler activity toy learning', 'silicone bib waterproof baby', 'diaper bag backpack large'],
+  'Toys & Games':           ['fidget toys sensory pack kids', 'card games family fun adults', 'magnetic tiles building blocks', 'kinetic sand moldable'],
+  'Clothing & Accessories': ['compression socks athletic women men', 'sun hat wide brim women upf', 'cooling towel sports workout', 'travel wallet rfid blocking'],
+  'Jewelry & Watches':      ['minimalist bracelet set women gold', 'watch band replacement silicone', 'jewelry organizer box travel', 'earring set hypoallergenic women'],
+  'Office Supplies':        ['desk organizer accessories office', 'ergonomic wrist rest mouse pad', 'standing desk mat anti fatigue', 'label maker tape refill'],
+  'Industrial Equipment':   ['safety glasses protective eyewear ansi', 'work gloves mechanic heavy duty', 'ear protection earmuffs noise', 'respirator mask n95 reusable'],
+  'Safety Gear':            ['safety vest reflective high visibility', 'hard hat construction vented', 'first aid kit emergency', 'fire extinguisher home small'],
+  'Janitorial & Cleaning':  ['heavy duty trash bags industrial 55 gallon', 'floor scrubber brush commercial', 'paper towels bulk pack', 'hand soap refill gallon'],
+  'Packaging Materials':    ['bubble mailers padded envelopes', 'shipping boxes packing tape', 'poly mailers shipping bags', 'stretch wrap film clear'],
+  'Trading Cards':          ['card sleeves deck protector standard', 'card storage binder 9 pocket', 'card grading sleeves hard case', 'booster box display case'],
+  'Vintage & Antiques':     ['vintage style wall clock decor', 'retro tin signs man cave bar', 'antique map print framed', 'vintage record album storage'],
+  'Coins & Currency':       ['coin holder album collection', 'magnifying glass loupe jeweler', 'coin tubes storage capsule', 'currency detector pen'],
+  'Comics & Manga':         ['manga book storage box', 'comic book bags boards supplies', 'action figure display case', 'anime poster print framed'],
+  'Sports Memorabilia':     ['sports card display case frame', 'autograph frame display signed', 'jersey display case shadow box', 'trading card storage box'],
+}
+
+async function ensureCacheTable() {
+  try {
+    await sql`CREATE TABLE IF NOT EXISTS product_cache (
+      niche      TEXT        PRIMARY KEY,
+      results    JSONB       NOT NULL,
+      cached_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`
+  } catch { /* already exists */ }
 }
 
 export async function GET(req: NextRequest) {
@@ -96,34 +118,58 @@ export async function GET(req: NextRequest) {
   const niche = req.nextUrl.searchParams.get('niche')
   if (!niche) return NextResponse.json({ error: 'Niche required' }, { status: 400 })
 
-  const rapidKey = process.env.RAPIDAPI_KEY
-  if (!rapidKey) return NextResponse.json({ error: 'RapidAPI key not configured' }, { status: 500 })
+  const forceRefresh = req.nextUrl.searchParams.get('refresh') === '1'
 
+  await ensureCacheTable()
+
+  // ── Load user's already-listed ASINs (to filter duplicates) ─────────────────
   let listedAsins = new Set<string>()
   try {
     const listedRows = await sql`SELECT asin FROM listed_asins WHERE user_id = ${session.user.id}`
     listedAsins = new Set(listedRows.map((r) => String(r.asin)))
-  } catch { /* table not yet created */ }
+  } catch { /* table may not exist yet */ }
 
-  const queries = NICHE_QUERIES[niche] || [`${niche} bestseller`]
-  const results: Array<{
-    asin: string; title: string; amazonPrice: number; ebayPrice: number
-    profit: number; roi: number; imageUrl?: string; risk: string; salesVolume?: string
-  }> = []
+  // ── Check cache ──────────────────────────────────────────────────────────────
+  let cacheRow: { results: Product[]; cached_at: Date } | null = null
+  try {
+    const rows = await sql`SELECT results, cached_at FROM product_cache WHERE niche = ${niche}`
+    if (rows[0]) cacheRow = rows[0] as { results: Product[]; cached_at: Date }
+  } catch { /* ignore */ }
 
+  const cacheAge = cacheRow ? Date.now() - new Date(cacheRow.cached_at).getTime() : Infinity
+  const cacheIsFresh = cacheAge < CACHE_TTL
+
+  if (cacheIsFresh && !forceRefresh) {
+    // Serve from cache — filter out already-listed ASINs for this user
+    const filtered = (cacheRow!.results as Product[]).filter(p => !listedAsins.has(p.asin))
+    return NextResponse.json({ niche, results: filtered, count: filtered.length, source: 'cache' })
+  }
+
+  // ── Fetch fresh data from API ────────────────────────────────────────────────
+  const rapidKey = process.env.RAPIDAPI_KEY
+  if (!rapidKey) {
+    // No API key — fall back to cache if available
+    if (cacheRow) {
+      const filtered = (cacheRow.results as Product[]).filter(p => !listedAsins.has(p.asin))
+      return NextResponse.json({ niche, results: filtered, count: filtered.length, source: 'cache' })
+    }
+    return NextResponse.json({ error: 'Product search not configured', niche, results: [], count: 0 })
+  }
+
+  const queries   = NICHE_QUERIES[niche] || [`${niche} bestseller`]
+  const results: Product[] = []
   const seenAsins = new Set<string>()
-
   let apiQuotaExceeded = false
 
   const processProducts = (products: Record<string, unknown>[]) => {
     for (const p of products) {
-      if (results.length >= 30) break
+      if (results.length >= 40) break
       const asin = String(p.asin || '')
-      if (!asin || seenAsins.has(asin) || listedAsins.has(asin)) continue
+      if (!asin || seenAsins.has(asin)) continue
       seenAsins.add(asin)
-      const price = parsePrice(p.product_price) || parsePrice(p.product_original_price)
-      const title = String(p.product_title || '')
-      const imageUrl = String(p.product_photo || '')
+      const price      = parsePrice(p.product_price) || parsePrice(p.product_original_price)
+      const title      = String(p.product_title || '')
+      const imageUrl   = String(p.product_photo || '')
       const salesVolume = String(p.sales_volume || '')
       if (!price || price <= 0 || price > MAX_COST) continue
       if (!title || isRejected(title)) continue
@@ -135,43 +181,51 @@ export async function GET(req: NextRequest) {
   }
 
   for (const query of queries) {
-    if (results.length >= 15 || apiQuotaExceeded) break
+    if (results.length >= 20 || apiQuotaExceeded) break
     for (const page of [1, 2]) {
-      if (results.length >= 15) break
+      if (results.length >= 20) break
       try {
-        const searchRes = await fetch(
+        const res = await fetch(
           `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(query)}&country=US&category_id=aps&page=${page}`,
-          { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey } }
+          { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey }, signal: AbortSignal.timeout(10000) }
         )
-        if (searchRes.status === 429 || searchRes.status === 403) {
-          apiQuotaExceeded = true
-          break
-        }
-        const searchData = await searchRes.json()
-        if (searchData?.message?.toLowerCase().includes('limit') || searchData?.message?.toLowerCase().includes('quota')) {
-          apiQuotaExceeded = true
-          break
-        }
-        const products: Record<string, unknown>[] = searchData?.data?.products || []
+        if (res.status === 429 || res.status === 403) { apiQuotaExceeded = true; break }
+        const data = await res.json()
+        if (String(data?.message || '').toLowerCase().match(/limit|quota|exceed/)) { apiQuotaExceeded = true; break }
+        const products: Record<string, unknown>[] = data?.data?.products || []
         processProducts(products)
-        if (products.length < 5) break // sparse page, skip page 2
+        if (products.length < 5) break
       } catch { continue }
     }
   }
 
-  if (apiQuotaExceeded && results.length === 0) {
-    return NextResponse.json({ error: 'API limit reached for today — try again tomorrow or upgrade your plan', niche, results: [], count: 0 })
+  // ── Save fresh results to cache ──────────────────────────────────────────────
+  if (results.length > 0) {
+    results.sort((a, b) => {
+      const sA = a.profit * Math.log10(parseSales(a.salesVolume) + 1)
+      const sB = b.profit * Math.log10(parseSales(b.salesVolume) + 1)
+      return sB - sA
+    })
+    try {
+      await sql`
+        INSERT INTO product_cache (niche, results) VALUES (${niche}, ${JSON.stringify(results)})
+        ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, cached_at = NOW()
+      `
+    } catch { /* non-fatal */ }
   }
 
-  const parseSales = (v?: string) => {
-    if (!v) return 1
-    const n = parseInt(v.replace(/[^0-9]/g, ''), 10)
-    return isNaN(n) ? 1 : Math.max(1, n)
+  // ── API failed — fall back to existing cache ─────────────────────────────────
+  if (apiQuotaExceeded && results.length === 0) {
+    if (cacheRow) {
+      const filtered = (cacheRow.results as Product[]).filter(p => !listedAsins.has(p.asin))
+      return NextResponse.json({ niche, results: filtered, count: filtered.length, source: 'stale_cache' })
+    }
+    return NextResponse.json({
+      error: 'Product search is temporarily unavailable. Results will refresh automatically.',
+      niche, results: [], count: 0,
+    })
   }
-  results.sort((a, b) => {
-    const scoreA = a.profit * Math.log10(parseSales(a.salesVolume) + 1)
-    const scoreB = b.profit * Math.log10(parseSales(b.salesVolume) + 1)
-    return scoreB - scoreA
-  })
-  return NextResponse.json({ niche, results, count: results.length })
+
+  const filtered = results.filter(p => !listedAsins.has(p.asin))
+  return NextResponse.json({ niche, results: filtered, count: filtered.length, source: 'live' })
 }
