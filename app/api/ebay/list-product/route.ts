@@ -320,7 +320,7 @@ ${thumbs.map(u => `      <img src="${u}" alt="" style="width:120px;height:120px;
 <div style="max-width:620px;margin:0 auto;padding:0 8px;box-sizing:border-box;overflow:hidden;">
 
   <!-- Title -->
-  <h1 style="font-size:21px;font-weight:700;padding:18px 4px 12px;margin:0;border-bottom:2px solid #eee;line-height:1.45;word-wrap:break-word;">${displayTitle}</h1>
+  <h1 style="font-size:26px;font-weight:700;padding:18px 4px 14px;margin:0;border-bottom:2px solid #eee;line-height:1.4;word-wrap:break-word;">${displayTitle}</h1>
 
   <!-- Product images -->
   ${imageBlock}

@@ -72,22 +72,23 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
       }
     }
 
-    // ── Images — extract from the colorImages JSON block ────────────────────
+    // ── Images — search for hiRes/large URLs in the colorImages section ────────
     const images: string[] = []
-    const imgBlockMatch = html.match(/'colorImages':\s*\{[^}]*'initial':\s*(\[[\s\S]*?\])\s*\}/)
-      || html.match(/"colorImages":\s*\{[^}]*"initial":\s*(\[[\s\S]*?\])\s*\}/)
-    if (imgBlockMatch) {
-      const hiResMatches = imgBlockMatch[1].matchAll(/"hiRes"\s*:\s*"(https:[^"]+)"/g)
-      for (const m of hiResMatches) {
+    const colorImagesIdx = html.indexOf('"colorImages"') !== -1
+      ? html.indexOf('"colorImages"')
+      : html.indexOf("'colorImages'")
+    if (colorImagesIdx !== -1) {
+      // Grab a window large enough to contain all image entries
+      const section = html.slice(colorImagesIdx, colorImagesIdx + 80000)
+      // Prefer hiRes, fall back to large
+      for (const pattern of [/"hiRes"\s*:\s*"(https:[^"]+)"/g, /"large"\s*:\s*"(https:[^"]+)"/g]) {
         if (images.length >= 6) break
-        images.push(m[1])
-      }
-      if (images.length === 0) {
-        const largeMatches = imgBlockMatch[1].matchAll(/"large"\s*:\s*"(https:[^"]+)"/g)
-        for (const m of largeMatches) {
+        for (const m of section.matchAll(pattern)) {
           if (images.length >= 6) break
-          images.push(m[1])
+          const url = m[1]
+          if (!images.includes(url)) images.push(url)
         }
+        if (images.length > 0) break
       }
     }
     // fallback: main image
