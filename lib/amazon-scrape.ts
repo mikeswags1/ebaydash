@@ -79,8 +79,10 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
       : html.indexOf("'colorImages'")
     if (colorImagesIdx !== -1) {
       const section = html.slice(colorImagesIdx, colorImagesIdx + 100000)
-      // Find the 'initial' key — this contains only the selected ASIN's images
-      const initialIdx = section.indexOf('"initial"')
+      // Find the 'initial' key — Amazon uses both single and double quotes
+      const initialIdx = section.indexOf('"initial"') !== -1
+        ? section.indexOf('"initial"')
+        : section.indexOf("'initial'")
       if (initialIdx !== -1) {
         const arrayStart = section.indexOf('[', initialIdx)
         if (arrayStart !== -1) {
