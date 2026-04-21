@@ -275,13 +275,13 @@ function buildDescription(title: string, features: string[], _about: string, ima
     .replace(/&amp;/g, '&').replace(/&#38;/g, '&')
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 
-  const featureBullets = features.map(f => `<li style="margin-bottom:6px;">${f}</li>`).join('\n')
+  const featureBullets = features.map(f => `<li style="margin-bottom:8px;">${f}</li>`).join('\n')
 
-  // Small thumbnail row — 3 images, fixed size, side by side
+  // Thumbnail row — up to 3 images
   const thumbs = images.slice(0, 3)
   const imageBlock = thumbs.length > 0
-    ? `<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;padding:12px 0;">
-${thumbs.map(u => `      <img src="${u}" alt="" style="width:160px;height:160px;object-fit:contain;border:1px solid #ddd;border-radius:6px;background:#fafafa;">`).join('\n')}
+    ? `<div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;padding:16px 0;">
+${thumbs.map(u => `      <img src="${u}" alt="" style="width:220px;height:220px;object-fit:contain;border:1px solid #e0e0e0;border-radius:8px;background:#fafafa;">`).join('\n')}
     </div>`
     : ''
 
@@ -290,44 +290,44 @@ ${thumbs.map(u => `      <img src="${u}" alt="" style="width:160px;height:160px;
   const specRows = specs
     .filter(([k]) => !skipKeys.test(k))
     .slice(0, 16)
-    .map(([k, v]) => `<tr><td style="font-weight:700;padding:5px 10px;width:38%;border-bottom:1px solid #eee;font-size:13px;">${k}</td><td style="padding:5px 10px;border-bottom:1px solid #eee;font-size:13px;">${v}</td></tr>`)
+    .map(([k, v]) => `<tr><td style="font-weight:700;padding:6px 12px;width:38%;border-bottom:1px solid #eee;font-size:14px;">${k}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;font-size:14px;">${v}</td></tr>`)
     .join('\n')
 
   const sectionHeader = (label: string) =>
-    `<div style="background:#555;color:#fff;text-align:center;padding:9px 12px;font-size:15px;font-weight:700;letter-spacing:0.04em;margin-top:14px;">${label}</div>`
+    `<div style="background:#444;color:#fff;text-align:center;padding:11px 14px;font-size:15px;font-weight:700;letter-spacing:0.06em;margin-top:18px;border-radius:3px;">${label}</div>`
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;color:#222;background:#fff;box-sizing:border-box;">
-<div style="max-width:680px;margin:0 auto;padding:0 8px;box-sizing:border-box;overflow:hidden;">
+<div style="max-width:700px;margin:0 auto;padding:0 10px;box-sizing:border-box;overflow:hidden;">
 
   <!-- Title -->
-  <h1 style="font-size:18px;font-weight:700;padding:14px 4px 10px;margin:0;border-bottom:2px solid #eee;line-height:1.4;word-wrap:break-word;">${displayTitle}</h1>
+  <h1 style="font-size:21px;font-weight:700;padding:18px 4px 12px;margin:0;border-bottom:2px solid #eee;line-height:1.45;word-wrap:break-word;">${displayTitle}</h1>
 
   <!-- Product images -->
   ${imageBlock}
 
   <!-- Features -->
-  ${sectionHeader('Features')}
-  <ul style="font-size:14px;font-weight:500;line-height:1.75;padding:12px 12px 12px 28px;margin:0;color:#111;">
+  ${sectionHeader('Product Features')}
+  <ul style="font-size:15px;font-weight:500;line-height:1.85;padding:14px 14px 14px 30px;margin:0;color:#111;">
     ${featureBullets}
   </ul>
 
   <!-- Specs (if available) -->
-  ${specRows ? `${sectionHeader('Specifications')}<table style="width:100%;border-collapse:collapse;"><tbody>${specRows}</tbody></table>` : ''}
+  ${specRows ? `${sectionHeader('Specifications')}<table style="width:100%;border-collapse:collapse;margin-top:2px;"><tbody>${specRows}</tbody></table>` : ''}
 
   <!-- Shipping -->
   ${sectionHeader('Shipping')}
-  <ul style="font-size:13px;line-height:1.8;padding:10px 12px 10px 28px;margin:0;color:#333;">
+  <ul style="font-size:14px;line-height:1.9;padding:12px 14px 12px 30px;margin:0;color:#333;">
     <li><strong>Free Shipping:</strong> Free USPS Priority Mail on every order. Estimated 2&ndash;4 business days.</li>
-    <li><strong>Handling:</strong> Ships within 1&ndash;2 business days of cleared payment.</li>
+    <li><strong>Handling:</strong> Ships same day or next business day after cleared payment.</li>
     <li><strong>Tracking:</strong> Tracking number emailed as soon as your order ships.</li>
   </ul>
 
   <!-- Return Policy -->
   ${sectionHeader('Return Policy')}
-  <ul style="font-size:13px;line-height:1.8;padding:10px 12px 10px 28px;margin:0;color:#333;">
+  <ul style="font-size:14px;line-height:1.9;padding:12px 14px 12px 30px;margin:0;color:#333;">
     <li><strong>30-Day Returns:</strong> Not satisfied? Return within 30 days for a full refund or exchange.</li>
     <li><strong>No Restocking Fee:</strong> We cover return shipping and charge no restocking fees.</li>
     <li><strong>Fast Refunds:</strong> Refunds processed within 1 business day of receiving the return.</li>
@@ -335,20 +335,20 @@ ${thumbs.map(u => `      <img src="${u}" alt="" style="width:160px;height:160px;
 
   <!-- Feedback -->
   ${sectionHeader('Feedback')}
-  <p style="font-size:13px;line-height:1.8;padding:10px 12px;margin:0;color:#333;">
+  <p style="font-size:14px;line-height:1.9;padding:12px 14px;margin:0;color:#333;">
     Your satisfaction is our priority. If you are happy with your purchase, please leave positive feedback.
     If there is any issue, contact us <strong>before</strong> leaving feedback &mdash; we will make it right.
   </p>
 
   <!-- Contact -->
   ${sectionHeader('Contact Us')}
-  <p style="font-size:13px;line-height:1.8;padding:10px 12px;margin:0;color:#333;">
+  <p style="font-size:14px;line-height:1.9;padding:12px 14px;margin:0;color:#333;">
     Questions? Message us through eBay. We respond within 24 hours, Monday&ndash;Friday 9am&ndash;5pm EST.
   </p>
 
   <!-- Footer -->
-  <p style="text-align:center;font-size:14px;font-weight:700;padding:18px 12px;margin:0;border-top:2px solid #eee;color:#444;">
-    Thank you for supporting our small family business!
+  <p style="text-align:center;font-size:15px;font-weight:700;padding:20px 14px;margin:0;border-top:2px solid #eee;color:#444;letter-spacing:0.02em;">
+    Thank you for your purchase &mdash; we appreciate your business!
   </p>
 
 </div>

@@ -4,8 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { sql } from '@/lib/db'
 
 const EBAY_FEE = 0.1335
-const MIN_PROFIT = 4
-const MIN_ROI = 20
+const MIN_PROFIT = 3
+const MIN_ROI = 15
 const MAX_COST = 300
 
 const REJECT_KEYWORDS = [
@@ -58,7 +58,7 @@ const NICHE_QUERIES: Record<string, string[]> = {
   'Cleaning Supplies': ['cleaning supplies microfiber cloths', 'cleaning brush kit bathroom'],
   'Storage & Organization': ['storage bins organizer closet', 'cable management organizer desk'],
   'Camping & Hiking': ['camping lantern led rechargeable', 'tactical flashlight rechargeable'],
-  'Garden & Tools': ['garden tools set planting', 'waterproof dry bag outdoor'],
+  'Garden & Tools': ['garden tools set planting kit', 'pruning shears garden scissors', 'garden hose nozzle spray', 'waterproof dry bag outdoor', 'garden gloves heavy duty'],
   'Sporting Goods': ['resistance bands workout set', 'jump rope speed fitness'],
   'Fishing & Hunting': ['fishing lure kit bass trout', 'braided fishing line 30lb'],
   'Cycling': ['bike accessories cycling light', 'cycling gloves padded'],
@@ -113,43 +113,54 @@ export async function GET(req: NextRequest) {
 
   const seenAsins = new Set<string>()
 
+  let apiQuotaExceeded = false
+
+  const processProducts = (products: Record<string, unknown>[]) => {
+    for (const p of products) {
+      if (results.length >= 30) break
+      const asin = String(p.asin || '')
+      if (!asin || seenAsins.has(asin) || listedAsins.has(asin)) continue
+      seenAsins.add(asin)
+      const price = parsePrice(p.product_price) || parsePrice(p.product_original_price)
+      const title = String(p.product_title || '')
+      const imageUrl = String(p.product_photo || '')
+      const salesVolume = String(p.sales_volume || '')
+      if (!price || price <= 0 || price > MAX_COST) continue
+      if (!title || isRejected(title)) continue
+      const { ebayPrice, profit, roi } = calcMetrics(price)
+      if (profit < MIN_PROFIT || roi < MIN_ROI) continue
+      const risk = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
+      results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk, salesVolume })
+    }
+  }
+
   for (const query of queries) {
-    if (results.length >= 15) break
-    try {
-      const searchRes = await fetch(
-        `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(query)}&country=US&category_id=aps&page=1`,
-        {
-          headers: {
-            'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com',
-            'x-rapidapi-key': rapidKey,
-          },
+    if (results.length >= 15 || apiQuotaExceeded) break
+    for (const page of [1, 2]) {
+      if (results.length >= 15) break
+      try {
+        const searchRes = await fetch(
+          `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(query)}&country=US&category_id=aps&page=${page}`,
+          { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey } }
+        )
+        if (searchRes.status === 429 || searchRes.status === 403) {
+          apiQuotaExceeded = true
+          break
         }
-      )
-      const searchData = await searchRes.json()
-      const products: Record<string, unknown>[] = searchData?.data?.products || []
+        const searchData = await searchRes.json()
+        if (searchData?.message?.toLowerCase().includes('limit') || searchData?.message?.toLowerCase().includes('quota')) {
+          apiQuotaExceeded = true
+          break
+        }
+        const products: Record<string, unknown>[] = searchData?.data?.products || []
+        processProducts(products)
+        if (products.length < 5) break // sparse page, skip page 2
+      } catch { continue }
+    }
+  }
 
-      for (const p of products) {
-        if (results.length >= 30) break
-
-        const asin = String(p.asin || '')
-        if (!asin || seenAsins.has(asin) || listedAsins.has(asin)) continue
-        seenAsins.add(asin)
-
-        const price = parsePrice(p.product_price) || parsePrice(p.product_original_price)
-        const title = String(p.product_title || '')
-        const imageUrl = String(p.product_photo || '')
-        const salesVolume = String(p.sales_volume || '')
-
-        if (!price || price <= 0 || price > MAX_COST) continue
-        if (!title || isRejected(title)) continue
-
-        const { ebayPrice, profit, roi } = calcMetrics(price)
-        if (profit < MIN_PROFIT || roi < MIN_ROI) continue
-
-        const risk = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
-        results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk, salesVolume })
-      }
-    } catch { continue }
+  if (apiQuotaExceeded && results.length === 0) {
+    return NextResponse.json({ error: 'API limit reached for today — try again tomorrow or upgrade your plan', niche, results: [], count: 0 })
   }
 
   const parseSales = (v?: string) => {
