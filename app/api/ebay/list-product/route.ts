@@ -272,8 +272,8 @@ function buildDescription(title: string, features: string[], _about: string, ima
   // Feature bullets — preserve 【bold label】 format from Amazon as-is
   const featureBullets = features.map(f => `<li>${f}</li>`).join('\n')
 
-  // Inline product images — show ALL (including first) so even single-image products show something
-  const inlineImgs = images.slice(0, 9)
+  // Inline product images — show first 3 in description body
+  const inlineImgs = images.slice(0, 3)
   const imageBlock = inlineImgs.length > 0
     ? inlineImgs.map(u => `<img src="${u}" alt="" style="max-width:100%;display:block;margin:10px auto;">`).join('\n')
     : ''
