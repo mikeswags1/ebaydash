@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
+import { EBAY_OAUTH_SCOPES } from '@/lib/ebay-auth'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest) {
         grant_type: 'authorization_code',
         code,
         redirect_uri: process.env.EBAY_RUNAME!,
+        scope: EBAY_OAUTH_SCOPES.join(' '),
       }),
     })
 

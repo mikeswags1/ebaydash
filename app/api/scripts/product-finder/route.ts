@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { sql } from '@/lib/db'
+import { apiError, apiOk } from '@/lib/api-response'
+import { queryRows, sql } from '@/lib/db'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 
 const EBAY_FEE   = 0.15   // 15% eBay take rate used in new pricing model
@@ -113,10 +114,10 @@ async function ensureCacheTable() {
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
   const niche = req.nextUrl.searchParams.get('niche')
-  if (!niche) return NextResponse.json({ error: 'Niche required' }, { status: 400 })
+  if (!niche) return apiError('Niche is required.', { status: 400, code: 'NICHE_REQUIRED' })
 
   const forceRefresh = req.nextUrl.searchParams.get('refresh') === '1'
 
@@ -128,14 +129,14 @@ export async function GET(req: NextRequest) {
   let listedAsins = new Set<string>()
   try {
     await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ`.catch(() => {})
-    const listedRows = await sql`SELECT asin FROM listed_asins WHERE user_id = ${session.user.id} AND ended_at IS NULL`
+    const listedRows = await queryRows<{ asin: string }>`SELECT asin FROM listed_asins WHERE user_id = ${session.user.id} AND ended_at IS NULL`
     listedAsins = new Set(listedRows.map((r) => String(r.asin)))
   } catch { /* table may not exist yet */ }
 
   // ── Check cache ──────────────────────────────────────────────────────────────
   let cacheRow: { results: Product[]; cached_at: Date } | null = null
   try {
-    const rows = await sql`SELECT results, cached_at FROM product_cache WHERE niche = ${niche}`
+    const rows = await queryRows<{ results: Product[]; cached_at: Date }>`SELECT results, cached_at FROM product_cache WHERE niche = ${niche}`
     if (rows[0]) cacheRow = rows[0] as { results: Product[]; cached_at: Date }
   } catch { /* ignore */ }
 
@@ -145,7 +146,7 @@ export async function GET(req: NextRequest) {
   if (cacheIsFresh && !forceRefresh) {
     // Serve from cache — filter out already-listed ASINs for this user
     const filtered = (cacheRow!.results as Product[]).filter(p => !listedAsins.has(p.asin))
-    return NextResponse.json({ niche, results: filtered, count: filtered.length, source: 'cache' })
+    return apiOk({ niche, results: filtered, count: filtered.length, source: 'cache' })
   }
 
   // ── Fetch fresh data from API ────────────────────────────────────────────────
@@ -154,9 +155,13 @@ export async function GET(req: NextRequest) {
     // No API key — fall back to cache if available
     if (cacheRow) {
       const filtered = (cacheRow.results as Product[]).filter(p => !listedAsins.has(p.asin))
-      return NextResponse.json({ niche, results: filtered, count: filtered.length, source: 'cache' })
+      return apiOk({ niche, results: filtered, count: filtered.length, source: 'cache' })
     }
-    return NextResponse.json({ error: 'Product search not configured', niche, results: [], count: 0 })
+    return apiError('Product sourcing is not configured right now.', {
+      status: 503,
+      code: 'PRODUCT_SEARCH_NOT_CONFIGURED',
+      details: { niche, results: [], count: 0 },
+    })
   }
 
   const queries   = NICHE_QUERIES[niche] || [`${niche} bestseller`]
@@ -229,7 +234,7 @@ export async function GET(req: NextRequest) {
   if (apiQuotaExceeded && results.length === 0) {
     if (cacheRow) {
       const filtered = (cacheRow.results as Product[]).filter(p => !listedAsins.has(p.asin))
-      return NextResponse.json({ niche, results: filtered, count: filtered.length, source: 'stale_cache' })
+      return apiOk({ niche, results: filtered, count: filtered.length, source: 'stale_cache' })
     }
 
     // No cache at all — scrape Amazon search directly (free, no quota)
@@ -265,15 +270,16 @@ export async function GET(req: NextRequest) {
           ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, cached_at = NOW()`
       } catch { /* non-fatal */ }
       const filtered = results.filter(p => !listedAsins.has(p.asin))
-      return NextResponse.json({ niche, results: filtered, count: filtered.length, source: 'scrape' })
+      return apiOk({ niche, results: filtered, count: filtered.length, source: 'scrape' })
     }
 
-    return NextResponse.json({
-      error: 'Product search is temporarily unavailable. Results will refresh automatically.',
-      niche, results: [], count: 0,
+    return apiError('Product search is temporarily unavailable. Try again in a few minutes.', {
+      status: 503,
+      code: 'PRODUCT_SEARCH_UNAVAILABLE',
+      details: { niche, results: [], count: 0 },
     })
   }
 
   const filtered = results.filter(p => !listedAsins.has(p.asin))
-  return NextResponse.json({ niche, results: filtered, count: filtered.length, source: 'live' })
+  return apiOk({ niche, results: filtered, count: filtered.length, source: 'live' })
 }

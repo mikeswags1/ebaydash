@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
-import { sql } from '@/lib/db'
+import { queryRows, sql } from '@/lib/db'
 
 export async function POST(req: Request) {
   try {
@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     if (!email || !password) return NextResponse.json({ error: 'Email and password required' }, { status: 400 })
     if (password.length < 8) return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
 
-    const existing = await sql`SELECT id FROM users WHERE email = ${email}`
+    const existing = await queryRows<{ id: number }>`SELECT id FROM users WHERE email = ${email}`
     if (existing.length > 0) return NextResponse.json({ error: 'Email already registered' }, { status: 409 })
 
     const hash = await bcrypt.hash(password, 12)

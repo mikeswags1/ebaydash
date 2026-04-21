@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { sql } from '@/lib/db'
+import { NextRequest } from 'next/server'
+import { apiError, apiOk } from '@/lib/api-response'
+import { getValidEbayAccessToken } from '@/lib/ebay-auth'
+import { queryRows, sql } from '@/lib/db'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 
 export const maxDuration = 300
@@ -179,28 +181,13 @@ async function refreshNicheScrape(niche: string): Promise<number> {
 
 // ── Sync one user's eBay listings — mark ended/sold listings in DB ────────────
 async function syncUserListings(userId: number) {
-  const credRows = await sql`SELECT oauth_token, refresh_token, token_expires_at FROM ebay_credentials WHERE user_id = ${userId}`
-  if (!credRows[0]) return
-
-  let token = String(credRows[0].oauth_token || '')
-  const expired = !credRows[0].token_expires_at || new Date(credRows[0].token_expires_at) < new Date(Date.now() + 5 * 60 * 1000)
-  if (expired && credRows[0].refresh_token) {
-    const creds = Buffer.from(`${process.env.EBAY_APP_ID}:${process.env.EBAY_CERT_ID}`).toString('base64')
-    const r = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
-      method: 'POST',
-      headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: String(credRows[0].refresh_token), scope: 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory' }),
-    })
-    const d = await r.json()
-    if (d.access_token) {
-      token = d.access_token
-      await sql`UPDATE ebay_credentials SET oauth_token = ${token}, token_expires_at = ${new Date(Date.now() + d.expires_in * 1000).toISOString()}, updated_at = NOW() WHERE user_id = ${userId}`
-    }
-  }
-  if (!token) return
+  const credentials = await getValidEbayAccessToken(String(userId))
+  if (!credentials?.accessToken) return
+  const token = credentials.accessToken
 
   // Collect all active eBay listing IDs via GetMyeBaySelling (paginated)
   const activeIds = new Set<string>()
+  let fetchSucceeded = false
   const appId = process.env.EBAY_APP_ID || ''
   for (let page = 1; page <= 20; page++) {
     const xml = `<?xml version="1.0" encoding="utf-8"?>
@@ -215,17 +202,20 @@ async function syncUserListings(userId: number) {
       body: xml,
       signal: AbortSignal.timeout(10000),
     })
+    if (!res.ok) return
     const text = await res.text()
+    if (text.includes('<Ack>Failure</Ack>')) return
+    fetchSucceeded = true
     const ids = [...text.matchAll(/<ItemID>(\d+)<\/ItemID>/g)].map(m => m[1])
     ids.forEach(id => activeIds.add(id))
     const totalPages = parseInt(text.match(/<TotalNumberOfPages>(\d+)<\/TotalNumberOfPages>/)?.[1] || '1', 10)
     if (page >= totalPages) break
   }
 
-  if (activeIds.size === 0) return
+  if (!fetchSucceeded) return
 
   // Mark any listed ASIN whose eBay listing is no longer active
-  const dbRows = await sql`SELECT id, ebay_listing_id FROM listed_asins WHERE user_id = ${userId} AND ended_at IS NULL AND ebay_listing_id IS NOT NULL`
+  const dbRows = await queryRows<{ id: number; ebay_listing_id: string }>`SELECT id, ebay_listing_id FROM listed_asins WHERE user_id = ${userId} AND ended_at IS NULL AND ebay_listing_id IS NOT NULL`
   const toEnd = dbRows.filter(r => !activeIds.has(String(r.ebay_listing_id)))
   if (toEnd.length > 0) {
     const ids = toEnd.map(r => r.id)
@@ -237,7 +227,7 @@ async function syncUserListings(userId: number) {
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
   if (cronSecret && req.headers.get('authorization') !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
   }
 
   // Ensure ended_at column exists
@@ -249,7 +239,7 @@ export async function GET(req: NextRequest) {
 
   // 1. Sync eBay listing statuses for all users
   try {
-    const users = await sql`SELECT user_id FROM ebay_credentials`
+    const users = await queryRows<{ user_id: number }>`SELECT user_id FROM ebay_credentials`
     let synced = 0
     for (const u of users) {
       try { await syncUserListings(Number(u.user_id)); synced++ } catch { /* skip */ }
@@ -291,5 +281,5 @@ export async function GET(req: NextRequest) {
   report.quotaHit = quotaHit
 
   report.durationMs = Date.now() - startedAt
-  return NextResponse.json({ success: true, ...report })
+  return apiOk({ success: true, ...report })
 }

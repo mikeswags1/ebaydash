@@ -1,88 +1,92 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { sql } from '@/lib/db'
-
-async function getEbayToken(userId: string) {
-  const rows = await sql`SELECT oauth_token, token_expires_at FROM ebay_credentials WHERE user_id = ${userId}`
-  return rows[0]?.oauth_token || null
-}
+import { apiError, apiOk, getErrorText } from '@/lib/api-response'
+import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 
 async function ebayGet(token: string, path: string) {
   const res = await fetch(`https://api.ebay.com${path}`, {
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
   })
+
+  if (!res.ok) {
+    throw new Error(`eBay API request failed (${res.status})`)
+  }
+
   return res.json()
 }
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
   const script = req.nextUrl.searchParams.get('script')
-  const token = await getEbayToken(session.user.id)
-  if (!token) return NextResponse.json({ error: '✗ eBay not connected — go to Settings first' })
+  const credentials = await getValidEbayAccessToken(session.user.id)
+  if (!credentials?.accessToken) {
+    return apiError('eBay is not connected. Open Settings and reconnect your account.', {
+      status: 401,
+      code: 'RECONNECT_REQUIRED',
+    })
+  }
 
   try {
     switch (script) {
       case 'check-orders.js': {
-        const data = await ebayGet(token, '/sell/fulfillment/v1/order?limit=50&orderFulfillmentStatus=NOT_STARTED')
+        const data = await ebayGet(credentials.accessToken, '/sell/fulfillment/v1/order?limit=50&orderFulfillmentStatus=NOT_STARTED')
         const count = data.total || 0
-        return NextResponse.json({ message: `✓ Found ${count} order${count !== 1 ? 's' : ''} needing shipment` })
+        return apiOk({ message: `Found ${count} order${count !== 1 ? 's' : ''} needing shipment.` })
       }
 
-      case 'auto-feedback.js': {
-        // eBay doesn't expose buyer messaging via REST for sellers (only buyers can initiate)
-        return NextResponse.json({ message: '⚠ eBay no longer allows sellers to initiate messages via API. Send feedback requests manually from My eBay → Sold.' })
-      }
+      case 'auto-feedback.js':
+        return apiOk({ message: 'eBay no longer allows sellers to initiate buyer messages through the API. Send feedback requests manually from My eBay > Sold.' })
 
       case 'fix-campaigns.js': {
-        const data = await ebayGet(token, '/sell/marketing/v1/ad_campaign?limit=10')
+        const data = await ebayGet(credentials.accessToken, '/sell/marketing/v1/ad_campaign?limit=10')
         const campaigns = data.campaigns || []
-        const paused = campaigns.filter((c: { campaignStatus: string }) => c.campaignStatus === 'PAUSED').length
-        return NextResponse.json({ message: `✓ Found ${campaigns.length} campaign(s) — ${paused} paused. Review in eBay Seller Hub → Marketing.` })
+        const paused = campaigns.filter((campaign: { campaignStatus: string }) => campaign.campaignStatus === 'PAUSED').length
+        return apiOk({ message: `Found ${campaigns.length} campaign(s); ${paused} are paused. Review them in eBay Seller Hub > Marketing.` })
       }
 
-      case 'delete-low-roi.js': {
-        return NextResponse.json({ message: '⚠ This script permanently deletes listings. Run it locally for safety: node delete-low-roi.js' })
-      }
+      case 'delete-low-roi.js':
+        return apiOk({ message: 'This script permanently deletes listings. Run it locally for safety: node delete-low-roi.js' })
 
       case 'audit-and-clean.js': {
-        const data = await ebayGet(token, '/sell/inventory/v1/inventory_item?limit=200')
+        const data = await ebayGet(credentials.accessToken, '/sell/inventory/v1/inventory_item?limit=200')
         const count = data.total || (data.inventoryItems?.length ?? 0)
-        return NextResponse.json({ message: `✓ Found ${count} inventory item(s). Full audit runs locally: node audit-and-clean.js` })
+        return apiOk({ message: `Found ${count} inventory item(s). Run the full audit locally with: node audit-and-clean.js` })
       }
 
-      case 'delete-dead-listings.js': {
-        return NextResponse.json({ message: '⚠ Deletion scripts run locally for safety. Use: node delete-dead-listings.js' })
-      }
+      case 'delete-dead-listings.js':
+        return apiOk({ message: 'Deletion scripts run locally for safety. Use: node delete-dead-listings.js' })
 
       case 'optimize-titles.js': {
-        const data = await ebayGet(token, '/sell/inventory/v1/inventory_item?limit=200')
+        const data = await ebayGet(credentials.accessToken, '/sell/inventory/v1/inventory_item?limit=200')
         const count = data.total || (data.inventoryItems?.length ?? 0)
-        return NextResponse.json({ message: `✓ ${count} listing(s) found. Title optimization runs locally: node optimize-titles.js` })
+        return apiOk({ message: `Found ${count} listing(s). Title optimization runs locally: node optimize-titles.js` })
       }
 
-      case 'optimize-titles-apply.js': {
-        return NextResponse.json({ message: '⚠ Title changes apply live to your listings. Run locally after reviewing report: node optimize-titles-apply.js' })
-      }
+      case 'optimize-titles-apply.js':
+        return apiOk({ message: 'Title changes apply live to your listings. Run locally after reviewing the report: node optimize-titles-apply.js' })
 
-      case 'auto-lister.js': {
-        return NextResponse.json({ message: '⚠ Auto-lister requires product data file. Run locally: node auto-lister.js' })
-      }
+      case 'auto-lister.js':
+        return apiOk({ message: 'Auto-lister requires a product data file. Run locally: node auto-lister.js' })
 
-      case 'update-descriptions.js': {
-        return NextResponse.json({ message: '⚠ Description updates run locally. Use: node update-descriptions.js' })
-      }
+      case 'update-descriptions.js':
+        return apiOk({ message: 'Description updates run locally. Use: node update-descriptions.js' })
 
-      case 'sync-amazon-costs.js': {
-        return NextResponse.json({ message: '⚠ Cost sync runs locally. Use: node sync-amazon-costs.js — or use the ASIN tab to check prices manually.' })
-      }
+      case 'sync-amazon-costs.js':
+        return apiOk({ message: 'Cost sync runs locally. Use: node sync-amazon-costs.js or check prices manually in the ASIN tab.' })
 
       default:
-        return NextResponse.json({ message: '⚠ Script not recognized' })
+        return apiError('Script not recognized.', { status: 400, code: 'UNKNOWN_SCRIPT' })
     }
-  } catch (e) {
-    return NextResponse.json({ message: `✗ Error: ${String(e).slice(0, 100)}` })
+  } catch (error) {
+    return apiError(getErrorText(error, 'Failed to run script.'), {
+      status: 500,
+      code: 'SCRIPT_RUN_FAILED',
+    })
   }
 }

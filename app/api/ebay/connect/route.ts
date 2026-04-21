@@ -1,14 +1,9 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { EBAY_OAUTH_SCOPES } from '@/lib/ebay-auth'
 
-const SCOPES = [
-  'https://api.ebay.com/oauth/api_scope',
-  'https://api.ebay.com/oauth/api_scope/sell.fulfillment',
-  'https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly',
-  'https://api.ebay.com/oauth/api_scope/sell.finances',
-  'https://api.ebay.com/oauth/api_scope/sell.account.readonly',
-].join('%20')
+const SCOPES = encodeURIComponent(EBAY_OAUTH_SCOPES.join(' '))
 
 export async function GET() {
   const session = await getServerSession(authOptions)

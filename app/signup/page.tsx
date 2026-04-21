@@ -76,7 +76,7 @@ export default function Signup() {
             }}
           >
             <GoogleIcon />
-            {googleLoading ? 'Redirecting…' : 'Sign up with Google'}
+            {googleLoading ? 'Redirecting...' : 'Sign up with Google'}
           </button>
 
           {/* Divider */}
@@ -107,7 +107,7 @@ export default function Signup() {
             )}
 
             <button type="submit" className="btn btn-solid btn-full" style={{ marginTop: '4px' }} disabled={loading}>
-              {loading ? 'Creating account…' : 'Create Account'}
+              {loading ? 'Creating account...' : 'Create Account'}
             </button>
           </form>
         </div>

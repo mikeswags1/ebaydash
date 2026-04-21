@@ -1,7 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { apiError, apiOk } from '@/lib/api-response'
+import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { sql } from '@/lib/db'
+import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
 
 // ── VeRO Protection ──────────────────────────────────────────────────────────
@@ -251,39 +254,15 @@ async function fetchAmazonDetails(
   }
 }
 
-// Download image ourselves then upload as binary to eBay EPS.
-// This bypasses any Amazon CDN restrictions on eBay's IP addresses.
-async function uploadToEPS(imageUrl: string, token: string, appId: string): Promise<string> {
+async function uploadToEPS(externalUrl: string, token: string, appId: string): Promise<string> {
   try {
-    // Step 1: download the image with browser-like headers
-    const imgRes = await fetch(imageUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-        'Referer': 'https://www.amazon.com/',
-      },
-      signal: AbortSignal.timeout(10000),
-    })
-    if (!imgRes.ok) { console.error('[uploadToEPS] image download failed', imgRes.status, imageUrl.slice(0, 80)); return imageUrl }
-
-    const imageBuffer = Buffer.from(await imgRes.arrayBuffer())
-    const contentType = imgRes.headers.get('content-type') || 'image/jpeg'
-
-    // Step 2: upload binary to eBay EPS via multipart form
-    const boundary = `EPS${Date.now()}BOUNDARY`
-    const xmlPayload = `<?xml version="1.0" encoding="utf-8"?>\n<UploadSiteHostedPicturesRequest xmlns="urn:ebay:apis:eBLBaseComponents"><PictureSet>Supersize</PictureSet></UploadSiteHostedPicturesRequest>`
-
-    const xmlPart = Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="XML Payload"\r\nContent-Type: text/xml;charset=utf-8\r\n\r\n${xmlPayload}\r\n`,
-      'utf-8'
-    )
-    const imgHeader = Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="image.jpg"\r\nContent-Type: ${contentType}\r\nContent-Transfer-Encoding: binary\r\n\r\n`,
-      'utf-8'
-    )
-    const closing = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf-8')
-    const body = Buffer.concat([xmlPart, imgHeader, imageBuffer, closing])
-
+    const safeUrl = externalUrl.replace(/&/g, '&amp;').replace(/[<>]/g, '')
+    const xml = `<?xml version="1.0" encoding="utf-8"?>
+<UploadSiteHostedPicturesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
+  <ExternalPictureURL>${safeUrl}</ExternalPictureURL>
+  <PictureSet>Supersize</PictureSet>
+</UploadSiteHostedPicturesRequest>`
     const res = await fetch('https://api.ebay.com/ws/api.dll', {
       method: 'POST',
       headers: {
@@ -294,20 +273,20 @@ async function uploadToEPS(imageUrl: string, token: string, appId: string): Prom
         'X-EBAY-API-DEV-NAME': process.env.EBAY_DEV_ID || '',
         'X-EBAY-API-CERT-NAME': process.env.EBAY_CERT_ID || '',
         'Authorization': `Bearer ${token}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Type': 'text/xml',
       },
-      body,
-      signal: AbortSignal.timeout(20000),
+      body: xml,
+      signal: AbortSignal.timeout(15000),
     })
     const text = await res.text()
     const fullUrl = text.match(/<FullURL>(.*?)<\/FullURL>/)?.[1]
     if (fullUrl) return fullUrl
-    const epsErr = text.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || text.slice(0, 200)
-    console.error('[uploadToEPS] no FullURL:', epsErr.slice(0, 150))
+    const err = text.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || text.slice(0, 300)
+    console.error('[EPS]', err.slice(0, 200))
   } catch (e) {
-    console.error('[uploadToEPS] failed:', e instanceof Error ? e.message : e)
+    console.error('[EPS] fetch error:', e instanceof Error ? e.message : e)
   }
-  return imageUrl
+  return externalUrl
 }
 
 // ── Description builder ──────────────────────────────────────────────────────
@@ -408,34 +387,6 @@ ${thumbs.map(u => `      <img src="${u}" alt="" style="width:120px;height:120px;
 
 
 // ── Auth helper ──────────────────────────────────────────────────────────────
-async function getFreshToken(userId: string): Promise<string | null> {
-  const rows = await sql`SELECT oauth_token, refresh_token, token_expires_at FROM ebay_credentials WHERE user_id = ${userId}`
-  if (!rows[0]) return null
-  const { oauth_token, refresh_token, token_expires_at } = rows[0]
-
-  const expired = !token_expires_at || new Date(token_expires_at) < new Date(Date.now() + 5 * 60 * 1000)
-  if (!expired) return oauth_token as string
-  if (!refresh_token) return null
-
-  try {
-    const creds = Buffer.from(`${process.env.EBAY_APP_ID}:${process.env.EBAY_CERT_ID}`).toString('base64')
-    const res = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
-      method: 'POST',
-      headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: refresh_token as string,
-        scope: 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.fulfillment https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.account',
-      }),
-    })
-    const data = await res.json()
-    if (!data.access_token) return null
-    const expiresAt = new Date(Date.now() + data.expires_in * 1000)
-    await sql`UPDATE ebay_credentials SET oauth_token = ${data.access_token}, token_expires_at = ${expiresAt.toISOString()}, updated_at = NOW() WHERE user_id = ${userId}`
-    return data.access_token as string
-  } catch { return null }
-}
-
 // ── eBay API call ────────────────────────────────────────────────────────────
 async function submitToEbay(xml: string, appId: string, token: string): Promise<string> {
   const res = await fetch('https://api.ebay.com/ws/api.dll', {
@@ -509,20 +460,36 @@ function buildXml(params: {
 // ── Route handler ────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
-  const { asin, title, ebayPrice, imageUrl, niche } = await req.json()
-  if (!asin || !title || !ebayPrice) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
-
-  if (isVero(title)) {
-    return NextResponse.json(
-      { error: 'This product cannot be listed — it contains a brand enrolled in eBay VeRO. Choose a different product.' },
-      { status: 400 }
-    )
+  const { asin, title, ebayPrice, amazonPrice, imageUrl, niche } = await req.json()
+  if (!asin || !title || ebayPrice === undefined || ebayPrice === null || amazonPrice === undefined || amazonPrice === null) {
+    return apiError('ASIN, title, Amazon cost, and eBay price are required.', { status: 400, code: 'INVALID_LISTING_INPUT' })
   }
 
-  const token = await getFreshToken(session.user.id)
-  if (!token) return NextResponse.json({ error: 'RECONNECT_REQUIRED' }, { status: 401 })
+  const parsedEbayPrice = Number(ebayPrice)
+  const parsedAmazonPrice = Number(amazonPrice)
+  if (!Number.isFinite(parsedEbayPrice) || parsedEbayPrice <= 0) {
+    return apiError('Enter a valid eBay price before publishing.', { status: 400, code: 'INVALID_LISTING_PRICE' })
+  }
+  if (!Number.isFinite(parsedAmazonPrice) || parsedAmazonPrice <= 0) {
+    return apiError('Enter a valid Amazon source price before publishing.', { status: 400, code: 'INVALID_AMAZON_PRICE' })
+  }
+
+  if (isVero(title)) {
+    return apiError('This product cannot be listed because it appears to match an eBay VeRO brand.', {
+      status: 400,
+      code: 'VERO_BLOCKED',
+    })
+  }
+
+  const credentials = await getValidEbayAccessToken(session.user.id)
+  if (!credentials?.accessToken) {
+    return apiError('Your eBay session expired. Reconnect your account in Settings.', {
+      status: 401,
+      code: 'RECONNECT_REQUIRED',
+    })
+  }
 
   const appId = process.env.EBAY_APP_ID || ''
 
@@ -543,7 +510,7 @@ export async function POST(req: NextRequest) {
     : cleanTitle.slice(0, 80).replace(/\s+\S*$/, '').trim()
 
   const categoryId = NICHE_CATEGORY[niche] || '177'
-  const price = parseFloat(ebayPrice).toFixed(2)
+  const price = parsedEbayPrice.toFixed(2)
   const extraSpecifics = (NICHE_SPECIFICS[niche] || [])
     .map(([n, v]) => `\n      <NameValueList><Name>${n}</Name><Value>${v}</Value></NameValueList>`)
     .join('')
@@ -572,9 +539,7 @@ export async function POST(req: NextRequest) {
 
   // Upload original Amazon URLs directly to eBay EPS — no proxy hop, simpler chain.
   // EPS fetches from Amazon CDN directly; falls back to the original URL if upload fails.
-  const pictureList = await Promise.all(
-    filteredImages.map(u => uploadToEPS(u, token, appId))
-  )
+  const pictureList = await Promise.all(filteredImages.map((u) => uploadToEPS(u, credentials.accessToken, appId)))
 
   // Description inline images go through our proxy (Amazon URLs work in buyer browsers)
   const description = buildDescription(safeTitle, amazon.features, amazon.description, proxyUrls, amazon.specs)
@@ -584,7 +549,7 @@ export async function POST(req: NextRequest) {
     ? `<PictureDetails><GalleryType>Gallery</GalleryType>${pictureList.map(u => `<PictureURL>${xmlEncodeUrl(u)}</PictureURL>`).join('')}</PictureDetails>`
     : ''
 
-  const xmlParams = { token, safeTitle, description, categoryId, price, pictureXml, extraSpecifics }
+  const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId, price, pictureXml, extraSpecifics }
 
   // Parse eBay response — skip deprecated warnings to surface real errors
   const notWarn = (s: string) => {
@@ -638,20 +603,20 @@ export async function POST(req: NextRequest) {
 
   // ── Retry chain ──────────────────────────────────────────────────────────────
   // Attempt 1: niche category + niche specifics
-  let responseText = await submitToEbay(buildXml(xmlParams), appId, token)
+  let responseText = await submitToEbay(buildXml(xmlParams), appId, credentials.accessToken)
   let p = parse(responseText)
   let et = errType(p.short, p.long, p.codes)
 
   // Attempt 2: same category + auto-extracted required specifics from error
   if (et === 'specific') {
     const auto = autoSpecificsXml(responseText)
-    responseText = await submitToEbay(buildXml({ ...xmlParams, extraSpecifics: extraSpecifics + auto }), appId, token)
+    responseText = await submitToEbay(buildXml({ ...xmlParams, extraSpecifics: extraSpecifics + auto }), appId, credentials.accessToken)
     p = parse(responseText)
     et = errType(p.short, p.long, p.codes)
     // Attempt 2b: only auto specifics (in case niche ones conflict)
     if (et === 'specific') {
       const auto2 = autoSpecificsXml(responseText)
-      responseText = await submitToEbay(buildXml({ ...xmlParams, extraSpecifics: auto2 }), appId, token)
+      responseText = await submitToEbay(buildXml({ ...xmlParams, extraSpecifics: auto2 }), appId, credentials.accessToken)
       p = parse(responseText)
       et = errType(p.short, p.long, p.codes)
     }
@@ -659,14 +624,14 @@ export async function POST(req: NextRequest) {
 
   // Attempt 3: category 29223 (Everything Else > Everything Else — true leaf, no required specifics)
   if (et === 'leaf' || et === 'specific') {
-    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '29223', extraSpecifics: '' }), appId, token)
+    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '29223', extraSpecifics: '' }), appId, credentials.accessToken)
     p = parse(responseText)
     et = errType(p.short, p.long, p.codes)
   }
 
   // Attempt 4: category 45100 (Other Everything Else) as final resort
   if (et === 'leaf' || et === 'specific') {
-    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '45100', extraSpecifics: '' }), appId, token)
+    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '45100', extraSpecifics: '' }), appId, credentials.accessToken)
   }
 
   const itemIdMatch = responseText.match(/<ItemID>(\d+)<\/ItemID>/)
@@ -687,20 +652,33 @@ export async function POST(req: NextRequest) {
       allLong[0] || allShort[0] ||
       responseText.slice(0, 400)
     if (errMsg.toLowerCase().includes('expired') || errMsg.toLowerCase().includes('auth token')) {
-      return NextResponse.json({ error: 'RECONNECT_REQUIRED' }, { status: 401 })
+      return apiError('Your eBay session expired. Reconnect your account in Settings.', {
+        status: 401,
+        code: 'RECONNECT_REQUIRED',
+      })
     }
-    return NextResponse.json({ error: errMsg, _raw: responseText.slice(0, 1200) }, { status: 400 })
+    return apiError(errMsg, {
+      status: 400,
+      code: 'EBAY_LISTING_FAILED',
+      details: { raw: responseText.slice(0, 1200) },
+    })
   }
 
   const listingId = itemIdMatch[1]
 
+  await ensureListedAsinsFinancialColumns()
   await sql`
-    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id)
-    VALUES (${session.user.id}, ${asin}, ${title.slice(0, 200)}, ${listingId})
-    ON CONFLICT (user_id, asin) DO UPDATE SET ebay_listing_id = ${listingId}, listed_at = NOW()
+    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate)
+    VALUES (${session.user.id}, ${asin}, ${title.slice(0, 200)}, ${listingId}, ${parsedAmazonPrice.toFixed(2)}, ${price}, ${0.1325})
+    ON CONFLICT (user_id, asin) DO UPDATE SET
+      ebay_listing_id = ${listingId},
+      amazon_price = ${parsedAmazonPrice.toFixed(2)},
+      ebay_price = ${price},
+      ebay_fee_rate = ${0.1325},
+      listed_at = NOW()
   `.catch(() => {})
 
-  return NextResponse.json({
+  return apiOk({
     success: true,
     listingId,
     listingUrl: `https://www.ebay.com/itm/${listingId}`,

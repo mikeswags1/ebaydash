@@ -3,8 +3,8 @@ import Providers from './providers'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'EbayDash — Professional eBay Operations Platform',
-  description: 'Real-time eBay order management, financial analytics, and automation for serious sellers.',
+  title: 'EbayDash | Professional eBay Operations Platform',
+  description: 'Real-time eBay order management, listing workflows, sourcing tools, and automation for serious sellers.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

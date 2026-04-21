@@ -61,7 +61,7 @@ export default function Login() {
             }}
           >
             <GoogleIcon />
-            {googleLoading ? 'Redirecting…' : 'Continue with Google'}
+            {googleLoading ? 'Redirecting...' : 'Continue with Google'}
           </button>
 
           {/* Divider */}
@@ -78,7 +78,7 @@ export default function Login() {
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" required />
             </div>
 
             {error && (
@@ -88,7 +88,7 @@ export default function Login() {
             )}
 
             <button type="submit" className="btn btn-solid btn-full" style={{ marginTop: '4px' }} disabled={loading}>
-              {loading ? 'Signing in…' : 'Sign In with Email'}
+              {loading ? 'Signing in...' : 'Sign In with Email'}
             </button>
           </form>
         </div>
