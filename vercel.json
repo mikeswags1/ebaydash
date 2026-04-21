@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "app/api/ebay/list-product/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}
