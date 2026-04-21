@@ -72,23 +72,35 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
       }
     }
 
-    // ── Images — search for hiRes/large URLs in the colorImages section ────────
+    // ── Images — extract only from colorImages.initial (this ASIN's variant only) ─
     const images: string[] = []
     const colorImagesIdx = html.indexOf('"colorImages"') !== -1
       ? html.indexOf('"colorImages"')
       : html.indexOf("'colorImages'")
     if (colorImagesIdx !== -1) {
-      // Grab a window large enough to contain all image entries
-      const section = html.slice(colorImagesIdx, colorImagesIdx + 80000)
-      // Prefer hiRes, fall back to large
-      for (const pattern of [/"hiRes"\s*:\s*"(https:[^"]+)"/g, /"large"\s*:\s*"(https:[^"]+)"/g]) {
-        if (images.length >= 6) break
-        for (const m of section.matchAll(pattern)) {
-          if (images.length >= 6) break
-          const url = m[1]
-          if (!images.includes(url)) images.push(url)
+      const section = html.slice(colorImagesIdx, colorImagesIdx + 100000)
+      // Find the 'initial' key — this contains only the selected ASIN's images
+      const initialIdx = section.indexOf('"initial"')
+      if (initialIdx !== -1) {
+        const arrayStart = section.indexOf('[', initialIdx)
+        if (arrayStart !== -1) {
+          // Walk brackets to find the matching ] for the initial array
+          let depth = 0, arrayEnd = -1
+          for (let i = arrayStart; i < Math.min(arrayStart + 50000, section.length); i++) {
+            if (section[i] === '[') depth++
+            else if (section[i] === ']') { depth--; if (depth === 0) { arrayEnd = i; break } }
+          }
+          if (arrayEnd !== -1) {
+            const initialArray = section.slice(arrayStart, arrayEnd + 1)
+            for (const pattern of [/"hiRes"\s*:\s*"(https:[^"]+)"/g, /"large"\s*:\s*"(https:[^"]+)"/g]) {
+              for (const m of initialArray.matchAll(pattern)) {
+                if (images.length >= 6) break
+                if (!images.includes(m[1])) images.push(m[1])
+              }
+              if (images.length > 0) break
+            }
+          }
         }
-        if (images.length > 0) break
       }
     }
     // fallback: main image
