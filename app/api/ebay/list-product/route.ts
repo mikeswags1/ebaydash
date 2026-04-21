@@ -255,10 +255,11 @@ async function fetchAmazonDetails(
 // Returns the eBay-hosted URL on success, or the original URL as fallback.
 async function uploadToEPS(imageUrl: string, token: string, appId: string): Promise<string> {
   try {
+    const safeUrl = imageUrl.replace(/&/g, '&amp;').replace(/</g, '').replace(/>/g, '')
     const xml = `<?xml version="1.0" encoding="utf-8"?>
 <UploadSiteHostedPicturesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
-  <ExternalPictureURL>${imageUrl.replace(/&/g, '&amp;').replace(/</g, '').replace(/>/g, '')}</ExternalPictureURL>
+  <ExternalPictureURL>${safeUrl}</ExternalPictureURL>
   <PictureSet>Supersize</PictureSet>
 </UploadSiteHostedPicturesRequest>`
     const res = await fetch('https://api.ebay.com/ws/api.dll', {
@@ -274,13 +275,15 @@ async function uploadToEPS(imageUrl: string, token: string, appId: string): Prom
         'Content-Type': 'text/xml',
       },
       body: xml,
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(15000),
     })
     const text = await res.text()
-    const m = text.match(/<FullURL>(.*?)<\/FullURL>/)
-    if (m?.[1]) return m[1]
+    const fullUrl = text.match(/<FullURL>(.*?)<\/FullURL>/)?.[1]
+    if (fullUrl) return fullUrl
+    const epsErr = text.match(/<LongMessage>(.*?)<\/LongMessage>/)?.[1] || ''
+    console.error('[uploadToEPS] no FullURL for', imageUrl.slice(0, 80), epsErr.slice(0, 120))
   } catch (e) {
-    console.error('[uploadToEPS] failed for', imageUrl.slice(0, 60), e instanceof Error ? e.message : e)
+    console.error('[uploadToEPS] fetch failed', e instanceof Error ? e.message : e)
   }
   return imageUrl
 }
@@ -526,8 +529,6 @@ export async function POST(req: NextRequest) {
   const rapidKey = process.env.RAPIDAPI_KEY || ''
   const amazon = await fetchAmazonDetails(asin, rapidKey, imageUrl)
 
-  // Build proxied picture list FIRST — all images route through our server
-  // so eBay can load them (Amazon CDN blocks eBay's crawlers directly).
   const host = req.headers.get('host') || ''
   const proto = host.startsWith('localhost') ? 'http' : 'https'
   const siteUrl = `${proto}://${host}`
@@ -537,21 +538,23 @@ export async function POST(req: NextRequest) {
     : (imageUrl ? [imageUrl] : [])
 
   const filteredImages = allImages
-    .filter(u => typeof u === 'string' && u.startsWith('http'))
+    .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
     .slice(0, 8)
 
-  // Build proxy URLs for each image (used for EPS upload + description inline images)
+  // Proxy URLs used only inside the HTML description (fetched by buyer's browser, not eBay)
   const proxyUrls = filteredImages.map((u, i) =>
     i === 0
       ? `${siteUrl}/api/image/badge?url=${encodeURIComponent(u)}`
       : `${siteUrl}/api/image/proxy?url=${encodeURIComponent(u)}`
   )
 
-  // Upload all images to eBay's own CDN (EPS) so they're guaranteed accessible in the listing.
-  // Falls back to the proxy URL if any individual upload fails.
-  const pictureList = await Promise.all(proxyUrls.map(u => uploadToEPS(u, token, appId)))
+  // Upload original Amazon URLs directly to eBay EPS — no proxy hop, simpler chain.
+  // EPS fetches from Amazon CDN directly; falls back to the original URL if upload fails.
+  const pictureList = await Promise.all(
+    filteredImages.map(u => uploadToEPS(u, token, appId))
+  )
 
-  // Description inline images use proxy URLs (loaded by buyer's browser, not eBay EPS)
+  // Description inline images go through our proxy (Amazon URLs work in buyer browsers)
   const description = buildDescription(safeTitle, amazon.features, amazon.description, proxyUrls, amazon.specs)
 
   const xmlEncodeUrl = (u: string) => u.replace(/&/g, '&amp;').replace(/</g, '').replace(/>/g, '')
