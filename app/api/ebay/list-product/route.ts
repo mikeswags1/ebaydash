@@ -266,89 +266,88 @@ async function uploadToEPS(imageUrl: string, token: string, appId: string): Prom
   return imageUrl
 }
 
-// ── Description builder — matches Infinitybot style ─────────────────────────
+// ── Description builder ──────────────────────────────────────────────────────
 function buildDescription(title: string, features: string[], _about: string, images: string[], specs: Array<[string, string]> = []): string {
 
-  // Feature bullets — preserve 【bold label】 format from Amazon as-is
-  const featureBullets = features.map(f => `<li>${f}</li>`).join('\n')
+  // Decode HTML entities in title so &quot; / &amp; etc. render correctly
+  const displayTitle = title
+    .replace(/&quot;/g, '"').replace(/&#34;/g, '"')
+    .replace(/&amp;/g, '&').replace(/&#38;/g, '&')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 
-  // Inline product images — show first 3 in description body
-  const inlineImgs = images.slice(0, 3)
-  const imageBlock = inlineImgs.length > 0
-    ? inlineImgs.map(u => `<img src="${u}" alt="" style="max-width:100%;display:block;margin:10px auto;">`).join('\n')
+  const featureBullets = features.map(f => `<li style="margin-bottom:6px;">${f}</li>`).join('\n')
+
+  // Small thumbnail row — 3 images, fixed size, side by side
+  const thumbs = images.slice(0, 3)
+  const imageBlock = thumbs.length > 0
+    ? `<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;padding:12px 0;">
+${thumbs.map(u => `      <img src="${u}" alt="" style="width:160px;height:160px;object-fit:contain;border:1px solid #ddd;border-radius:6px;background:#fafafa;">`).join('\n')}
+    </div>`
     : ''
 
-  // Spec table rows
+  // Spec table
   const skipKeys = /customer|review|rating|star|bought|month|seller|return|warranty|asin|date first|best seller|discontinued|department|item model|upc|ean|isbn/i
   const specRows = specs
     .filter(([k]) => !skipKeys.test(k))
-    .slice(0, 20)
-    .map(([k, v]) => `<tr><td style="font-weight:bold;padding:6px 10px;width:35%;border-bottom:1px solid #ddd;">${k}</td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">${v}</td></tr>`)
+    .slice(0, 16)
+    .map(([k, v]) => `<tr><td style="font-weight:700;padding:5px 10px;width:38%;border-bottom:1px solid #eee;font-size:13px;">${k}</td><td style="padding:5px 10px;border-bottom:1px solid #eee;font-size:13px;">${v}</td></tr>`)
     .join('\n')
+
+  const sectionHeader = (label: string) =>
+    `<div style="background:#555;color:#fff;text-align:center;padding:9px 12px;font-size:15px;font-weight:700;letter-spacing:0.04em;margin-top:14px;">${label}</div>`
 
   const html = `<!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-</head>
-<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;color:#222;background:#fff;">
-<div style="max-width:750px;margin:0 auto;padding:0;">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;color:#222;background:#fff;box-sizing:border-box;">
+<div style="max-width:680px;margin:0 auto;padding:0 8px;box-sizing:border-box;overflow:hidden;">
 
   <!-- Title -->
-  <h1 style="font-size:20px;font-weight:bold;padding:16px 12px 10px;margin:0;border-bottom:2px solid #eee;">${title}</h1>
+  <h1 style="font-size:18px;font-weight:700;padding:14px 4px 10px;margin:0;border-bottom:2px solid #eee;line-height:1.4;word-wrap:break-word;">${displayTitle}</h1>
+
+  <!-- Product images -->
+  ${imageBlock}
 
   <!-- Features -->
-  <div style="background:#666;color:#fff;text-align:center;padding:10px;font-size:16px;font-weight:bold;margin-top:16px;">Features</div>
-  <ul style="font-size:14px;line-height:1.8;padding:14px 14px 14px 30px;margin:0;">
+  ${sectionHeader('Features')}
+  <ul style="font-size:14px;font-weight:500;line-height:1.75;padding:12px 12px 12px 28px;margin:0;color:#111;">
     ${featureBullets}
   </ul>
 
-  <!-- Inline product images -->
-  ${imageBlock ? `<div style="padding:10px 0;">${imageBlock}</div>` : ''}
-
-  <!-- Specs table (if available) -->
-  ${specRows ? `
-  <div style="background:#666;color:#fff;text-align:center;padding:10px;font-size:16px;font-weight:bold;margin-top:16px;">Specifications</div>
-  <table style="width:100%;border-collapse:collapse;font-size:14px;">
-    <tbody>${specRows}</tbody>
-  </table>` : ''}
+  <!-- Specs (if available) -->
+  ${specRows ? `${sectionHeader('Specifications')}<table style="width:100%;border-collapse:collapse;"><tbody>${specRows}</tbody></table>` : ''}
 
   <!-- Shipping -->
-  <div style="background:#666;color:#fff;text-align:center;padding:10px;font-size:16px;font-weight:bold;margin-top:20px;">Shipping</div>
-  <ul style="font-size:14px;line-height:1.9;padding:14px 14px 14px 30px;margin:0;">
-    <li><strong>Free &amp; Fast Shipping:</strong> We offer free USPS Priority Mail shipping. Estimated delivery 2&ndash;4 business days.</li>
-    <li><strong>Handling Time:</strong> Orders are processed and shipped within 1&ndash;2 business days of receiving cleared payment.</li>
-    <li><strong>Order Tracking:</strong> A tracking number will be emailed to you as soon as your order ships.</li>
-    <li><strong>State Restrictions:</strong> Shipping to Alaska, Hawaii, Puerto Rico, and other US territories may incur additional charges. Please contact us before ordering.</li>
+  ${sectionHeader('Shipping')}
+  <ul style="font-size:13px;line-height:1.8;padding:10px 12px 10px 28px;margin:0;color:#333;">
+    <li><strong>Free Shipping:</strong> Free USPS Priority Mail on every order. Estimated 2&ndash;4 business days.</li>
+    <li><strong>Handling:</strong> Ships within 1&ndash;2 business days of cleared payment.</li>
+    <li><strong>Tracking:</strong> Tracking number emailed as soon as your order ships.</li>
   </ul>
 
   <!-- Return Policy -->
-  <div style="background:#666;color:#fff;text-align:center;padding:10px;font-size:16px;font-weight:bold;margin-top:4px;">Return Policy</div>
-  <ul style="font-size:14px;line-height:1.9;padding:14px 14px 14px 30px;margin:0;">
-    <li><strong>30-Day Hassle-Free Returns:</strong> If you are not completely satisfied, return the item within 30 days for a full refund or exchange.</li>
-    <li><strong>Easy Return Process:</strong> Contact us and we will provide a prepaid return shipping label and detailed instructions.</li>
-    <li><strong>No Restocking Fee:</strong> We do not charge restocking fees for returns.</li>
-    <li><strong>Refund Processing:</strong> Refunds are processed within 1 business day of receiving the returned item.</li>
+  ${sectionHeader('Return Policy')}
+  <ul style="font-size:13px;line-height:1.8;padding:10px 12px 10px 28px;margin:0;color:#333;">
+    <li><strong>30-Day Returns:</strong> Not satisfied? Return within 30 days for a full refund or exchange.</li>
+    <li><strong>No Restocking Fee:</strong> We cover return shipping and charge no restocking fees.</li>
+    <li><strong>Fast Refunds:</strong> Refunds processed within 1 business day of receiving the return.</li>
   </ul>
 
   <!-- Feedback -->
-  <div style="background:#666;color:#fff;text-align:center;padding:10px;font-size:16px;font-weight:bold;margin-top:4px;">Feedback</div>
-  <p style="font-size:14px;line-height:1.8;padding:14px;margin:0;">
-    Your feedback is extremely important to us. We strive to provide the best products and customer service possible.
-    If you are satisfied with your purchase, please take a moment to leave us a positive review.
-    If you have any concerns, please contact us <em>before</em> leaving negative feedback &mdash; we are committed to resolving any issue quickly.
+  ${sectionHeader('Feedback')}
+  <p style="font-size:13px;line-height:1.8;padding:10px 12px;margin:0;color:#333;">
+    Your satisfaction is our priority. If you are happy with your purchase, please leave positive feedback.
+    If there is any issue, contact us <strong>before</strong> leaving feedback &mdash; we will make it right.
   </p>
 
-  <!-- Contact Us -->
-  <div style="background:#666;color:#fff;text-align:center;padding:10px;font-size:16px;font-weight:bold;margin-top:4px;">Contact Us</div>
-  <p style="font-size:14px;line-height:1.8;padding:14px;margin:0;">
-    If you have any questions or concerns, please feel free to reach out through the eBay messaging system.
-    We are available Monday to Friday, 9:00 am &ndash; 5:00 pm EST, and will respond to your inquiry within 24 hours.
+  <!-- Contact -->
+  ${sectionHeader('Contact Us')}
+  <p style="font-size:13px;line-height:1.8;padding:10px 12px;margin:0;color:#333;">
+    Questions? Message us through eBay. We respond within 24 hours, Monday&ndash;Friday 9am&ndash;5pm EST.
   </p>
 
   <!-- Footer -->
-  <p style="text-align:center;font-size:16px;font-weight:bold;padding:20px 12px;margin:0;border-top:2px solid #eee;">
+  <p style="text-align:center;font-size:14px;font-weight:700;padding:18px 12px;margin:0;border-top:2px solid #eee;color:#444;">
     Thank you for supporting our small family business!
   </p>
 
@@ -480,6 +479,11 @@ export async function POST(req: NextRequest) {
   const appId = process.env.EBAY_APP_ID || ''
 
   const cleanTitle = title
+    // Decode HTML entities first so &quot; → " then gets stripped cleanly
+    .replace(/&quot;|&#34;/gi, '"')
+    .replace(/&amp;|&#38;/gi, '&')
+    .replace(/&lt;|&#60;/gi, '<')
+    .replace(/&gt;|&#62;/gi, '>')
     .replace(/[^\x20-\x7E]/g, '')
     .replace(/[<>"]/g, '')
     .replace(/&/g, '&amp;')
