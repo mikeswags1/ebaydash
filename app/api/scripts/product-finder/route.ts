@@ -23,6 +23,7 @@ const REJECT_KEYWORDS = [
 type Product = {
   asin: string; title: string; amazonPrice: number; ebayPrice: number
   profit: number; roi: number; imageUrl?: string; risk: string; salesVolume?: string
+  _rating?: number; _numRatings?: number
 }
 
 function calcMetrics(amazonPrice: number) {
@@ -123,9 +124,12 @@ export async function GET(req: NextRequest) {
   await ensureCacheTable()
 
   // ── Load user's already-listed ASINs (to filter duplicates) ─────────────────
+  // Only block ASINs that are currently active on eBay (ended_at IS NULL)
+  // If a listing sold out or was removed, that ASIN becomes available again
   let listedAsins = new Set<string>()
   try {
-    const listedRows = await sql`SELECT asin FROM listed_asins WHERE user_id = ${session.user.id}`
+    await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ`.catch(() => {})
+    const listedRows = await sql`SELECT asin FROM listed_asins WHERE user_id = ${session.user.id} AND ended_at IS NULL`
     listedAsins = new Set(listedRows.map((r) => String(r.asin)))
   } catch { /* table may not exist yet */ }
 
@@ -165,18 +169,21 @@ export async function GET(req: NextRequest) {
     for (const p of products) {
       if (results.length >= 40) break
       const asin = String(p.asin || '')
-      if (!asin || seenAsins.has(asin)) continue
+      if (!asin || seenAsins.has(asin) || listedAsins.has(asin)) continue
       seenAsins.add(asin)
-      const price      = parsePrice(p.product_price) || parsePrice(p.product_original_price)
-      const title      = String(p.product_title || '')
-      const imageUrl   = String(p.product_photo || '')
+      const price       = parsePrice(p.product_price) || parsePrice(p.product_original_price)
+      const title       = String(p.product_title || '')
+      const imageUrl    = String(p.product_photo || '')
       const salesVolume = String(p.sales_volume || '')
       if (!price || price <= 0 || price > MAX_COST) continue
       if (!title || isRejected(title)) continue
       const { ebayPrice, profit, roi } = calcMetrics(price)
       if (profit < MIN_PROFIT || roi < MIN_ROI) continue
       const risk = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
-      results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk, salesVolume })
+      results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk, salesVolume,
+        _rating: parseFloat(String(p.product_star_rating || '0')) || 0,
+        _numRatings: parseInt(String(p.product_num_ratings || '0').replace(/[^0-9]/g, ''), 10) || 0,
+      })
     }
   }
 
@@ -202,9 +209,14 @@ export async function GET(req: NextRequest) {
   // ── Save fresh results to cache ──────────────────────────────────────────────
   if (results.length > 0) {
     results.sort((a, b) => {
-      const sA = a.profit * Math.log10(parseSales(a.salesVolume) + 1)
-      const sB = b.profit * Math.log10(parseSales(b.salesVolume) + 1)
-      return sB - sA
+      const score = (p: Product) => {
+        const profitWeight  = p.profit
+        const salesWeight   = Math.log10(parseSales(p.salesVolume) + 1)
+        const ratingWeight  = p._rating  ? p._rating / 5  : 0.6
+        const reviewWeight  = Math.log10((p._numRatings ?? 0) + 10)
+        return profitWeight * salesWeight * ratingWeight * reviewWeight
+      }
+      return score(b) - score(a)
     })
     try {
       await sql`

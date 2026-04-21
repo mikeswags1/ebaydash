@@ -793,25 +793,28 @@ export default function Dashboard() {
                           disabled={!!listAllProgress && listAllProgress.done < listAllProgress.total}
                           onClick={async () => {
                             if (!connected) { alert('Connect eBay first in Settings.'); return }
-                            setListAllProgress({ done: 0, total: finderResults.length, errors: 0 })
+                            const all = finderResults || []
+                            const total = all.length
+                            setListAllProgress({ done: 0, total, errors: 0 })
                             let errors = 0
                             const listedAsins: string[] = []
-                            for (let i = 0; i < finderResults.length; i++) {
-                              const p = finderResults[i]
-                              setListAllProgress({ done: i, total: finderResults.length, errors })
-                              try {
-                                const res = await fetch('/api/ebay/list-product', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ asin: p.asin, title: p.title, ebayPrice: p.ebayPrice, imageUrl: p.imageUrl, niche }),
-                                })
-                                const data = await res.json()
-                                if (data.error === 'RECONNECT_REQUIRED') { setListError('RECONNECT_REQUIRED'); break }
-                                if (data.success) listedAsins.push(p.asin)
-                                else errors++
-                              } catch { errors++ }
+                            let reconnect = false
+                            for (let i = 0; i < total; i += 3) {
+                              if (reconnect) break
+                              const batch = all.slice(i, i + 3)
+                              setListAllProgress({ done: i, total, errors })
+                              const batchRes = await Promise.all(batch.map(async p => {
+                                try {
+                                  const res = await fetch('/api/ebay/list-product', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ asin: p.asin, title: p.title, ebayPrice: p.ebayPrice, imageUrl: p.imageUrl, niche }) })
+                                  const data = await res.json()
+                                  if (data.error === 'RECONNECT_REQUIRED') return 'reconnect'
+                                  return data.success ? p.asin : null
+                                } catch { return null }
+                              }))
+                              batchRes.forEach(r => { if (r === 'reconnect') reconnect = true; else if (r) listedAsins.push(r as string); else errors++ })
                             }
-                            setListAllProgress(prev => prev ? { ...prev, done: finderResults.length, errors } : null)
+                            if (reconnect) setListError('RECONNECT_REQUIRED')
+                            setListAllProgress({ done: total, total, errors })
                             setFinderResults(prev => prev ? prev.filter(p => !listedAsins.includes(p.asin)) : null)
                           }}
                         >
@@ -855,25 +858,28 @@ export default function Dashboard() {
                                 disabled={!!listAllProgress}
                                 onClick={async () => {
                                   if (!connected) { alert('Connect eBay first in Settings.'); return }
-                                  setListAllProgress({ done: 0, total: finderResults.length, errors: 0 })
+                                  const all = finderResults || []
+                                  const total = all.length
+                                  setListAllProgress({ done: 0, total, errors: 0 })
                                   let errors = 0
                                   const listedAsins: string[] = []
-                                  for (let i = 0; i < finderResults.length; i++) {
-                                    const p = finderResults[i]
-                                    setListAllProgress({ done: i, total: finderResults.length, errors })
-                                    try {
-                                      const res = await fetch('/api/ebay/list-product', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ asin: p.asin, title: p.title, ebayPrice: p.ebayPrice, imageUrl: p.imageUrl, niche }),
-                                      })
-                                      const data = await res.json()
-                                      if (data.success) listedAsins.push(p.asin)
-                                      else errors++
-                                    } catch { errors++ }
+                                  let reconnect = false
+                                  for (let i = 0; i < total; i += 3) {
+                                    if (reconnect) break
+                                    const batch = all.slice(i, i + 3)
+                                    setListAllProgress({ done: i, total, errors })
+                                    const batchRes = await Promise.all(batch.map(async p => {
+                                      try {
+                                        const res = await fetch('/api/ebay/list-product', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ asin: p.asin, title: p.title, ebayPrice: p.ebayPrice, imageUrl: p.imageUrl, niche }) })
+                                        const data = await res.json()
+                                        if (data.error === 'RECONNECT_REQUIRED') return 'reconnect'
+                                        return data.success ? p.asin : null
+                                      } catch { return null }
+                                    }))
+                                    batchRes.forEach(r => { if (r === 'reconnect') reconnect = true; else if (r) listedAsins.push(r as string); else errors++ })
                                   }
-                                  setListAllProgress({ done: finderResults.length, total: finderResults.length, errors })
-                                  // Remove listed products from results
+                                  if (reconnect) setListError('RECONNECT_REQUIRED')
+                                  setListAllProgress({ done: total, total, errors })
                                   setFinderResults(prev => prev ? prev.filter(p => !listedAsins.includes(p.asin)) : null)
                                 }}
                               >

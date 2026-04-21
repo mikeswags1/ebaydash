@@ -9,3 +9,6 @@ out/
 .vercel
 .env*.local
 .env.prod
+test-*.mjs
+test-*.json
+tsconfig.tsbuildinfo
