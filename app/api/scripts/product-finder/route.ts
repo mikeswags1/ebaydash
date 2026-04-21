@@ -4,9 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { sql } from '@/lib/db'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 
-const EBAY_FEE   = 0.1335
-const MIN_PROFIT = 3
-const MIN_ROI    = 15
+const EBAY_FEE   = 0.15   // 15% eBay take rate used in new pricing model
+const MIN_PROFIT = 6
 const MAX_COST   = 300
 const CACHE_TTL  = 23 * 60 * 60 * 1000 // 23 hours — refresh once per day
 
@@ -28,17 +27,16 @@ type Product = {
 }
 
 function calcMetrics(amazonPrice: number) {
-  const markup = amazonPrice < 15  ? 2.4
-    : amazonPrice < 25  ? 2.1
-    : amazonPrice < 40  ? 1.85
-    : amazonPrice < 60  ? 1.65
-    : amazonPrice < 100 ? 1.55
-    : amazonPrice < 200 ? 1.45
-    : 1.38
-  const ebayPrice = parseFloat((amazonPrice * markup).toFixed(2))
-  const fees      = parseFloat((ebayPrice * EBAY_FEE).toFixed(2))
-  const profit    = parseFloat((ebayPrice - amazonPrice - fees).toFixed(2))
-  const roi       = parseFloat(((profit / amazonPrice) * 100).toFixed(0))
+  const targetProfit = amazonPrice < 15  ? 7
+    : amazonPrice < 40  ? 12
+    : amazonPrice < 100 ? 20
+    : amazonPrice * 0.12
+  const rawEbayPrice = (amazonPrice + targetProfit) / (1 - EBAY_FEE)
+  // Round to nearest .99
+  const ebayPrice = Math.ceil(rawEbayPrice) - 0.01
+  const fees   = parseFloat((ebayPrice * EBAY_FEE).toFixed(2))
+  const profit = parseFloat((ebayPrice - amazonPrice - fees).toFixed(2))
+  const roi    = parseFloat(((profit / amazonPrice) * 100).toFixed(0))
   return { ebayPrice, fees, profit, roi }
 }
 
@@ -179,7 +177,7 @@ export async function GET(req: NextRequest) {
       if (!price || price <= 0 || price > MAX_COST) continue
       if (!title || isRejected(title)) continue
       const { ebayPrice, profit, roi } = calcMetrics(price)
-      if (profit < MIN_PROFIT || roi < MIN_ROI) continue
+      if (profit < MIN_PROFIT) continue
       const risk = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
       results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk, salesVolume,
         _rating: parseFloat(String(p.product_star_rating || '0')) || 0,
@@ -247,7 +245,7 @@ export async function GET(req: NextRequest) {
           if (!p.price || p.price <= 0 || p.price > MAX_COST) continue
           if (!p.title || isRejected(p.title)) continue
           const { ebayPrice, profit, roi } = calcMetrics(p.price)
-          if (profit < MIN_PROFIT || roi < MIN_ROI) continue
+          if (profit < MIN_PROFIT) continue
           const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
           results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
             imageUrl: p.imageUrl, risk, salesVolume: undefined, _rating: p.rating, _numRatings: p.reviewCount })

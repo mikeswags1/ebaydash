@@ -5,9 +5,8 @@ import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 export const maxDuration = 300
 
 // ── Shared helpers (mirrored from product-finder) ────────────────────────────
-const EBAY_FEE = 0.1335
-const MIN_PROFIT = 3
-const MIN_ROI = 15
+const EBAY_FEE = 0.15
+const MIN_PROFIT = 6
 const MAX_COST = 300
 
 const REJECT_KEYWORDS = [
@@ -22,12 +21,15 @@ const REJECT_KEYWORDS = [
 ]
 
 function calcMetrics(amazonPrice: number) {
-  const markup = amazonPrice < 15 ? 2.4 : amazonPrice < 25 ? 2.1 : amazonPrice < 40 ? 1.85
-    : amazonPrice < 60 ? 1.65 : amazonPrice < 100 ? 1.55 : amazonPrice < 200 ? 1.45 : 1.38
-  const ebayPrice = parseFloat((amazonPrice * markup).toFixed(2))
-  const fees      = parseFloat((ebayPrice * EBAY_FEE).toFixed(2))
-  const profit    = parseFloat((ebayPrice - amazonPrice - fees).toFixed(2))
-  const roi       = parseFloat(((profit / amazonPrice) * 100).toFixed(0))
+  const targetProfit = amazonPrice < 15  ? 7
+    : amazonPrice < 40  ? 12
+    : amazonPrice < 100 ? 20
+    : amazonPrice * 0.12
+  const rawEbayPrice = (amazonPrice + targetProfit) / (1 - EBAY_FEE)
+  const ebayPrice = Math.ceil(rawEbayPrice) - 0.01
+  const fees   = parseFloat((ebayPrice * EBAY_FEE).toFixed(2))
+  const profit = parseFloat((ebayPrice - amazonPrice - fees).toFixed(2))
+  const roi    = parseFloat(((profit / amazonPrice) * 100).toFixed(0))
   return { ebayPrice, profit, roi }
 }
 
@@ -113,7 +115,7 @@ async function refreshNiche(niche: string, rapidKey: string): Promise<number> {
         const title = String(p.product_title || '')
         if (!price || price <= 0 || price > MAX_COST || !title || isRejected(title)) continue
         const { ebayPrice, profit, roi } = calcMetrics(price)
-        if (profit < MIN_PROFIT || roi < MIN_ROI) continue
+        if (profit < MIN_PROFIT) continue
         const risk       = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
         const salesVol   = String(p.sales_volume || '')
         const rating     = parseFloat(String(p.product_star_rating || '0')) || 0
@@ -154,7 +156,7 @@ async function refreshNicheScrape(niche: string): Promise<number> {
         seen.add(p.asin)
         if (!p.price || p.price <= 0 || p.price > MAX_COST || !p.title || isRejected(p.title)) continue
         const { ebayPrice, profit, roi } = calcMetrics(p.price)
-        if (profit < MIN_PROFIT || roi < MIN_ROI) continue
+        if (profit < MIN_PROFIT) continue
         const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
         results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
           imageUrl: p.imageUrl, risk, salesVolume: '', _rating: p.rating, _numRatings: p.reviewCount })
