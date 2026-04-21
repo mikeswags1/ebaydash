@@ -277,11 +277,11 @@ function buildDescription(title: string, features: string[], _about: string, ima
 
   const featureBullets = features.map(f => `<li style="margin-bottom:8px;">${f}</li>`).join('\n')
 
-  // Thumbnail row — up to 3 images
-  const thumbs = images.slice(0, 3)
+  // Thumbnail row — 2 images max, small size so they fit the description box
+  const thumbs = images.slice(0, 2)
   const imageBlock = thumbs.length > 0
-    ? `<div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;padding:16px 0;">
-${thumbs.map(u => `      <img src="${u}" alt="" style="width:220px;height:220px;object-fit:contain;border:1px solid #e0e0e0;border-radius:8px;background:#fafafa;">`).join('\n')}
+    ? `<div style="display:flex;gap:10px;justify-content:center;padding:12px 0;">
+${thumbs.map(u => `      <img src="${u}" alt="" style="width:120px;height:120px;object-fit:contain;border:1px solid #e0e0e0;border-radius:6px;background:#fafafa;">`).join('\n')}
     </div>`
     : ''
 
@@ -300,7 +300,7 @@ ${thumbs.map(u => `      <img src="${u}" alt="" style="width:220px;height:220px;
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;color:#222;background:#fff;box-sizing:border-box;">
-<div style="max-width:700px;margin:0 auto;padding:0 10px;box-sizing:border-box;overflow:hidden;">
+<div style="max-width:620px;margin:0 auto;padding:0 8px;box-sizing:border-box;overflow:hidden;">
 
   <!-- Title -->
   <h1 style="font-size:21px;font-weight:700;padding:18px 4px 12px;margin:0;border-bottom:2px solid #eee;line-height:1.45;word-wrap:break-word;">${displayTitle}</h1>
