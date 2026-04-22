@@ -212,6 +212,7 @@ function sanitizeDescriptionText(input: string) {
     .map((line) => sanitizeContent(line))
     .filter((line) => line.length > 35)
     .filter((line) => !/(data-csa|aplus|widget|module|desktop|wrapper|padding|margin|background-image|function|position relative|display table)/i.test(line))
+    .filter((line) => !/(click to play|watch the video|how to add|visit the .* store|learn more|amazon.?s choice|prime|customer review)/i.test(line))
     .filter((line) => !/[{}]/.test(line))
     .join(' ')
     .trim()
@@ -292,6 +293,65 @@ function dedupeImageUrls(values: Array<string | undefined | null>) {
   }
 
   return unique
+}
+
+function inferBrandFromProduct(title: string, specs: Array<[string, string]>) {
+  const brandSpec = specs.find(([key]) => /brand/i.test(key))
+  if (brandSpec?.[1]) return sanitizeContent(brandSpec[1]).slice(0, 80)
+  const firstWord = sanitizeContent(title).split(/\s+/)[0] || ''
+  return firstWord.length > 1 ? firstWord.slice(0, 80) : ''
+}
+
+function pickRelevantSpecs(specs: Array<[string, string]>) {
+  const skipKeys = /customer|review|rating|star|bought|month|seller|return|warranty|asin|date first|best seller|discontinued|department|item model|upc|ean|isbn|manufacturer part|is discontinued/i
+  return dedupeSpecEntries(specs)
+    .filter(([key, value]) => key.length > 1 && value.length > 1 && !skipKeys.test(key))
+    .slice(0, 14)
+}
+
+function buildItemSpecificsXml(title: string, specs: Array<[string, string]>, fallbackXml: string) {
+  const relevantSpecs = pickRelevantSpecs(specs)
+  const nameMap = new Map<string, string>()
+
+  const brand = inferBrandFromProduct(title, relevantSpecs)
+  if (brand) nameMap.set('Brand', brand)
+
+  const preferredKeys = [
+    'Type',
+    'Model',
+    'Compatible Brand',
+    'Connectivity',
+    'Color',
+    'Material',
+    'Features',
+    'Power Source',
+    'Screen Size',
+    'Resolution',
+    'Storage Capacity',
+    'Operating System',
+    'Sport',
+    'Activity',
+  ]
+
+  for (const preferred of preferredKeys) {
+    const match = relevantSpecs.find(([key]) => key.toLowerCase() === preferred.toLowerCase())
+    if (match?.[1]) nameMap.set(preferred, sanitizeContent(match[1]).slice(0, 120))
+  }
+
+  for (const [key, value] of relevantSpecs) {
+    if (nameMap.size >= 8) break
+    const cleanKey = titleCaseLabel(key).slice(0, 80)
+    if (!cleanKey || nameMap.has(cleanKey)) continue
+    nameMap.set(cleanKey, sanitizeContent(value).slice(0, 120))
+  }
+
+  if (nameMap.size === 0) {
+    return `<NameValueList><Name>Brand</Name><Value>${inferBrandFromProduct(title, specs) || 'See Description'}</Value></NameValueList>${fallbackXml}`
+  }
+
+  return Array.from(nameMap.entries())
+    .map(([name, value]) => `\n      <NameValueList><Name>${name}</Name><Value>${value}</Value></NameValueList>`)
+    .join('')
 }
 
 
@@ -461,14 +521,31 @@ function buildDescription(title: string, features: string[], about: string, imag
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 
   const uniqueImages = dedupeImageUrls(images)
-  const normalizedFeatures = features.filter(Boolean).slice(0, 10)
-  const featureBullets = normalizedFeatures.map(f => `<li style="margin-bottom:8px;">${f}</li>`).join('\n')
-  const descriptionParagraphs = toParagraphs(sanitizeDescriptionText(about))
+  const relevantSpecs = pickRelevantSpecs(specs)
+  const normalizedFeatures = Array.from(
+    new Set(
+      features
+        .map((feature) => sanitizeContent(feature))
+        .filter(Boolean)
+    )
+  ).slice(0, 10)
+  const specBullets = relevantSpecs
+    .filter(([key]) => !/brand/i.test(key))
+    .slice(0, 6)
+    .map(([key, value]) => `${titleCaseLabel(key)}: ${value}`)
+  const finalBullets = Array.from(new Set([...normalizedFeatures, ...specBullets])).slice(0, 10)
+  const cleanAbout = sanitizeDescriptionText(about)
+  const descriptionParagraphs = toParagraphs(cleanAbout)
+  const inferredBrand = inferBrandFromProduct(displayTitle, relevantSpecs)
+  const topSpecsSentence = relevantSpecs
+    .slice(0, 3)
+    .map(([key, value]) => `${titleCaseLabel(key)} ${value}`)
+    .join(', ')
   const overviewBlock = descriptionParagraphs.length > 0
     ? descriptionParagraphs
       .map((paragraph) => `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">${paragraph}</p>`)
       .join('\n')
-    : `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">This listing is based on the matching manufacturer product data for ${displayTitle}. Review the item specifics and feature summary below for the most important fit, function, and package details.</p>`
+    : `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">${displayTitle} is a ${inferredBrand ? `${inferredBrand} ` : ''}product listing built from the matching product record and key item details. ${topSpecsSentence ? `Highlights include ${topSpecsSentence}.` : 'Review the feature summary and specifications below for fit, function, and package details.'}</p>`
 
   const heroImages = uniqueImages.slice(0, 2)
   const detailImages = uniqueImages.slice(2, 4)
@@ -484,9 +561,7 @@ ${detailImages.map(u => `      <img src="${u}" alt="" style="width:210px;max-wid
     : ''
 
   // Spec table
-  const skipKeys = /customer|review|rating|star|bought|month|seller|return|warranty|asin|date first|best seller|discontinued|department|item model|upc|ean|isbn/i
-  const specRows = dedupeSpecEntries(specs)
-    .filter(([k]) => !skipKeys.test(k))
+  const specRows = relevantSpecs
     .slice(0, 12)
     .map(([k, v]) => `<tr><td style="font-weight:700;padding:8px 12px;width:38%;border-bottom:1px solid #eee;font-size:14px;">${titleCaseLabel(k)}</td><td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;">${v}</td></tr>`)
     .join('\n')
@@ -512,8 +587,8 @@ ${detailImages.map(u => `      <img src="${u}" alt="" style="width:210px;max-wid
 
   <!-- Features -->
   ${sectionHeader('Product Features')}
-  ${featureBullets ? `<ul style="font-size:14px;font-weight:500;line-height:1.8;padding:14px 14px 14px 30px;margin:0;color:#111;overflow-wrap:anywhere;">
-    ${featureBullets}
+  ${finalBullets.length > 0 ? `<ul style="font-size:14px;font-weight:500;line-height:1.8;padding:14px 14px 14px 30px;margin:0;color:#111;overflow-wrap:anywhere;">
+    ${finalBullets.map(f => `<li style="margin-bottom:8px;">${f}</li>`).join('\n')}
   </ul>` : `<p style="font-size:14px;line-height:1.8;padding:12px 14px;margin:0;color:#333;overflow-wrap:anywhere;">Review the product details and compatibility notes above to confirm the fit and package contents for your order.</p>`}
 
   <!-- Specs (if available) -->
@@ -590,7 +665,7 @@ async function submitToEbay(xml: string, appId: string, token: string): Promise<
 
 function buildXml(params: {
   token: string; safeTitle: string; description: string; categoryId: string
-  price: string; pictureXml: string; extraSpecifics: string
+  price: string; pictureXml: string; itemSpecificsXml: string
 }) {
   return `<?xml version="1.0" encoding="utf-8"?>
 <AddFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
@@ -633,7 +708,7 @@ function buildXml(params: {
       <ShippingCostPaidByOption>Seller</ShippingCostPaidByOption>
     </ReturnPolicy>
     <ItemSpecifics>
-      <NameValueList><Name>Brand</Name><Value>Unbranded</Value></NameValueList>${params.extraSpecifics}
+      ${params.itemSpecificsXml}
     </ItemSpecifics>
   </Item>
 </AddFixedPriceItemRequest>`
@@ -718,9 +793,9 @@ export async function POST(req: NextRequest) {
     ? cleanTitle
     : cleanTitle.slice(0, 80).replace(/\s+\S*$/, '').trim()
 
-  const categoryId = NICHE_CATEGORY[niche] || '177'
+  const nicheCategoryId = NICHE_CATEGORY[niche] || '177'
   const price = parsedEbayPrice.toFixed(2)
-  const extraSpecifics = (NICHE_SPECIFICS[niche] || [])
+  const fallbackSpecificsXml = (NICHE_SPECIFICS[niche] || [])
     .map(([n, v]) => `\n      <NameValueList><Name>${n}</Name><Value>${v}</Value></NameValueList>`)
     .join('')
 
@@ -774,6 +849,7 @@ export async function POST(req: NextRequest) {
     _apiError: fetchedAmazon._apiError,
   }
   amazon.specs = dedupeSpecEntries(amazon.specs)
+  const itemSpecificsXml = buildItemSpecificsXml(listingTitle, amazon.specs, fallbackSpecificsXml)
 
   const host = req.headers.get('host') || ''
   const proto = host.startsWith('localhost') ? 'http' : 'https'
@@ -828,7 +904,8 @@ export async function POST(req: NextRequest) {
     : ''
 
   const suggestedCategoryId = await getSuggestedCategoryId(safeTitle, appId, credentials.accessToken)
-  const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId, price, pictureXml, extraSpecifics }
+  const preferredCategoryId = suggestedCategoryId || nicheCategoryId
+  const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId: preferredCategoryId, price, pictureXml, itemSpecificsXml }
 
   // Parse eBay response — skip deprecated warnings to surface real errors
   const notWarn = (s: string) => {
@@ -881,7 +958,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Retry chain ──────────────────────────────────────────────────────────────
-  // Attempt 1: niche category + niche specifics
+  // Attempt 1: suggested category (preferred) or niche category with product-derived specifics
   let responseText = await submitToEbay(buildXml(xmlParams), appId, credentials.accessToken)
   let p = parse(responseText)
   let et = errType(p.short, p.long, p.codes)
@@ -889,35 +966,23 @@ export async function POST(req: NextRequest) {
   // Attempt 2: same category + auto-extracted required specifics from error
   if (et === 'specific') {
     const auto = autoSpecificsXml(responseText)
-    responseText = await submitToEbay(buildXml({ ...xmlParams, extraSpecifics: extraSpecifics + auto }), appId, credentials.accessToken)
+    responseText = await submitToEbay(buildXml({ ...xmlParams, itemSpecificsXml: itemSpecificsXml + auto }), appId, credentials.accessToken)
     p = parse(responseText)
     et = errType(p.short, p.long, p.codes)
-    // Attempt 2b: only auto specifics (in case niche ones conflict)
+    // Attempt 2b: only auto specifics (in case extracted specifics conflict)
     if (et === 'specific') {
       const auto2 = autoSpecificsXml(responseText)
-      responseText = await submitToEbay(buildXml({ ...xmlParams, extraSpecifics: auto2 }), appId, credentials.accessToken)
+      responseText = await submitToEbay(buildXml({ ...xmlParams, itemSpecificsXml: auto2 }), appId, credentials.accessToken)
       p = parse(responseText)
       et = errType(p.short, p.long, p.codes)
     }
   }
 
-  // Attempt 3: ask eBay for a better suggested category before falling back to junk categories
-  if ((et === 'leaf' || et === 'specific') && suggestedCategoryId && suggestedCategoryId !== categoryId) {
-    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: suggestedCategoryId, extraSpecifics: extraSpecifics }), appId, credentials.accessToken)
+  // Attempt 3: if the preferred category fails, try the niche category once with the same specifics
+  if ((et === 'leaf' || et === 'specific') && suggestedCategoryId && nicheCategoryId !== suggestedCategoryId) {
+    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: nicheCategoryId, itemSpecificsXml }), appId, credentials.accessToken)
     p = parse(responseText)
     et = errType(p.short, p.long, p.codes)
-  }
-
-  // Attempt 4: category 29223 (Everything Else > Everything Else) as last-resort recovery only
-  if (et === 'leaf' || et === 'specific') {
-    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '29223', extraSpecifics: '' }), appId, credentials.accessToken)
-    p = parse(responseText)
-    et = errType(p.short, p.long, p.codes)
-  }
-
-  // Attempt 5: category 45100 (Other Everything Else) as absolute final resort
-  if (et === 'leaf' || et === 'specific') {
-    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '45100', extraSpecifics: '' }), appId, credentials.accessToken)
   }
 
   const itemIdMatch = responseText.match(/<ItemID>(\d+)<\/ItemID>/)

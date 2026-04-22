@@ -103,8 +103,6 @@ function extractDynamicImageUrls(html: string): string[] {
       /"hiRes"\s*:\s*"(https:[^"]+)"/g,
       /"large"\s*:\s*"(https:[^"]+)"/g,
       /data-old-hires="(https:[^"]+)"/g,
-      /data-thumb-action="[^"]*(https:[^"&]+)[^"]*"/g,
-      /class="[^"]*imageThumbnail[^"]*"[\s\S]*?<img[^>]+src="(https:[^"]+)"/g,
     ]) {
       for (const match of scope.matchAll(pattern)) {
         if (urls.length >= 12) break
