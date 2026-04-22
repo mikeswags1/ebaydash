@@ -62,55 +62,57 @@ function dedupeImages(values: string[]) {
   return Array.from(new Set(values.filter((url) => url.startsWith('http')).map((url) => upgradeAmazonImageUrl(url))))
 }
 
+function extractGalleryScopes(html: string): string[] {
+  const scopes: string[] = []
+  const anchors = [
+    'id="landingImage"',
+    'id="imgTagWrapperId"',
+    'id="main-image-container"',
+    'id="altImages"',
+    '"ImageBlockATF"',
+    '"imageBlockVariations_feature_div"',
+  ]
+
+  for (const anchor of anchors) {
+    const idx = html.indexOf(anchor)
+    if (idx === -1) continue
+    const start = Math.max(0, idx - 2500)
+    const end = Math.min(html.length, idx + 65000)
+    scopes.push(html.slice(start, end))
+  }
+
+  return scopes.length > 0 ? scopes : [html]
+}
+
 function extractDynamicImageUrls(html: string): string[] {
   const urls: string[] = []
 
-  for (const dynamicImageMatch of html.matchAll(/data-a-dynamic-image="([^"]+)"/g)) {
-    if (urls.length >= 12) break
-    if (!dynamicImageMatch?.[1]) continue
-    const decoded = decodeHtmlEntities(dynamicImageMatch[1])
-    for (const match of decoded.matchAll(/https:[^"]+\.(?:jpg|jpeg|png|webp)/gi)) {
+  for (const scope of extractGalleryScopes(html)) {
+    for (const dynamicImageMatch of scope.matchAll(/data-a-dynamic-image="([^"]+)"/g)) {
       if (urls.length >= 12) break
-      const url = upgradeAmazonImageUrl(match[0])
-      if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
+      if (!dynamicImageMatch?.[1]) continue
+      const decoded = decodeHtmlEntities(dynamicImageMatch[1])
+      for (const match of decoded.matchAll(/https:[^"]+\.(?:jpg|jpeg|png|webp)/gi)) {
+        if (urls.length >= 12) break
+        const url = upgradeAmazonImageUrl(match[0])
+        if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
+      }
     }
-  }
 
-  for (const pattern of [
-    /"hiRes"\s*:\s*"(https:[^"]+)"/g,
-    /"large"\s*:\s*"(https:[^"]+)"/g,
-    /"mainUrl"\s*:\s*"(https:[^"]+)"/g,
-    /data-old-hires="(https:[^"]+)"/g,
-  ]) {
-    for (const match of html.matchAll(pattern)) {
-      if (urls.length >= 12) break
-      const url = upgradeAmazonImageUrl(match[1])
-      if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
+    for (const pattern of [
+      /"hiRes"\s*:\s*"(https:[^"]+)"/g,
+      /"large"\s*:\s*"(https:[^"]+)"/g,
+      /data-old-hires="(https:[^"]+)"/g,
+      /data-thumb-action="[^"]*(https:[^"&]+)[^"]*"/g,
+      /class="[^"]*imageThumbnail[^"]*"[\s\S]*?<img[^>]+src="(https:[^"]+)"/g,
+    ]) {
+      for (const match of scope.matchAll(pattern)) {
+        if (urls.length >= 12) break
+        const url = upgradeAmazonImageUrl(match[1])
+        if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
+      }
     }
-  }
-
-  for (const match of html.matchAll(/"mainUrl":"(https:[^"]+)"/g)) {
     if (urls.length >= 12) break
-    const url = upgradeAmazonImageUrl(match[1])
-    if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
-  }
-
-  for (const match of html.matchAll(/"thumb":"(https:[^"]+)"/g)) {
-    if (urls.length >= 12) break
-    const url = upgradeAmazonImageUrl(match[1])
-    if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
-  }
-
-  for (const match of html.matchAll(/data-thumb-action="[^"]*(https:[^"&]+)[^"]*"/g)) {
-    if (urls.length >= 12) break
-    const url = upgradeAmazonImageUrl(match[1])
-    if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
-  }
-
-  for (const match of html.matchAll(/class="[^"]*imageThumbnail[^"]*"[\s\S]*?<img[^>]+src="(https:[^"]+)"/g)) {
-    if (urls.length >= 12) break
-    const url = upgradeAmazonImageUrl(match[1])
-    if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
   }
 
   return urls
