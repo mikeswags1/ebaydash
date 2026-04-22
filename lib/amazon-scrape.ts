@@ -3,7 +3,7 @@
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
   'Accept-Encoding': 'identity',
   'Cache-Control': 'no-cache',
@@ -32,6 +32,86 @@ function stripTags(s: string): string {
   return s.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
 }
 
+function decodeHtmlEntities(input: string): string {
+  return input
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&#38;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#x2F;/g, '/')
+    .replace(/\\u0026/g, '&')
+    .replace(/\\\//g, '/')
+}
+
+function dedupeImages(values: string[]) {
+  return Array.from(new Set(values.filter((url) => url.startsWith('http'))))
+}
+
+function extractDynamicImageUrls(html: string): string[] {
+  const urls: string[] = []
+
+  const dynamicImageMatch = html.match(/data-a-dynamic-image="([^"]+)"/)
+  if (dynamicImageMatch?.[1]) {
+    const decoded = decodeHtmlEntities(dynamicImageMatch[1])
+    for (const match of decoded.matchAll(/https:[^"]+\.(?:jpg|jpeg|png|webp)/gi)) {
+      if (urls.length >= 12) break
+      const url = decodeHtmlEntities(match[0]).replace(/\\/g, '')
+      if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
+    }
+  }
+
+  for (const match of html.matchAll(/"hiRes"\s*:\s*"(https:[^"]+)"/g)) {
+    if (urls.length >= 12) break
+    const url = decodeHtmlEntities(match[1]).replace(/\\/g, '')
+    if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
+  }
+
+  return urls
+}
+
+function extractColorImageUrls(html: string): string[] {
+  const images: string[] = []
+  const colorImagesIdx =
+    html.indexOf('"colorImages"') !== -1 ? html.indexOf('"colorImages"') : html.indexOf("'colorImages'")
+
+  if (colorImagesIdx === -1) return images
+
+  const section = html.slice(colorImagesIdx, colorImagesIdx + 100000)
+  const initialIdx = section.indexOf('"initial"') !== -1 ? section.indexOf('"initial"') : section.indexOf("'initial'")
+  if (initialIdx === -1) return images
+
+  const arrayStart = section.indexOf('[', initialIdx)
+  if (arrayStart === -1) return images
+
+  let depth = 0
+  let arrayEnd = -1
+  for (let i = arrayStart; i < Math.min(arrayStart + 50000, section.length); i += 1) {
+    if (section[i] === '[') depth += 1
+    else if (section[i] === ']') {
+      depth -= 1
+      if (depth === 0) {
+        arrayEnd = i
+        break
+      }
+    }
+  }
+
+  if (arrayEnd === -1) return images
+
+  const initialArray = section.slice(arrayStart, arrayEnd + 1)
+  for (const pattern of [/"hiRes"\s*:\s*"(https:[^"]+)"/g, /"large"\s*:\s*"(https:[^"]+)"/g]) {
+    for (const match of initialArray.matchAll(pattern)) {
+      if (images.length >= 12) break
+      if (!images.includes(match[1])) images.push(match[1])
+    }
+    if (images.length > 0) break
+  }
+
+  return images
+}
+
 export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct | null> {
   try {
     const res = await fetch(`https://www.amazon.com/dp/${asin}?th=1&psc=1`, {
@@ -39,22 +119,24 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
       signal: AbortSignal.timeout(12000),
     })
     if (!res.ok) return null
+
     const html = await res.text()
     if (html.includes('api-services-support@amazon.com') || html.length < 50000) return null
 
-    // ── Title ────────────────────────────────────────────────────────────────
     let title = ''
     const titlePatterns = [
       /id="productTitle"[^>]*>\s*([^<]{5,200})/,
       /id="title"[^>]*>\s*<span[^>]*>\s*([^<]{5,200})/,
     ]
-    for (const p of titlePatterns) {
-      const m = html.match(p)
-      if (m) { title = m[1].trim(); break }
+    for (const pattern of titlePatterns) {
+      const match = html.match(pattern)
+      if (match) {
+        title = match[1].trim()
+        break
+      }
     }
     if (!title) return null
 
-    // ── Price ────────────────────────────────────────────────────────────────
     let price = 0
     const pricePatterns = [
       /"priceAmount":(\d+\.?\d*)/,
@@ -64,55 +146,29 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
       /id="priceblock_dealprice"[^>]*>\s*\$?([\d,]+\.?\d*)/,
       /"buyingPrice":"?\$?([\d,]+\.?\d*)"/,
     ]
-    for (const p of pricePatterns) {
-      const m = html.match(p)
-      if (m) {
-        const val = parseFloat(m[1].replace(/,/g, ''))
-        if (val > 0) { price = val; break }
-      }
-    }
-
-    // ── Images — extract only from colorImages.initial (this ASIN's variant only) ─
-    const images: string[] = []
-    const colorImagesIdx = html.indexOf('"colorImages"') !== -1
-      ? html.indexOf('"colorImages"')
-      : html.indexOf("'colorImages'")
-    if (colorImagesIdx !== -1) {
-      const section = html.slice(colorImagesIdx, colorImagesIdx + 100000)
-      // Find the 'initial' key — Amazon uses both single and double quotes
-      const initialIdx = section.indexOf('"initial"') !== -1
-        ? section.indexOf('"initial"')
-        : section.indexOf("'initial'")
-      if (initialIdx !== -1) {
-        const arrayStart = section.indexOf('[', initialIdx)
-        if (arrayStart !== -1) {
-          // Walk brackets to find the matching ] for the initial array
-          let depth = 0, arrayEnd = -1
-          for (let i = arrayStart; i < Math.min(arrayStart + 50000, section.length); i++) {
-            if (section[i] === '[') depth++
-            else if (section[i] === ']') { depth--; if (depth === 0) { arrayEnd = i; break } }
-          }
-          if (arrayEnd !== -1) {
-            const initialArray = section.slice(arrayStart, arrayEnd + 1)
-            for (const pattern of [/"hiRes"\s*:\s*"(https:[^"]+)"/g, /"large"\s*:\s*"(https:[^"]+)"/g]) {
-              for (const m of initialArray.matchAll(pattern)) {
-                if (images.length >= 6) break
-                if (!images.includes(m[1])) images.push(m[1])
-              }
-              if (images.length > 0) break
-            }
-          }
+    for (const pattern of pricePatterns) {
+      const match = html.match(pattern)
+      if (match) {
+        const value = parseFloat(match[1].replace(/,/g, ''))
+        if (value > 0) {
+          price = value
+          break
         }
       }
     }
-    // fallback: main image
+
+    let images = dedupeImages([
+      ...extractDynamicImageUrls(html),
+      ...extractColorImageUrls(html),
+    ]).slice(0, 12)
+
     if (images.length === 0) {
-      const mainImg = html.match(/id="landingImage"[^>]*data-a-dynamic-image="([^"]+)"/)
-        || html.match(/id="imgBlkFront"[^>]*src="(https:[^"]+)"/)
-      if (mainImg) images.push(mainImg[1].split('"')[0])
+      const mainImg =
+        html.match(/id="landingImage"[^>]*data-a-dynamic-image="([^"]+)"/) ||
+        html.match(/id="imgBlkFront"[^>]*src="(https:[^"]+)"/)
+      if (mainImg) images = [decodeHtmlEntities(mainImg[1].split('"')[0]).replace(/\\/g, '')]
     }
 
-    // ── Bullet features ──────────────────────────────────────────────────────
     const features: string[] = []
     const bulletSection = extractBetween(html, 'id="feature-bullets"', '</ul>')
     if (bulletSection) {
@@ -121,15 +177,15 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
         const text = stripTags(item)
         if (text && text.length > 10 && text.length < 300 && !text.toLowerCase().includes('make sure')) {
           features.push(text)
-          if (features.length >= 6) break
+          if (features.length >= 8) break
         }
       }
     }
 
-    // ── Tech specs table ─────────────────────────────────────────────────────
     const specs: Array<[string, string]> = []
-    const specSection = extractBetween(html, 'id="productDetails_techSpec_section_1"', '</table>')
-      || extractBetween(html, 'id="productDetails_db_sections"', '</table>')
+    const specSection =
+      extractBetween(html, 'id="productDetails_techSpec_section_1"', '</table>') ||
+      extractBetween(html, 'id="productDetails_db_sections"', '</table>')
     if (specSection) {
       const rows = specSection.match(/<tr[\s\S]*?<\/tr>/g) || []
       for (const row of rows) {
@@ -147,34 +203,47 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
 
     const available = !html.includes('Currently unavailable') && !html.includes('unavailable.')
 
-    return { asin, title: stripTags(title), price, images, features, specs, available }
+    return {
+      asin,
+      title: stripTags(title),
+      price,
+      images,
+      features,
+      specs,
+      available,
+    }
   } catch {
     return null
   }
 }
 
 // Search Amazon for products in a niche — scrapes search results page
-export async function scrapeAmazonSearch(query: string, page = 1): Promise<Array<{ asin: string; title: string; price: number; imageUrl: string; rating: number; reviewCount: number }>> {
+export async function scrapeAmazonSearch(
+  query: string,
+  page = 1
+): Promise<Array<{ asin: string; title: string; price: number; imageUrl: string; rating: number; reviewCount: number }>> {
   try {
     const url = `https://www.amazon.com/s?k=${encodeURIComponent(query)}&page=${page}`
     const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(12000) })
     if (!res.ok) return []
+
     const html = await res.text()
     if (html.includes('api-services-support@amazon.com') || html.length < 30000) return []
 
     const results: Array<{ asin: string; title: string; price: number; imageUrl: string; rating: number; reviewCount: number }> = []
-
-    // Products appear in data-asin attributes on result divs
-    const productBlocks = html.match(/data-asin="([A-Z0-9]{10})"[\s\S]*?data-component-type="s-search-result"[\s\S]*?(?=data-asin="|$)/g) || []
+    const productBlocks =
+      html.match(/data-asin="([A-Z0-9]{10})"[\s\S]*?data-component-type="s-search-result"[\s\S]*?(?=data-asin="|$)/g) ||
+      []
 
     for (const block of productBlocks) {
       if (results.length >= 20) break
       const asinMatch = block.match(/data-asin="([A-Z0-9]{10})"/)
       if (!asinMatch) continue
-      const asin = asinMatch[1]
+      const foundAsin = asinMatch[1]
 
-      const titleMatch = block.match(/class="a-size-medium[^"]*a-color-base[^"]*a-text-normal"[^>]*>([\s\S]*?)<\/span>/)
-        || block.match(/class="a-size-base-plus[^"]*"[^>]*>([\s\S]*?)<\/span>/)
+      const titleMatch =
+        block.match(/class="a-size-medium[^"]*a-color-base[^"]*a-text-normal"[^>]*>([\s\S]*?)<\/span>/) ||
+        block.match(/class="a-size-base-plus[^"]*"[^>]*>([\s\S]*?)<\/span>/)
       const title = titleMatch ? stripTags(titleMatch[1]) : ''
       if (!title || title.length < 5) continue
 
@@ -190,8 +259,9 @@ export async function scrapeAmazonSearch(query: string, page = 1): Promise<Array
       const reviewMatch = block.match(/aria-label="([\d,]+) ratings"/)
       const reviewCount = reviewMatch ? parseInt(reviewMatch[1].replace(/,/g, ''), 10) : 0
 
-      if (asin && title) results.push({ asin, title, price, imageUrl, rating, reviewCount })
+      results.push({ asin: foundAsin, title, price, imageUrl, rating, reviewCount })
     }
+
     return results
   } catch {
     return []
