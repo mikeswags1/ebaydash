@@ -6,6 +6,9 @@ export interface AsinResult {
   amazonPrice: number
   imageUrl?: string
   images?: string[]
+  features?: string[]
+  description?: string
+  specs?: Array<[string, string]>
   available: boolean
   amazonUrl?: string
   ebayTitle?: string
@@ -36,6 +39,10 @@ export interface FinderProduct {
   profit: number
   roi: number
   imageUrl?: string
+  images?: string[]
+  features?: string[]
+  description?: string
+  specs?: Array<[string, string]>
   risk: string
   salesVolume?: string
 }

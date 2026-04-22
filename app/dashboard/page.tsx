@@ -337,6 +337,10 @@ export default function Dashboard() {
           ebayPrice: product.ebayPrice,
           amazonPrice: product.amazonPrice,
           imageUrl: product.imageUrl,
+          images: product.images,
+          features: product.features,
+          description: product.description,
+          specs: product.specs,
           niche: nicheState.value,
         })
 
@@ -431,6 +435,10 @@ export default function Dashboard() {
               title: validated.title,
               amazonPrice: validated.amazonPrice,
               imageUrl: validated.imageUrl || prev.modal.imageUrl,
+              images: validated.images || prev.modal.images,
+              features: validated.features || prev.modal.features,
+              description: validated.description || prev.modal.description,
+              specs: validated.specs || prev.modal.specs,
             },
             validating: false,
             validated: Boolean(validated.imageUrl && validated.amazonPrice > 0),
@@ -481,6 +489,10 @@ export default function Dashboard() {
         ebayPrice: parsedPrice,
         amazonPrice: listingState.modal.amazonPrice,
         imageUrl: listingState.modal.imageUrl,
+        images: listingState.modal.images,
+        features: listingState.modal.features,
+        description: listingState.modal.description,
+        specs: listingState.modal.specs,
         niche: nicheState.value,
       })
 

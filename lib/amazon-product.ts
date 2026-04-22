@@ -14,6 +14,10 @@ export type ValidatedAmazonProduct = {
   amazonPrice: number
   images: string[]
   imageUrl?: string
+  features: string[]
+  description: string
+  specs: Array<[string, string]>
+  brand?: string
   available: boolean
   source: 'api' | 'search' | 'scrape' | 'cache' | 'fallback'
   usedFallbackTitle?: boolean
@@ -26,6 +30,10 @@ type CachedAmazonProduct = {
   amazon_price: string | number
   images: unknown
   primary_image: string | null
+  features: unknown
+  description: string | null
+  specs: unknown
+  brand: string | null
   available: boolean | null
 }
 
@@ -46,8 +54,57 @@ function sanitizeTitle(value: unknown) {
     .trim()
 }
 
+function sanitizeText(value: unknown) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function dedupeImages(values: string[]) {
   return Array.from(new Set(values.filter((url) => url.startsWith('http'))))
+}
+
+function normalizeFeatures(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return Array.from(
+    new Set(
+      value
+        .map((entry) => sanitizeText(entry))
+        .filter((entry) => entry.length > 6)
+        .slice(0, 12)
+    )
+  )
+}
+
+function normalizeSpecs(value: unknown) {
+  if (!Array.isArray(value)) return []
+  const specs: Array<[string, string]> = []
+  for (const entry of value) {
+    if (!Array.isArray(entry) || entry.length < 2) continue
+    const key = sanitizeText(entry[0]).slice(0, 120)
+    const val = sanitizeText(entry[1]).slice(0, 300)
+    if (!key || !val) continue
+    specs.push([key, val])
+    if (specs.length >= 20) break
+  }
+  return specs
+}
+
+function inferBrand(title: string, specs: Array<[string, string]>, brand?: string) {
+  const direct = sanitizeText(brand)
+  if (direct) return direct
+  const specBrand = specs.find(([key]) => /brand/i.test(key))
+  if (specBrand?.[1]) return sanitizeText(specBrand[1])
+  const firstWord = sanitizeTitle(title).split(/\s+/)[0] || ''
+  return firstWord.length > 1 ? firstWord : ''
+}
+
+function toSpecEntries(value: unknown) {
+  if (!value || typeof value !== 'object') return []
+  return Object.entries(value as Record<string, unknown>)
+    .map(([key, val]) => [sanitizeText(key), sanitizeText(val)] as [string, string])
+    .filter(([key, val]) => key.length > 1 && val.length > 1)
+    .slice(0, 16)
 }
 
 function mergeProducts(asin: string, products: Array<ValidatedAmazonProduct | null>, options: FetchAmazonProductOptions) {
@@ -69,6 +126,10 @@ function mergeProducts(asin: string, products: Array<ValidatedAmazonProduct | nu
     title: preferred.title,
     amazonPrice: preferred.amazonPrice,
     images,
+    features: validProducts.flatMap((product) => product.features),
+    description: validProducts.find((product) => product.description)?.description || '',
+    specs: validProducts.flatMap((product) => product.specs),
+    brand: preferred.brand,
     available: validProducts.some((product) => product.available),
     source: preferred.source,
     fallbackTitle: options.fallbackTitle,
@@ -86,6 +147,10 @@ function toProduct(input: {
   title?: string
   amazonPrice?: number
   images?: string[]
+  features?: unknown
+  description?: unknown
+  specs?: unknown
+  brand?: string
   available?: boolean
   source: ValidatedAmazonProduct['source']
   fallbackTitle?: string
@@ -93,6 +158,9 @@ function toProduct(input: {
 }): ValidatedAmazonProduct | null {
   const title = sanitizeTitle(input.title || input.fallbackTitle)
   const images = dedupeImages(input.images || [])
+  const features = normalizeFeatures(input.features)
+  const description = sanitizeText(input.description)
+  const specs = normalizeSpecs(input.specs)
   const recoveredPrice = Number.isFinite(input.amazonPrice) ? Number(input.amazonPrice) : 0
   const fallbackPrice = Number.isFinite(input.fallbackPrice) ? Number(input.fallbackPrice) : 0
   const amazonPrice = recoveredPrice > 0 ? recoveredPrice : fallbackPrice
@@ -105,6 +173,10 @@ function toProduct(input: {
     amazonPrice,
     images,
     imageUrl: images[0],
+    features,
+    description,
+    specs,
+    brand: inferBrand(title, specs, input.brand),
     available: input.available ?? amazonPrice > 0,
     source: input.source,
     usedFallbackTitle: !sanitizeTitle(input.title) && Boolean(input.fallbackTitle),
@@ -120,17 +192,25 @@ async function ensureAmazonProductCacheTable() {
       amazon_price NUMERIC(10,2) NOT NULL,
       primary_image TEXT,
       images JSONB NOT NULL DEFAULT '[]'::jsonb,
+      features JSONB NOT NULL DEFAULT '[]'::jsonb,
+      description TEXT,
+      specs JSONB NOT NULL DEFAULT '[]'::jsonb,
+      brand TEXT,
       available BOOLEAN NOT NULL DEFAULT TRUE,
       source TEXT NOT NULL DEFAULT 'api',
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `.catch(() => {})
+  await sql`ALTER TABLE amazon_product_cache ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '[]'::jsonb`.catch(() => {})
+  await sql`ALTER TABLE amazon_product_cache ADD COLUMN IF NOT EXISTS description TEXT`.catch(() => {})
+  await sql`ALTER TABLE amazon_product_cache ADD COLUMN IF NOT EXISTS specs JSONB NOT NULL DEFAULT '[]'::jsonb`.catch(() => {})
+  await sql`ALTER TABLE amazon_product_cache ADD COLUMN IF NOT EXISTS brand TEXT`.catch(() => {})
 }
 
 async function loadCachedAmazonProduct(asin: string): Promise<ValidatedAmazonProduct | null> {
   await ensureAmazonProductCacheTable()
   const rows = await queryRows<CachedAmazonProduct>`
-    SELECT asin, title, amazon_price, images, primary_image, available
+    SELECT asin, title, amazon_price, images, primary_image, features, description, specs, brand, available
     FROM amazon_product_cache
     WHERE asin = ${asin}
     LIMIT 1
@@ -149,6 +229,10 @@ async function loadCachedAmazonProduct(asin: string): Promise<ValidatedAmazonPro
     title: cached.title,
     amazonPrice: parseAmazonPrice(cached.amazon_price),
     images,
+    features: cached.features,
+    description: cached.description,
+    specs: cached.specs,
+    brand: sanitizeText(cached.brand),
     available: cached.available ?? true,
     source: 'cache',
   })
@@ -157,13 +241,17 @@ async function loadCachedAmazonProduct(asin: string): Promise<ValidatedAmazonPro
 async function saveCachedAmazonProduct(product: ValidatedAmazonProduct) {
   await ensureAmazonProductCacheTable()
   await sql`
-    INSERT INTO amazon_product_cache (asin, title, amazon_price, primary_image, images, available, source, updated_at)
+    INSERT INTO amazon_product_cache (asin, title, amazon_price, primary_image, images, features, description, specs, brand, available, source, updated_at)
     VALUES (
       ${product.asin},
       ${product.title.slice(0, 500)},
       ${product.amazonPrice.toFixed(2)},
       ${product.imageUrl || null},
       ${JSON.stringify(product.images)},
+      ${JSON.stringify(product.features)},
+      ${product.description || null},
+      ${JSON.stringify(product.specs)},
+      ${product.brand || null},
       ${product.available},
       ${product.source},
       NOW()
@@ -173,6 +261,10 @@ async function saveCachedAmazonProduct(product: ValidatedAmazonProduct) {
       amazon_price = EXCLUDED.amazon_price,
       primary_image = EXCLUDED.primary_image,
       images = EXCLUDED.images,
+      features = EXCLUDED.features,
+      description = EXCLUDED.description,
+      specs = EXCLUDED.specs,
+      brand = EXCLUDED.brand,
       available = EXCLUDED.available,
       source = EXCLUDED.source,
       updated_at = NOW()
@@ -225,6 +317,24 @@ async function fetchProductDetailsFromApi(asin: string, fallbackImage?: string) 
       title: data.product_title || data.title,
       amazonPrice: parseAmazonPrice(data.product_price || data.price),
       images,
+      features:
+        data.about_product ||
+        data.feature_bullets ||
+        data.bullet_points ||
+        data.product_features ||
+        data.highlights ||
+        [],
+      description:
+        data.product_description ||
+        data.description ||
+        data.synopsis ||
+        data.product_information ||
+        '',
+      specs: [
+        ...toSpecEntries(data.product_overview),
+        ...toSpecEntries(data.product_details),
+      ],
+      brand: sanitizeText((data as Record<string, unknown>).product_byline || (data as Record<string, unknown>).brand),
       available:
         String(data.product_availability || '').toLowerCase() !== 'currently unavailable' &&
         parseAmazonPrice(data.product_price || data.price) > 0,
@@ -264,6 +374,7 @@ async function fetchProductFromSearch(asin: string, fallbackImage?: string) {
         normalizeImageUrl(match.product_photo),
         normalizeImageUrl(fallbackImage),
       ],
+      brand: sanitizeText(match.product_byline || ''),
       available: parseAmazonPrice(match.product_price || match.product_original_price) > 0,
       source: 'search',
     })
@@ -281,6 +392,8 @@ async function fetchProductFromScrape(asin: string, fallbackImage?: string) {
     title: scraped.title,
     amazonPrice: scraped.price,
     images: [...scraped.images, normalizeImageUrl(fallbackImage)],
+    features: scraped.features,
+    specs: scraped.specs,
     available: scraped.available && scraped.price > 0,
     source: 'scrape',
   })
@@ -333,6 +446,10 @@ export async function fetchAmazonProductByAsin(
       title: cached.title,
       amazonPrice: cached.amazonPrice,
       images: dedupeImages([...cached.images, normalizeImageUrl(options.fallbackImage)]),
+      features: cached.features,
+      description: cached.description,
+      specs: cached.specs,
+      brand: cached.brand,
       available: cached.available,
       source: 'cache',
       fallbackTitle: options.fallbackTitle,
@@ -355,6 +472,9 @@ export async function fetchAmazonProductByAsin(
     title: options.fallbackTitle || `Item ${asin}`,
     amazonPrice: options.fallbackPrice,
     images: dedupeImages([normalizeImageUrl(options.fallbackImage)]),
+    features: [],
+    description: '',
+    specs: [],
     available: Number(options.fallbackPrice || 0) > 0,
     source: 'fallback',
     fallbackTitle: options.fallbackTitle,

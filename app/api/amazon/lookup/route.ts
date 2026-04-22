@@ -30,7 +30,11 @@ export async function GET(req: NextRequest) {
     amazonPrice: product.amazonPrice,
     imageUrl: product.imageUrl,
     images: product.images,
+    features: product.features,
+    description: product.description,
+    specs: product.specs,
     available: product.available,
+    amazonUrl: `https://www.amazon.com/dp/${product.asin}`,
     source: product.source,
   })
 }

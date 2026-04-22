@@ -46,17 +46,19 @@ async function saveRecoveredMapping(args: {
   amazonPrice: number
   amazonImageUrl?: string
   amazonImages?: string[]
+  amazonSnapshot?: Record<string, unknown>
 }) {
   await ensureListedAsinsFinancialColumns()
   await sql`
-    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, amazon_image_url, amazon_images)
-    VALUES (${args.userId}, ${args.asin}, ${args.title.slice(0, 200)}, ${args.itemId}, ${args.amazonPrice.toFixed(2)}, ${args.amazonImageUrl || null}, ${JSON.stringify(args.amazonImages || [])})
+    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, amazon_image_url, amazon_images, amazon_snapshot)
+    VALUES (${args.userId}, ${args.asin}, ${args.title.slice(0, 200)}, ${args.itemId}, ${args.amazonPrice.toFixed(2)}, ${args.amazonImageUrl || null}, ${JSON.stringify(args.amazonImages || [])}, ${JSON.stringify(args.amazonSnapshot || null)})
     ON CONFLICT (user_id, asin) DO UPDATE SET
       title = ${args.title.slice(0, 200)},
       ebay_listing_id = ${args.itemId},
       amazon_price = ${args.amazonPrice.toFixed(2)},
       amazon_image_url = ${args.amazonImageUrl || null},
       amazon_images = ${JSON.stringify(args.amazonImages || [])},
+      amazon_snapshot = COALESCE(${JSON.stringify(args.amazonSnapshot || null)}::jsonb, listed_asins.amazon_snapshot),
       listed_at = NOW()
   `.catch(() => {})
 }
@@ -102,8 +104,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const rows = await queryRows<{ asin?: string; title?: string; amazon_price?: string | number; amazon_image_url?: string | null; amazon_images?: unknown }>`
-      SELECT asin, title, amazon_price, amazon_image_url, amazon_images
+    const rows = await queryRows<{ asin?: string; title?: string; amazon_price?: string | number; amazon_image_url?: string | null; amazon_images?: unknown; amazon_snapshot?: unknown }>`
+      SELECT asin, title, amazon_price, amazon_image_url, amazon_images, amazon_snapshot
       FROM listed_asins
       WHERE user_id = ${session.user.id} AND ebay_listing_id = ${itemId}
       LIMIT 1
@@ -111,6 +113,9 @@ export async function GET(req: NextRequest) {
 
     if (rows[0]?.asin) {
       const asin = String(rows[0].asin)
+      const snapshot = rows[0].amazon_snapshot && typeof rows[0].amazon_snapshot === 'object'
+        ? rows[0].amazon_snapshot as Record<string, unknown>
+        : null
       const validated = await fetchAmazonProductByAsin({ asin })
 
       if (!validated) {
@@ -118,16 +123,31 @@ export async function GET(req: NextRequest) {
         const storedImages = Array.isArray(rows[0].amazon_images)
           ? rows[0].amazon_images.map((value) => String(value || '')).filter((value) => value.startsWith('http'))
           : []
-        const storedImageUrl = String(rows[0].amazon_image_url || '') || storedImages[0] || undefined
+        const snapshotImages = Array.isArray(snapshot?.images)
+          ? snapshot.images.map((value) => String(value || '')).filter((value) => value.startsWith('http'))
+          : []
+        const storedImageUrl =
+          String(snapshot?.imageUrl || '') ||
+          String(rows[0].amazon_image_url || '') ||
+          snapshotImages[0] ||
+          storedImages[0] ||
+          undefined
 
         if (storedPrice > 0) {
+          const storedTitle = String(snapshot?.title || rows[0].title || asin)
           return apiOk({
             asin,
-            title: String(rows[0].title || asin),
+            title: storedTitle,
             amazonPrice: storedPrice,
             imageUrl: storedImageUrl,
-            images: storedImages,
-            amazonUrl: `https://www.amazon.com/dp/${asin}`,
+            images: snapshotImages.length > 0 ? snapshotImages : storedImages,
+            features: Array.isArray(snapshot?.features) ? snapshot.features : [],
+            description: String(snapshot?.description || ''),
+            specs: Array.isArray(snapshot?.specs) ? snapshot.specs : [],
+            amazonUrl: String(
+              snapshot?.amazonUrl ||
+              (storedTitle ? `https://www.amazon.com/s?k=${encodeURIComponent(storedTitle)}` : `https://www.amazon.com/dp/${asin}`)
+            ),
             available: true,
             source: 'db' as const,
           })
@@ -142,6 +162,19 @@ export async function GET(req: NextRequest) {
             amazonPrice: validated.amazonPrice,
             amazonImageUrl: validated.imageUrl,
             amazonImages: validated.images,
+            amazonSnapshot: {
+              asin: validated.asin,
+              title: validated.title,
+              amazonPrice: validated.amazonPrice,
+              imageUrl: validated.imageUrl,
+              images: validated.images,
+              features: validated.features,
+              description: validated.description,
+              specs: validated.specs,
+              available: validated.available,
+              source: validated.source,
+              amazonUrl: `https://www.amazon.com/dp/${validated.asin}`,
+            },
           })
         }
 
@@ -151,6 +184,9 @@ export async function GET(req: NextRequest) {
           amazonPrice: validated.amazonPrice,
           imageUrl: validated.imageUrl,
           images: validated.images,
+          features: validated.features,
+          description: validated.description,
+          specs: validated.specs,
           amazonUrl: `https://www.amazon.com/dp/${asin}`,
           available: validated.available,
           source: 'db' as const,
@@ -217,6 +253,19 @@ export async function GET(req: NextRequest) {
           amazonPrice: validated.amazonPrice,
           amazonImageUrl: validated.imageUrl,
           amazonImages: validated.images,
+          amazonSnapshot: {
+            asin: validated.asin,
+            title: validated.title,
+            amazonPrice: validated.amazonPrice,
+            imageUrl: validated.imageUrl,
+            images: validated.images,
+            features: validated.features,
+            description: validated.description,
+            specs: validated.specs,
+            available: validated.available,
+            source: validated.source,
+            amazonUrl: `https://www.amazon.com/dp/${validated.asin}`,
+          },
         })
 
         return apiOk({
@@ -225,6 +274,9 @@ export async function GET(req: NextRequest) {
           amazonPrice: validated.amazonPrice,
           imageUrl: validated.imageUrl,
           images: validated.images,
+          features: validated.features,
+          description: validated.description,
+          specs: validated.specs,
           amazonUrl: `https://www.amazon.com/dp/${validated.asin}`,
           available: validated.available,
           ebayTitle,
@@ -255,6 +307,19 @@ export async function GET(req: NextRequest) {
           amazonPrice: validated.amazonPrice,
           amazonImageUrl: validated.imageUrl,
           amazonImages: validated.images,
+          amazonSnapshot: {
+            asin: validated.asin,
+            title: validated.title,
+            amazonPrice: validated.amazonPrice,
+            imageUrl: validated.imageUrl,
+            images: validated.images,
+            features: validated.features,
+            description: validated.description,
+            specs: validated.specs,
+            available: validated.available,
+            source: validated.source,
+            amazonUrl: `https://www.amazon.com/dp/${validated.asin}`,
+          },
         })
 
         return apiOk({
@@ -263,6 +328,9 @@ export async function GET(req: NextRequest) {
           amazonPrice: validated.amazonPrice,
           imageUrl: validated.imageUrl,
           images: validated.images,
+          features: validated.features,
+          description: validated.description,
+          specs: validated.specs,
           amazonUrl: `https://www.amazon.com/dp/${validated.asin}`,
           available: validated.available,
           ebayTitle,

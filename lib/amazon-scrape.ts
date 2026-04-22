@@ -52,8 +52,9 @@ function dedupeImages(values: string[]) {
 function extractDynamicImageUrls(html: string): string[] {
   const urls: string[] = []
 
-  const dynamicImageMatch = html.match(/data-a-dynamic-image="([^"]+)"/)
-  if (dynamicImageMatch?.[1]) {
+  for (const dynamicImageMatch of html.matchAll(/data-a-dynamic-image="([^"]+)"/g)) {
+    if (urls.length >= 12) break
+    if (!dynamicImageMatch?.[1]) continue
     const decoded = decodeHtmlEntities(dynamicImageMatch[1])
     for (const match of decoded.matchAll(/https:[^"]+\.(?:jpg|jpeg|png|webp)/gi)) {
       if (urls.length >= 12) break
@@ -62,10 +63,17 @@ function extractDynamicImageUrls(html: string): string[] {
     }
   }
 
-  for (const match of html.matchAll(/"hiRes"\s*:\s*"(https:[^"]+)"/g)) {
-    if (urls.length >= 12) break
-    const url = decodeHtmlEntities(match[1]).replace(/\\/g, '')
-    if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
+  for (const pattern of [
+    /"hiRes"\s*:\s*"(https:[^"]+)"/g,
+    /"large"\s*:\s*"(https:[^"]+)"/g,
+    /"mainUrl"\s*:\s*"(https:[^"]+)"/g,
+    /data-old-hires="(https:[^"]+)"/g,
+  ]) {
+    for (const match of html.matchAll(pattern)) {
+      if (urls.length >= 12) break
+      const url = decodeHtmlEntities(match[1]).replace(/\\/g, '')
+      if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
+    }
   }
 
   return urls

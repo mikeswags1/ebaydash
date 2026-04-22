@@ -323,7 +323,7 @@ function buildDescription(title: string, features: string[], about: string, imag
     .replace(/&amp;/g, '&').replace(/&#38;/g, '&')
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 
-  const normalizedFeatures = features.slice(0, 8)
+  const normalizedFeatures = features.filter(Boolean).slice(0, 10)
   const featureBullets = normalizedFeatures.map(f => `<li style="margin-bottom:8px;">${f}</li>`).join('\n')
   const descriptionParagraphs = toParagraphs(about)
   const overviewBlock = descriptionParagraphs.length > 0
@@ -333,7 +333,7 @@ function buildDescription(title: string, features: string[], about: string, imag
     : `<p style="font-size:14px;line-height:1.85;padding:0 14px 12px;margin:0;color:#333;">This listing is based on the matching manufacturer product data for ${displayTitle}. Review the item specifics and feature summary below for the most important fit, function, and package details.</p>`
 
   const heroImages = images.slice(0, 2)
-  const detailImages = images.slice(2, 4)
+  const detailImages = images.slice(2, 6)
   const heroImageBlock = heroImages.length > 0
     ? `<div style="display:flex;gap:12px;justify-content:center;align-items:flex-start;padding:16px 0 10px;flex-wrap:wrap;">
 ${heroImages.map(u => `      <img src="${u}" alt="" style="width:${heroImages.length === 1 ? '320px' : '240px'};max-width:100%;height:auto;object-fit:contain;border:1px solid #e6e6e6;border-radius:8px;background:#fafafa;">`).join('\n')}
@@ -341,7 +341,7 @@ ${heroImages.map(u => `      <img src="${u}" alt="" style="width:${heroImages.le
     : ''
   const detailImageBlock = detailImages.length > 0
     ? `<div style="display:flex;gap:12px;justify-content:center;align-items:flex-start;padding:8px 0 0;flex-wrap:wrap;">
-${detailImages.map(u => `      <img src="${u}" alt="" style="width:240px;max-width:100%;height:auto;object-fit:contain;border:1px solid #e6e6e6;border-radius:8px;background:#fafafa;">`).join('\n')}
+${detailImages.map(u => `      <img src="${u}" alt="" style="width:220px;max-width:100%;height:auto;object-fit:contain;border:1px solid #e6e6e6;border-radius:8px;background:#fafafa;">`).join('\n')}
     </div>`
     : ''
 
@@ -363,7 +363,7 @@ ${detailImages.map(u => `      <img src="${u}" alt="" style="width:240px;max-wid
 <div style="max-width:760px;margin:0 auto;padding:18px 14px 28px;box-sizing:border-box;overflow:hidden;border:1px solid #d8d8d8;border-radius:8px;">
 
   <!-- Title -->
-  <h1 style="font-size:26px;font-weight:700;padding:10px 10px 14px;margin:0;border-bottom:1px solid #e4e4e4;line-height:1.35;word-wrap:break-word;text-align:center;">${displayTitle}</h1>
+  <h1 style="font-size:28px;font-weight:700;padding:10px 10px 14px;margin:0;border-bottom:1px solid #e4e4e4;line-height:1.35;word-wrap:break-word;text-align:center;">${displayTitle}</h1>
 
   <!-- Product images -->
   ${heroImageBlock}
@@ -374,9 +374,9 @@ ${detailImages.map(u => `      <img src="${u}" alt="" style="width:240px;max-wid
 
   <!-- Features -->
   ${sectionHeader('Product Features')}
-  <ul style="font-size:15px;font-weight:500;line-height:1.85;padding:14px 14px 14px 30px;margin:0;color:#111;">
+  ${featureBullets ? `<ul style="font-size:15px;font-weight:500;line-height:1.85;padding:14px 14px 14px 30px;margin:0;color:#111;">
     ${featureBullets}
-  </ul>
+  </ul>` : `<p style="font-size:14px;line-height:1.85;padding:12px 14px;margin:0;color:#333;">Review the product details and compatibility notes above to confirm the fit and package contents for your order.</p>`}
 
   <!-- Specs (if available) -->
   ${specRows ? `${sectionHeader('Specifications')}<table style="width:100%;border-collapse:collapse;margin-top:2px;"><tbody>${specRows}</tbody></table>` : ''}
@@ -506,7 +506,18 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
-  const { asin, title, ebayPrice, amazonPrice, imageUrl, niche } = await req.json()
+  const {
+    asin,
+    title,
+    ebayPrice,
+    amazonPrice,
+    imageUrl,
+    images,
+    features,
+    description: inputDescription,
+    specs,
+    niche,
+  } = await req.json()
   if (!asin || !title || ebayPrice === undefined || ebayPrice === null) {
     return apiError('ASIN, title, and eBay price are required.', { status: 400, code: 'INVALID_LISTING_INPUT' })
   }
@@ -575,18 +586,37 @@ export async function POST(req: NextRequest) {
     .join('')
 
   const rapidKey = process.env.RAPIDAPI_KEY || ''
-  const amazon = await fetchAmazonDetails(asin, rapidKey, validatedAmazon.imageUrl)
+  const fetchedAmazon = await fetchAmazonDetails(asin, rapidKey, validatedAmazon.imageUrl)
+  const amazon = {
+    images: dedupeImageUrls([
+      ...(Array.isArray(images) ? images : []),
+      ...validatedAmazon.images,
+      ...fetchedAmazon.images,
+      validatedAmazon.imageUrl,
+      imageUrl,
+    ]),
+    features: Array.from(new Set([
+      ...(Array.isArray(features) ? features : []),
+      ...validatedAmazon.features,
+      ...fetchedAmazon.features,
+    ].map((value) => sanitizeContent(String(value || ''))).filter((value) => value.length > 6))).slice(0, 10),
+    description: sanitizeContent(String(inputDescription || validatedAmazon.description || fetchedAmazon.description || '')),
+    specs: [
+      ...(Array.isArray(specs) ? specs : []),
+      ...validatedAmazon.specs,
+      ...fetchedAmazon.specs,
+    ].filter((entry): entry is [string, string] => Array.isArray(entry) && entry.length >= 2)
+      .map(([key, value]) => [sanitizeContent(key), sanitizeContent(value)] as [string, string])
+      .filter(([key, value]) => key.length > 1 && value.length > 1)
+      .slice(0, 16),
+    _apiError: fetchedAmazon._apiError,
+  }
 
   const host = req.headers.get('host') || ''
   const proto = host.startsWith('localhost') ? 'http' : 'https'
   const siteUrl = `${proto}://${host}`
 
-  const allImages = dedupeImageUrls([
-    ...validatedAmazon.images,
-    ...amazon.images,
-    validatedAmazon.imageUrl,
-    imageUrl,
-  ])
+  const allImages = dedupeImageUrls(amazon.images)
 
   const filteredImages = allImages
     .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
@@ -604,7 +634,7 @@ export async function POST(req: NextRequest) {
   const cleanGalleryUrls = filteredImages.slice(1).map((u) => `${siteUrl}/api/image/proxy?url=${encodeURIComponent(u)}`)
   const descriptionImageUrls = [
     cleanDescriptionPrimary,
-    ...cleanGalleryUrls.slice(0, 2),
+    ...cleanGalleryUrls.slice(0, 5),
   ]
 
   const epsSourceUrls =
@@ -753,15 +783,41 @@ export async function POST(req: NextRequest) {
 
   await ensureListedAsinsFinancialColumns()
   await sql`
-    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate, amazon_image_url, amazon_images)
-    VALUES (${session.user.id}, ${asin}, ${listingTitle.slice(0, 200)}, ${listingId}, ${listingAmazonPrice.toFixed(2)}, ${price}, ${0.1325}, ${primarySourceImage}, ${JSON.stringify(filteredImages)})
+    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate, amazon_image_url, amazon_images, amazon_snapshot)
+    VALUES (${session.user.id}, ${asin}, ${listingTitle.slice(0, 200)}, ${listingId}, ${listingAmazonPrice.toFixed(2)}, ${price}, ${0.1325}, ${primarySourceImage}, ${JSON.stringify(filteredImages)}, ${JSON.stringify({
+      asin,
+      title: listingTitle,
+      amazonPrice: listingAmazonPrice,
+      imageUrl: primarySourceImage,
+      images: filteredImages,
+      features: amazon.features,
+      description: amazon.description,
+      specs: amazon.specs,
+      available: validatedAmazon.available,
+      source: validatedAmazon.source,
+      amazonUrl: `https://www.amazon.com/dp/${asin}`,
+    })})
     ON CONFLICT (user_id, asin) DO UPDATE SET
       ebay_listing_id = ${listingId},
+      title = ${listingTitle.slice(0, 200)},
       amazon_price = ${listingAmazonPrice.toFixed(2)},
       ebay_price = ${price},
       ebay_fee_rate = ${0.1325},
       amazon_image_url = ${primarySourceImage},
       amazon_images = ${JSON.stringify(filteredImages)},
+      amazon_snapshot = ${JSON.stringify({
+        asin,
+        title: listingTitle,
+        amazonPrice: listingAmazonPrice,
+        imageUrl: primarySourceImage,
+        images: filteredImages,
+        features: amazon.features,
+        description: amazon.description,
+        specs: amazon.specs,
+        available: validatedAmazon.available,
+        source: validatedAmazon.source,
+        amazonUrl: `https://www.amazon.com/dp/${asin}`,
+      })},
       listed_at = NOW()
   `.catch(() => {})
 

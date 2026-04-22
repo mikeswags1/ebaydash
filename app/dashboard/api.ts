@@ -97,6 +97,10 @@ export async function publishProduct(input: {
   ebayPrice: number
   amazonPrice: number
   imageUrl?: string
+  images?: string[]
+  features?: string[]
+  description?: string
+  specs?: Array<[string, string]>
   niche: string | null
 }) {
   return requestJson<ListResult>('/api/ebay/list-product', {
