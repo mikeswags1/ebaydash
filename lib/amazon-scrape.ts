@@ -96,6 +96,18 @@ function extractDynamicImageUrls(html: string): string[] {
     if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
   }
 
+  for (const match of html.matchAll(/data-thumb-action="[^"]*(https:[^"&]+)[^"]*"/g)) {
+    if (urls.length >= 12) break
+    const url = upgradeAmazonImageUrl(match[1])
+    if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
+  }
+
+  for (const match of html.matchAll(/class="[^"]*imageThumbnail[^"]*"[\s\S]*?<img[^>]+src="(https:[^"]+)"/g)) {
+    if (urls.length >= 12) break
+    const url = upgradeAmazonImageUrl(match[1])
+    if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
+  }
+
   return urls
 }
 

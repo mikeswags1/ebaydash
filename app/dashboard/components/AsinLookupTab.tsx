@@ -62,7 +62,8 @@ export function AsinLookupTab({
               {orders.map((order) => {
                 const item = order.lineItems?.[0]
                 const itemId = item?.legacyItemId || ''
-                const storedAsin = itemId ? orderAsinMap[itemId]?.asin : undefined
+                const trackedOrder = itemId ? orderAsinMap[itemId] : undefined
+                const storedAsin = trackedOrder?.asin
                 const canFulfill = !!storedAsin
 
                 return (
@@ -96,7 +97,7 @@ export function AsinLookupTab({
                       </div>
                       {canFulfill ? (
                         <a
-                          href={`https://www.amazon.com/dp/${storedAsin}`}
+                          href={trackedOrder?.amazonUrl || `https://www.amazon.com/dp/${storedAsin}`}
                           target="_blank"
                           rel="noreferrer"
                           className="btn btn-gold btn-sm"

@@ -120,6 +120,30 @@ interface AmazonDetails {
   specs: Array<[string, string]>
 }
 
+function isGenericFeature(value: string) {
+  const normalized = value.toLowerCase()
+  return (
+    normalized.includes('brand new and factory sealed') ||
+    normalized.includes('premium quality') ||
+    normalized.includes('simple setup') ||
+    normalized.includes('easy to store and carry') ||
+    normalized.includes('excellent gift') ||
+    normalized.includes('ships fast via usps') ||
+    normalized.includes('30-day hassle-free returns')
+  )
+}
+
+function hasRichAmazonContent(input: { images?: string[]; features?: string[]; description?: string }) {
+  return (input.images?.length || 0) >= 2 || (input.features?.length || 0) >= 3 || String(input.description || '').length >= 120
+}
+
+function chooseBestDescription(...values: Array<string | undefined>) {
+  return values
+    .map((value) => sanitizeContent(String(value || '')))
+    .filter((value) => value.length > 20)
+    .sort((a, b) => b.length - a.length)[0] || ''
+}
+
 function sanitizeContent(text: string): string {
   return text
     .replace(/\b(amazon\.?com?|amazon prime|prime\s+shipping|prime\s+eligible|prime\s+member|fulfilled\s+by\s+amazon|ships\s+from\s+amazon|sold\s+by\s+amazon|amazon\s+basics|amazon\s+brand|buy\s+on\s+amazon|visit\s+the\s+\S+\s+store|fba)\b/gi, '')
@@ -614,24 +638,47 @@ export async function POST(req: NextRequest) {
 
   const rapidKey = process.env.RAPIDAPI_KEY || ''
   const fetchedAmazon = await fetchAmazonDetails(asin, rapidKey, validatedAmazon.imageUrl)
+  const validatedRich = hasRichAmazonContent(validatedAmazon)
+  const fetchedRich = hasRichAmazonContent(fetchedAmazon)
+  const clientRich = hasRichAmazonContent({
+    images: Array.isArray(images) ? images : [],
+    features: Array.isArray(features) ? features : [],
+    description: String(inputDescription || ''),
+  })
+  const preferredFeatureSources = [
+    ...(Array.isArray(features) ? features : []),
+    ...validatedAmazon.features,
+    ...(validatedRich || clientRich ? [] : fetchedAmazon.features),
+    ...(fetchedRich && !validatedRich ? fetchedAmazon.features : []),
+  ]
   const amazon = {
     images: dedupeImageUrls([
       ...(Array.isArray(images) ? images : []),
       ...validatedAmazon.images,
-      ...fetchedAmazon.images,
+      ...(validatedRich ? [] : fetchedAmazon.images),
+      ...(fetchedRich ? fetchedAmazon.images : []),
       validatedAmazon.imageUrl,
       imageUrl,
     ]),
-    features: Array.from(new Set([
-      ...(Array.isArray(features) ? features : []),
-      ...validatedAmazon.features,
-      ...fetchedAmazon.features,
-    ].map((value) => sanitizeContent(String(value || ''))).filter((value) => value.length > 6))).slice(0, 10),
-    description: sanitizeContent(String(inputDescription || validatedAmazon.description || fetchedAmazon.description || '')),
+    features: Array.from(
+      new Set(
+        preferredFeatureSources
+          .map((value) => sanitizeContent(String(value || '')))
+          .filter((value) => value.length > 6)
+          .filter((value) => (validatedRich || clientRich ? !isGenericFeature(value) : true))
+      )
+    ).slice(0, 10),
+    description: chooseBestDescription(
+      clientRich ? String(inputDescription || '') : '',
+      validatedAmazon.description,
+      fetchedAmazon.description,
+      String(inputDescription || '')
+    ),
     specs: [
       ...(Array.isArray(specs) ? specs : []),
       ...validatedAmazon.specs,
-      ...fetchedAmazon.specs,
+      ...(validatedRich ? [] : fetchedAmazon.specs),
+      ...(fetchedRich ? fetchedAmazon.specs : []),
     ].filter((entry): entry is [string, string] => Array.isArray(entry) && entry.length >= 2)
       .map(([key, value]) => [sanitizeContent(key), sanitizeContent(value)] as [string, string])
       .filter(([key, value]) => key.length > 1 && value.length > 1)

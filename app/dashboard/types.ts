@@ -108,4 +108,4 @@ export interface ScriptMessage {
   text: string
 }
 
-export type OrderAsinMap = Record<string, { asin: string; title: string }>
+export type OrderAsinMap = Record<string, { asin: string; title: string; amazonUrl?: string; imageUrl?: string }>

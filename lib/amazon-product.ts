@@ -65,6 +65,11 @@ function dedupeImages(values: string[]) {
   return Array.from(new Set(values.filter((url) => url.startsWith('http'))))
 }
 
+function hasRichContent(product: Pick<ValidatedAmazonProduct, 'images' | 'features' | 'description'> | null | undefined) {
+  if (!product) return false
+  return product.images.length >= 2 || product.features.length >= 3 || product.description.length >= 120
+}
+
 function normalizeFeatures(value: unknown) {
   if (!Array.isArray(value)) return []
   return Array.from(
@@ -436,13 +441,13 @@ export async function fetchAmazonProductByAsin(
     fetchProductFromScrape(asin, options.fallbackImage),
   ])
 
-  const merged = mergeProducts(asin, [apiResult, searchResult, scrapeResult], options)
+  const merged = mergeProducts(asin, [apiResult, searchResult, scrapeResult, cached], options)
   if (merged) {
     await saveCachedAmazonProduct(merged)
     return merged
   }
 
-  if (cached) {
+  if (cached && hasRichContent(cached)) {
     return toProduct({
       asin,
       title: cached.title,

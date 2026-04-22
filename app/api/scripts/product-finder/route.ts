@@ -29,6 +29,29 @@ type Product = {
   _rating?: number; _numRatings?: number
 }
 
+function normalizeTitle(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(pack|set|piece|pcs|count|for|with|and|the|a|an|of|to|in)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function getTitleScore(sourceTitle: string, candidateTitle: string) {
+  const sourceWords = new Set(normalizeTitle(sourceTitle).split(' ').filter(Boolean))
+  const candidateWords = new Set(normalizeTitle(candidateTitle).split(' ').filter(Boolean))
+  if (sourceWords.size === 0 || candidateWords.size === 0) return 0
+
+  let overlap = 0
+  for (const word of sourceWords) {
+    if (candidateWords.has(word)) overlap += 1
+  }
+
+  return overlap / Math.max(sourceWords.size, candidateWords.size)
+}
+
 function calcMetrics(amazonPrice: number) {
   const targetProfit = amazonPrice < 15  ? 7
     : amazonPrice < 40  ? 12
@@ -226,7 +249,7 @@ export async function GET(req: NextRequest) {
     })
 
     const enriched = await Promise.all(
-      results.slice(0, 12).map(async (product) => {
+      results.slice(0, 20).map(async (product) => {
         const validated = await fetchAmazonProductByAsin({
           asin: product.asin,
           fallbackImage: product.imageUrl,
@@ -236,6 +259,15 @@ export async function GET(req: NextRequest) {
         }).catch(() => null)
 
         if (!validated) return product
+        const titleScore = getTitleScore(product.title, validated.title)
+        const sameBrand =
+          product.title.split(/\s+/)[0]?.toLowerCase() &&
+          validated.title.split(/\s+/)[0]?.toLowerCase() &&
+          product.title.split(/\s+/)[0].toLowerCase() === validated.title.split(/\s+/)[0].toLowerCase()
+
+        if (titleScore < 0.42 && !sameBrand) {
+          return null
+        }
 
         return {
           ...product,
@@ -250,7 +282,15 @@ export async function GET(req: NextRequest) {
       })
     )
 
-    results.splice(0, enriched.length, ...enriched)
+    const filteredEnriched = enriched.filter((product): product is Product => Boolean(product))
+    const droppedSourceAsins = new Set(
+      results
+        .slice(0, 20)
+        .map((product) => product.asin)
+        .filter((asin) => !filteredEnriched.some((product) => product.asin === asin))
+    )
+    const remainder = results.slice(20).filter((product) => !droppedSourceAsins.has(product.asin))
+    results.splice(0, results.length, ...filteredEnriched, ...remainder)
 
     try {
       await sql`
