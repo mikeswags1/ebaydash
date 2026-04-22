@@ -218,7 +218,7 @@ function sanitizeDescriptionText(input: string) {
     .trim()
 }
 
-async function getSuggestedCategoryId(title: string, appId: string, token: string): Promise<string | null> {
+async function getSuggestedCategoryIds(title: string, appId: string, token: string): Promise<string[]> {
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetSuggestedCategoriesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
@@ -240,9 +240,10 @@ async function getSuggestedCategoryId(title: string, appId: string, token: strin
       signal: AbortSignal.timeout(12000),
     })
     const text = await res.text()
-    return text.match(/<CategoryID>(\d+)<\/CategoryID>/)?.[1] || null
+    const matches = [...text.matchAll(/<CategoryID>(\d+)<\/CategoryID>/g)].map((match) => match[1])
+    return Array.from(new Set(matches)).reverse()
   } catch {
-    return null
+    return []
   }
 }
 
@@ -903,8 +904,8 @@ export async function POST(req: NextRequest) {
     ? `<PictureDetails><GalleryType>Gallery</GalleryType>${usablePictureList.map(u => `<PictureURL>${xmlEncodeUrl(u)}</PictureURL>`).join('')}</PictureDetails>`
     : ''
 
-  const suggestedCategoryId = await getSuggestedCategoryId(safeTitle, appId, credentials.accessToken)
-  const preferredCategoryId = suggestedCategoryId || nicheCategoryId
+  const suggestedCategoryIds = await getSuggestedCategoryIds(safeTitle, appId, credentials.accessToken)
+  const preferredCategoryId = suggestedCategoryIds[0] || nicheCategoryId
   const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId: preferredCategoryId, price, pictureXml, itemSpecificsXml }
 
   // Parse eBay response — skip deprecated warnings to surface real errors
@@ -978,8 +979,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Attempt 3: if the preferred category fails, try the niche category once with the same specifics
-  if ((et === 'leaf' || et === 'specific') && suggestedCategoryId && nicheCategoryId !== suggestedCategoryId) {
+  // Attempt 3: if the preferred suggested category fails, try the remaining suggested categories from deepest to shallowest
+  if ((et === 'leaf' || et === 'specific') && suggestedCategoryIds.length > 1) {
+    for (const categoryId of suggestedCategoryIds.slice(1)) {
+      if (categoryId === preferredCategoryId) continue
+      responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId, itemSpecificsXml }), appId, credentials.accessToken)
+      p = parse(responseText)
+      et = errType(p.short, p.long, p.codes)
+      if (et !== 'leaf' && et !== 'specific') break
+    }
+  }
+
+  // Attempt 4: if the suggested tree still fails, try the niche category once with the same specifics
+  if ((et === 'leaf' || et === 'specific') && nicheCategoryId !== preferredCategoryId) {
     responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: nicheCategoryId, itemSpecificsXml }), appId, credentials.accessToken)
     p = parse(responseText)
     et = errType(p.short, p.long, p.codes)
