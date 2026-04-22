@@ -434,10 +434,7 @@ export default function Dashboard() {
             },
             validating: false,
             validated: Boolean(validated.imageUrl && validated.amazonPrice > 0),
-            error:
-              validated.imageUrl && validated.amazonPrice > 0
-                ? null
-                : 'ASIN validation did not return a usable Amazon image and price.',
+            error: null,
           }
         })
       } catch (error) {
@@ -448,7 +445,7 @@ export default function Dashboard() {
             ...prev,
             validating: false,
             validated: false,
-            error: getErrorMessage(error, 'ASIN validation failed. Verify the Amazon product before publishing.'),
+            error: null,
           }
         })
       }

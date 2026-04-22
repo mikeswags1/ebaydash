@@ -106,10 +106,10 @@ export function SellOnEbayModal({
 
             <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', background: validated ? 'rgba(46,207,118,0.08)' : 'rgba(200,162,80,0.08)', border: validated ? '1px solid rgba(46,207,118,0.2)' : '1px solid rgba(200,162,80,0.18)', fontSize: '12px', color: validated ? 'var(--grn)' : 'var(--gold)', lineHeight: 1.6 }}>
               {validating
-                ? 'Validating the Amazon ASIN now. You can still publish while recovery checks continue in the background.'
+                ? 'Pulling Amazon listing data and images now. You can still publish while recovery checks continue in the background.'
                 : validated
                   ? 'ASIN verified. This listing will use the validated Amazon title, image, and cost data.'
-                  : 'Recovery mode is active. If Amazon data is incomplete, the lister will use fallback title, price, and image recovery before it gives up.'}
+                  : 'Recovery mode is active. If Amazon data is incomplete, the lister will keep recovering title, price, and images before it gives up.'}
             </div>
 
             {listError ? (
