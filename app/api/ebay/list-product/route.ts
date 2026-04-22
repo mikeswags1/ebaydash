@@ -322,6 +322,29 @@ async function getLeafCategoryCandidates(categoryIds: string[], appId: string, t
   return validated
 }
 
+function buildCategorySearchQueries(title: string, niche: string | null) {
+  const stopWords = new Set(['with', 'for', 'the', 'and', 'set', 'pack', 'kit', 'new'])
+  const titleKeywords = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !stopWords.has(word))
+    .slice(0, 5)
+
+  return Array.from(
+    new Set(
+      [
+        title,
+        titleKeywords.join(' '),
+        niche || '',
+        niche && titleKeywords.length > 0 ? `${niche} ${titleKeywords.join(' ')}` : '',
+      ]
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+    )
+  )
+}
+
 function toParagraphs(text: string): string[] {
   return text
     .split(/\n+/)
@@ -987,10 +1010,15 @@ export async function POST(req: NextRequest) {
     ? `<PictureDetails><GalleryType>Gallery</GalleryType>${usablePictureList.map(u => `<PictureURL>${xmlEncodeUrl(u)}</PictureURL>`).join('')}</PictureDetails>`
     : ''
 
-  const suggestedCategoryIds = await getSuggestedCategoryIds(safeTitle, appId, credentials.accessToken)
+  const categorySearchQueries = buildCategorySearchQueries(safeTitle, niche)
+  const categorySuggestionGroups = await Promise.all(
+    categorySearchQueries.map((query) => getSuggestedCategoryIds(query, appId, credentials.accessToken))
+  )
+  const suggestedCategoryIds = Array.from(new Set(categorySuggestionGroups.flat()))
   const leafSuggestedCategoryIds = await getLeafCategoryCandidates(suggestedCategoryIds, appId, credentials.accessToken)
   const nicheIsLeaf = await isLeafCategory(nicheCategoryId, appId, credentials.accessToken)
-  const preferredCategoryId = leafSuggestedCategoryIds[0] || (nicheIsLeaf ? nicheCategoryId : nicheCategoryId)
+  const fallbackLeafCategoryIds = nicheIsLeaf ? [nicheCategoryId] : []
+  const preferredCategoryId = leafSuggestedCategoryIds[0] || fallbackLeafCategoryIds[0] || nicheCategoryId
   const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId: preferredCategoryId, price, pictureXml, itemSpecificsXml }
 
   // Parse eBay response — skip deprecated warnings to surface real errors
@@ -1172,7 +1200,7 @@ export async function POST(req: NextRequest) {
   const categoryCandidates = Array.from(
     new Set([
       ...leafSuggestedCategoryIds,
-      ...(nicheIsLeaf ? [nicheCategoryId] : []),
+      ...fallbackLeafCategoryIds,
     ].filter(Boolean))
   )
 

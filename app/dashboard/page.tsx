@@ -32,7 +32,7 @@ import {
   validateAmazonAsin,
 } from './api'
 import { EBAY_FEE_RATE } from './constants'
-import { getGrossRevenue, getRecommendedEbayPrice, listProductsInBatches, parseDashboardSearchMessage } from './utils'
+import { getGrossRevenue, getListingPreview, getRecommendedEbayPrice, listProductsInBatches, parseDashboardSearchMessage } from './utils'
 
 type ConnectionState = {
   ebayConnected: boolean
@@ -141,6 +141,82 @@ export default function Dashboard() {
   })
   const [scriptRunning, setScriptRunning] = useState<string | null>(null)
   const [scriptMessage, setScriptMessage] = useState<ScriptMessage | null>(null)
+
+  const validateListingProduct = useCallback(async (product: FinderProduct) => {
+    const originalPrice = product.ebayPrice.toFixed(2)
+
+    setListingState((prev) => {
+      if (!prev.modal || prev.modal.asin !== product.asin) return prev
+      return { ...prev, validating: true, error: null }
+    })
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const validated = await validateAmazonAsin(product.asin)
+        const hasValidAmazonData = Boolean(validated.imageUrl && validated.amazonPrice > 0)
+
+        if (!hasValidAmazonData) {
+          throw new Error('INCOMPLETE_AMAZON_VALIDATION')
+        }
+
+        const nextRecommendedPrice = getRecommendedEbayPrice(validated.amazonPrice)
+        const preview = getListingPreview(nextRecommendedPrice.toFixed(2), validated.amazonPrice, '0', EBAY_FEE_RATE)
+        const nextProduct: FinderProduct = {
+          ...product,
+          title: validated.title,
+          amazonPrice: validated.amazonPrice,
+          ebayPrice: nextRecommendedPrice,
+          profit: preview.profit,
+          roi: preview.roi,
+          imageUrl: validated.imageUrl || product.imageUrl,
+          images: validated.images || product.images,
+          features: validated.features || product.features,
+          description: validated.description || product.description,
+          specs: validated.specs || product.specs,
+        }
+
+        setFinderState((prev) => ({
+          ...prev,
+          results: prev.results
+            ? prev.results.map((entry) => (entry.asin === product.asin ? nextProduct : entry))
+            : prev.results,
+        }))
+
+        setListingState((prev) => {
+          if (!prev.modal || prev.modal.asin !== product.asin) return prev
+
+          const shouldRefreshPrice = prev.price === originalPrice
+          return {
+            ...prev,
+            modal: nextProduct,
+            price: shouldRefreshPrice ? nextRecommendedPrice.toFixed(2) : prev.price,
+            validating: false,
+            validated: true,
+            error: null,
+          }
+        })
+
+        return { validated: true, product: nextProduct }
+      } catch {
+        if (attempt === 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, 500))
+          continue
+        }
+      }
+    }
+
+    setListingState((prev) => {
+      if (!prev.modal || prev.modal.asin !== product.asin) return prev
+      return {
+        ...prev,
+        validating: false,
+        validated: false,
+        error: null,
+      }
+    })
+
+    return { validated: false as const, product }
+  }, [])
 
   useEffect(() => {
     const nextBanner = parseDashboardSearchMessage(window.location.search)
@@ -422,69 +498,8 @@ export default function Dashboard() {
       result: null,
       error: null,
     })
-    void (async () => {
-      try {
-        const validated = await validateAmazonAsin(product.asin)
-        const nextRecommendedPrice = getRecommendedEbayPrice(validated.amazonPrice)
-
-        setFinderState((prev) => ({
-          ...prev,
-          results: prev.results
-            ? prev.results.map((entry) =>
-                entry.asin === product.asin
-                  ? {
-                      ...entry,
-                      title: validated.title,
-                      amazonPrice: validated.amazonPrice,
-                      ebayPrice: nextRecommendedPrice,
-                      imageUrl: validated.imageUrl || entry.imageUrl,
-                      images: validated.images || entry.images,
-                      features: validated.features || entry.features,
-                      description: validated.description || entry.description,
-                      specs: validated.specs || entry.specs,
-                    }
-                  : entry
-              )
-            : prev.results,
-        }))
-
-        setListingState((prev) => {
-          if (!prev.modal || prev.modal.asin !== product.asin) return prev
-
-          const shouldRefreshPrice = prev.price === product.ebayPrice.toFixed(2)
-          return {
-            ...prev,
-            modal: {
-              ...prev.modal,
-              title: validated.title,
-              amazonPrice: validated.amazonPrice,
-              ebayPrice: nextRecommendedPrice,
-              imageUrl: validated.imageUrl || prev.modal.imageUrl,
-              images: validated.images || prev.modal.images,
-              features: validated.features || prev.modal.features,
-              description: validated.description || prev.modal.description,
-              specs: validated.specs || prev.modal.specs,
-            },
-            price: shouldRefreshPrice ? nextRecommendedPrice.toFixed(2) : prev.price,
-            validating: false,
-            validated: Boolean(validated.imageUrl && validated.amazonPrice > 0),
-            error: null,
-          }
-        })
-      } catch (error) {
-        setListingState((prev) => {
-          if (!prev.modal || prev.modal.asin !== product.asin) return prev
-
-          return {
-            ...prev,
-            validating: false,
-            validated: false,
-            error: null,
-          }
-        })
-      }
-    })()
-  }, [])
+    void validateListingProduct(product)
+  }, [validateListingProduct])
 
   const closeListModal = useCallback(() => {
     setListingState((prev) => ({
@@ -500,7 +515,25 @@ export default function Dashboard() {
   const handlePublishCurrentProduct = useCallback(async () => {
     if (!listingState.modal) return
 
-    const parsedPrice = parseFloat(listingState.price)
+    let productToPublish = listingState.modal
+    let priceValue = listingState.price
+
+    if (!listingState.validated) {
+      const validationResult = await validateListingProduct(listingState.modal)
+      if (!validationResult.validated) {
+        setListingState((prev) => ({
+          ...prev,
+          error: 'Amazon validation did not finish cleanly. Validation was retried once but still did not confirm a live Amazon title, image, and cost.',
+        }))
+        return
+      }
+      productToPublish = validationResult.product
+      if (priceValue === listingState.modal.ebayPrice.toFixed(2)) {
+        priceValue = validationResult.product.ebayPrice.toFixed(2)
+      }
+    }
+
+    const parsedPrice = parseFloat(priceValue)
     if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
       setListingState((prev) => ({ ...prev, error: 'Enter a valid eBay price before publishing.' }))
       return
@@ -510,22 +543,22 @@ export default function Dashboard() {
 
     try {
       const data = await publishProduct({
-        asin: listingState.modal.asin,
-        title: listingState.modal.title,
+        asin: productToPublish.asin,
+        title: productToPublish.title,
         ebayPrice: parsedPrice,
-        amazonPrice: listingState.modal.amazonPrice,
-        imageUrl: listingState.modal.imageUrl,
-        images: listingState.modal.images,
-        features: listingState.modal.features,
-        description: listingState.modal.description,
-        specs: listingState.modal.specs,
+        amazonPrice: productToPublish.amazonPrice,
+        imageUrl: productToPublish.imageUrl,
+        images: productToPublish.images,
+        features: productToPublish.features,
+        description: productToPublish.description,
+        specs: productToPublish.specs,
         niche: nicheState.value,
       })
 
       setListingState((prev) => ({ ...prev, result: data }))
       setFinderState((prev) => ({
         ...prev,
-        results: prev.results ? prev.results.filter((product) => product.asin !== listingState.modal?.asin) : prev.results,
+        results: prev.results ? prev.results.filter((product) => product.asin !== productToPublish.asin) : prev.results,
       }))
       setBanner({ tone: 'success', text: `Listing ${data.listingId} is now live on eBay.` })
     } catch (error) {
@@ -539,7 +572,7 @@ export default function Dashboard() {
     } finally {
       setListingState((prev) => ({ ...prev, loading: false }))
     }
-  }, [listingState.modal, listingState.price, nicheState.value])
+  }, [listingState.modal, listingState.price, listingState.validated, nicheState.value, validateListingProduct])
 
   const grossRevenue = useMemo(() => getGrossRevenue(orderState.orders), [orderState.orders])
 
