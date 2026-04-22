@@ -50,6 +50,32 @@ function dedupeImages(values: string[]) {
   return Array.from(new Set(values.filter((url) => url.startsWith('http'))))
 }
 
+function mergeProducts(asin: string, products: Array<ValidatedAmazonProduct | null>, options: FetchAmazonProductOptions) {
+  const validProducts = products.filter((product): product is ValidatedAmazonProduct => Boolean(product))
+  if (validProducts.length === 0) return null
+
+  const preferred =
+    validProducts.find((product) => product.source === 'api') ||
+    validProducts.find((product) => product.source === 'scrape') ||
+    validProducts[0]
+
+  const images = dedupeImages([
+    ...validProducts.flatMap((product) => product.images),
+    normalizeImageUrl(options.fallbackImage),
+  ])
+
+  return toProduct({
+    asin,
+    title: preferred.title,
+    amazonPrice: preferred.amazonPrice,
+    images,
+    available: validProducts.some((product) => product.available),
+    source: preferred.source,
+    fallbackTitle: options.fallbackTitle,
+    fallbackPrice: options.fallbackPrice,
+  })
+}
+
 function normalizeCachedImages(value: unknown) {
   if (!Array.isArray(value)) return []
   return dedupeImages(value.map((entry) => normalizeImageUrl(entry)))
@@ -289,19 +315,16 @@ export async function fetchAmazonProductByAsin(
   if (!/^[A-Z0-9]{10}$/.test(asin)) return null
 
   const cached = await loadCachedAmazonProduct(asin)
+  const [apiResult, searchResult, scrapeResult] = await Promise.all([
+    fetchProductDetailsFromApi(asin, options.fallbackImage),
+    fetchProductFromSearch(asin, options.fallbackImage),
+    fetchProductFromScrape(asin, options.fallbackImage),
+  ])
 
-  const attempts = [
-    () => fetchProductDetailsFromApi(asin, options.fallbackImage),
-    () => fetchProductFromSearch(asin, options.fallbackImage),
-    () => fetchProductFromScrape(asin, options.fallbackImage),
-  ]
-
-  for (const attempt of attempts) {
-    const result = await attempt()
-    if (result) {
-      await saveCachedAmazonProduct(result)
-      return result
-    }
+  const merged = mergeProducts(asin, [apiResult, searchResult, scrapeResult], options)
+  if (merged) {
+    await saveCachedAmazonProduct(merged)
+    return merged
   }
 
   if (cached) {

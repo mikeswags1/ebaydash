@@ -598,13 +598,19 @@ export async function POST(req: NextRequest) {
     ? primarySourceImage
     : `${siteUrl}/api/image/proxy?url=${encodeURIComponent(primarySourceImage)}`
   const badgeUrl = `${siteUrl}/api/image/badge?url=${encodeURIComponent(primaryProxyImage)}&asin=${encodeURIComponent(asin)}&title=${encodeURIComponent(listingTitle)}`
+  const cleanDescriptionPrimary = primarySourceImage.includes('/api/image/')
+    ? primarySourceImage
+    : `${siteUrl}/api/image/proxy?url=${encodeURIComponent(primarySourceImage)}`
   const cleanGalleryUrls = filteredImages.slice(1).map((u) => `${siteUrl}/api/image/proxy?url=${encodeURIComponent(u)}`)
   const descriptionImageUrls = [
-    badgeUrl,
+    cleanDescriptionPrimary,
     ...cleanGalleryUrls.slice(0, 2),
   ]
 
-  const epsSourceUrls = [badgeUrl, ...(cleanGalleryUrls.length > 0 ? cleanGalleryUrls : [fallbackListingImage])]
+  const epsSourceUrls =
+    filteredImages.length > 0
+      ? [badgeUrl, ...cleanGalleryUrls]
+      : [badgeUrl]
   const pictureList = await Promise.all(
     epsSourceUrls.map((u) => uploadToEPS(u, credentials.accessToken, appId))
   )
@@ -747,13 +753,15 @@ export async function POST(req: NextRequest) {
 
   await ensureListedAsinsFinancialColumns()
   await sql`
-    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate)
-    VALUES (${session.user.id}, ${asin}, ${listingTitle.slice(0, 200)}, ${listingId}, ${listingAmazonPrice.toFixed(2)}, ${price}, ${0.1325})
+    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate, amazon_image_url, amazon_images)
+    VALUES (${session.user.id}, ${asin}, ${listingTitle.slice(0, 200)}, ${listingId}, ${listingAmazonPrice.toFixed(2)}, ${price}, ${0.1325}, ${primarySourceImage}, ${JSON.stringify(filteredImages)})
     ON CONFLICT (user_id, asin) DO UPDATE SET
       ebay_listing_id = ${listingId},
       amazon_price = ${listingAmazonPrice.toFixed(2)},
       ebay_price = ${price},
       ebay_fee_rate = ${0.1325},
+      amazon_image_url = ${primarySourceImage},
+      amazon_images = ${JSON.stringify(filteredImages)},
       listed_at = NOW()
   `.catch(() => {})
 
