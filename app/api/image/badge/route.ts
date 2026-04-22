@@ -7,38 +7,10 @@ export const dynamic = 'force-dynamic'
 
 const STAMP_PATH = path.join(process.cwd(), 'public', 'free-shipping-stamp.png')
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
-function splitTitle(title: string) {
-  const words = title.trim().split(/\s+/).slice(0, 14)
-  const lines: string[] = []
-  let current = ''
-
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word
-    if (next.length > 28 && current) {
-      lines.push(current)
-      current = word
-    } else {
-      current = next
-    }
-  }
-
-  if (current) lines.push(current)
-  return lines.slice(0, 4)
-}
-
 async function buildFallbackImage(title: string, asin: string) {
   const stampBuffer = await fs.readFile(STAMP_PATH)
   const width = 1400
   const height = 1400
-  const titleLines = splitTitle(title || `Amazon Product ${asin}`)
   const svg = `
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -49,15 +21,17 @@ async function buildFallbackImage(title: string, asin: string) {
       </defs>
       <rect width="100%" height="100%" fill="url(#bg)" />
       <rect x="78" y="78" width="${width - 156}" height="${height - 156}" rx="48" fill="#fffaf0" stroke="#c8a250" stroke-width="6" />
-      <text x="120" y="220" fill="#8f6d2d" font-size="40" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="4">EBAYDASH LISTING</text>
-      ${titleLines
-        .map(
-          (line, index) =>
-            `<text x="120" y="${360 + index * 94}" fill="#23180b" font-size="58" font-family="Arial, Helvetica, sans-serif" font-weight="700">${escapeHtml(line)}</text>`
-        )
-        .join('')}
-      <text x="120" y="980" fill="#4a3920" font-size="36" font-family="Arial, Helvetica, sans-serif">ASIN: ${escapeHtml(asin)}</text>
-      <text x="120" y="1070" fill="#4a3920" font-size="34" font-family="Arial, Helvetica, sans-serif">Fast handling, free shipping, 30-day returns</text>
+      <rect x="170" y="240" width="620" height="740" rx="32" fill="#ffffff" stroke="#cfb26b" stroke-width="6" />
+      <rect x="850" y="280" width="360" height="70" rx="18" fill="#e9dcc0" />
+      <rect x="850" y="390" width="260" height="48" rx="14" fill="#efe4cb" />
+      <rect x="850" y="470" width="300" height="48" rx="14" fill="#efe4cb" />
+      <rect x="850" y="550" width="230" height="48" rx="14" fill="#efe4cb" />
+      <rect x="850" y="700" width="320" height="48" rx="14" fill="#efe4cb" />
+      <rect x="850" y="780" width="280" height="48" rx="14" fill="#efe4cb" />
+      <circle cx="480" cy="610" r="120" fill="#f2e8d1" stroke="#c8a250" stroke-width="14" />
+      <circle cx="480" cy="610" r="62" fill="#fffaf0" stroke="#c8a250" stroke-width="10" />
+      <rect x="360" y="430" width="240" height="70" rx="22" fill="#f2e8d1" />
+      <rect x="410" y="965" width="140" height="20" rx="10" fill="#d7c18a" />
     </svg>
   `
   const stampWidth = 360

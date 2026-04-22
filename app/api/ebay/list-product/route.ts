@@ -143,6 +143,12 @@ function toParagraphs(text: string): string[] {
     .slice(0, 3)
 }
 
+function dedupeImageUrls(values: Array<string | undefined | null>) {
+  return Array.from(
+    new Set(values.filter((value): value is string => Boolean(value && value.startsWith('http'))))
+  )
+}
+
 
 async function fetchAmazonDetails(
   asin: string, rapidKey: string, fallbackImage?: string
@@ -559,9 +565,12 @@ export async function POST(req: NextRequest) {
   const proto = host.startsWith('localhost') ? 'http' : 'https'
   const siteUrl = `${proto}://${host}`
 
-  const allImages = amazon.images.length > 0
-    ? amazon.images
-    : validatedAmazon.images
+  const allImages = dedupeImageUrls([
+    ...validatedAmazon.images,
+    ...amazon.images,
+    validatedAmazon.imageUrl,
+    imageUrl,
+  ])
 
   const filteredImages = allImages
     .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
@@ -569,7 +578,10 @@ export async function POST(req: NextRequest) {
 
   const fallbackListingImage = `${siteUrl}/api/image/fallback?asin=${encodeURIComponent(asin)}&title=${encodeURIComponent(listingTitle)}`
   const primarySourceImage = filteredImages[0] || validatedAmazon.imageUrl || imageUrl || fallbackListingImage
-  const badgeUrl = `${siteUrl}/api/image/badge?url=${encodeURIComponent(primarySourceImage)}&asin=${encodeURIComponent(asin)}&title=${encodeURIComponent(listingTitle)}`
+  const primaryProxyImage = primarySourceImage.includes('/api/image/')
+    ? primarySourceImage
+    : `${siteUrl}/api/image/proxy?url=${encodeURIComponent(primarySourceImage)}`
+  const badgeUrl = `${siteUrl}/api/image/badge?url=${encodeURIComponent(primaryProxyImage)}&asin=${encodeURIComponent(asin)}&title=${encodeURIComponent(listingTitle)}`
   const cleanGalleryUrls = filteredImages.slice(1).map((u) => `${siteUrl}/api/image/proxy?url=${encodeURIComponent(u)}`)
   const descriptionImageUrls = [
     badgeUrl,
