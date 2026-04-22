@@ -30,7 +30,12 @@ function extractBetween(html: string, open: string, close: string): string {
 }
 
 function stripTags(s: string): string {
-  return s.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+  return s.replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function decodeHtmlEntities(input: string): string {
@@ -111,46 +116,24 @@ function extractDynamicImageUrls(html: string): string[] {
   return urls
 }
 
-function extractColorImageUrls(html: string): string[] {
-  const images: string[] = []
-  const colorImagesIdx =
-    html.indexOf('"colorImages"') !== -1 ? html.indexOf('"colorImages"') : html.indexOf("'colorImages'")
+function extractVisibleTextBlocks(html: string): string[] {
+  const blocks: string[] = []
+  const cleaned = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
 
-  if (colorImagesIdx === -1) return images
-
-  const section = html.slice(colorImagesIdx, colorImagesIdx + 100000)
-  const initialIdx = section.indexOf('"initial"') !== -1 ? section.indexOf('"initial"') : section.indexOf("'initial'")
-  if (initialIdx === -1) return images
-
-  const arrayStart = section.indexOf('[', initialIdx)
-  if (arrayStart === -1) return images
-
-  let depth = 0
-  let arrayEnd = -1
-  for (let i = arrayStart; i < Math.min(arrayStart + 50000, section.length); i += 1) {
-    if (section[i] === '[') depth += 1
-    else if (section[i] === ']') {
-      depth -= 1
-      if (depth === 0) {
-        arrayEnd = i
-        break
-      }
-    }
+  for (const match of cleaned.matchAll(/<(p|li|h[1-6]|span|div)[^>]*>([\s\S]*?)<\/\1>/gi)) {
+    const text = stripTags(decodeHtmlEntities(match[2] || ''))
+    if (!text) continue
+    if (text.length < 30 || text.length > 380) continue
+    if (/[{};]/.test(text) && /(padding|width|height|background|position|display|module|a plus|a-plus|widget)/i.test(text)) continue
+    if (/data-csa|aplus|module|desktop|wrapper|padding|margin|background-image|function/i.test(text)) continue
+    blocks.push(text)
+    if (blocks.length >= 12) break
   }
 
-  if (arrayEnd === -1) return images
-
-  const initialArray = section.slice(arrayStart, arrayEnd + 1)
-  for (const pattern of [/"hiRes"\s*:\s*"(https:[^"]+)"/g, /"large"\s*:\s*"(https:[^"]+)"/g]) {
-    for (const match of initialArray.matchAll(pattern)) {
-      if (images.length >= 12) break
-      const url = upgradeAmazonImageUrl(match[1])
-      if (!images.includes(url)) images.push(url)
-    }
-    if (images.length > 0) break
-  }
-
-  return images
+  return Array.from(new Set(blocks))
 }
 
 export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct | null> {
@@ -200,7 +183,6 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
 
     let images = dedupeImages([
       ...extractDynamicImageUrls(html),
-      ...extractColorImageUrls(html),
     ]).slice(0, 12)
 
     if (images.length === 0) {
@@ -248,9 +230,12 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
       extractBetween(html, 'id="aplus_feature_div"', '</div>'),
       extractBetween(html, '"productDescription":"', '","'),
     ]
-    const description = descriptionSources
-      .map((source) => stripTags(decodeHtmlEntities(source)))
-      .find((source) => source.length > 60) || ''
+    const richBlocks = descriptionSources.flatMap((source) => extractVisibleTextBlocks(source))
+    const description = richBlocks.length > 0
+      ? richBlocks.slice(0, 6).join(' ')
+      : descriptionSources
+        .map((source) => stripTags(decodeHtmlEntities(source)))
+        .find((source) => source.length > 60 && !/(data-csa|aplus|module|desktop|wrapper|padding|margin|background-image|function)/i.test(source)) || ''
 
     const available = !html.includes('Currently unavailable') && !html.includes('unavailable.')
 

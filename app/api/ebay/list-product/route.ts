@@ -153,8 +153,96 @@ function sanitizeContent(text: string): string {
     .replace(/^[\u{1F300}-\u{1FFFF}\u{2600}-\u{27FF}\s]+/u, '')
     // Strip control characters invalid in XML 1.0 (causes XML Parse error)
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/class=\S+|data-[a-z-]+=\S+|aplus[-\w]*|widget[-\w]*|background-image\s*:[^;]+;?|position\s*:[^;]+;?|padding\s*:[^;]+;?|margin\s*:[^;]+;?|width\s*:[^;]+;?|height\s*:[^;]+;?|display\s*:[^;]+;?/gi, ' ')
+    .replace(/[{};]/g, ' ')
     .replace(/\s{2,}/g, ' ')
     .trim()
+}
+
+function canonicalWords(value: string) {
+  return sanitizeContent(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(' ')
+    .filter((word) => word.length > 2)
+}
+
+function detectVariantWords(title: string, specs: Array<[string, string]>) {
+  const allowed = new Set<string>()
+  for (const word of canonicalWords(title)) allowed.add(word)
+  for (const [key, value] of specs) {
+    if (/color|colour|style|size|variation|pattern|flavor|flavour|finish/i.test(key)) {
+      for (const word of canonicalWords(value)) allowed.add(word)
+    }
+  }
+  return allowed
+}
+
+function filterVariantSpecificImages(values: string[], title: string, specs: Array<[string, string]>) {
+  const allowedWords = detectVariantWords(title, specs)
+  if (allowedWords.size === 0) return values
+  const blocked = ['pink', 'purple', 'blue', 'green', 'red', 'coffee', 'brown', 'black', 'white', 'ivory', 'beige', 'silver', 'gold']
+
+  const filtered = values.filter((value, index) => {
+    if (index === 0) return true
+    const normalized = value.toLowerCase()
+    const matchedBlocked = blocked.filter((word) => normalized.includes(word))
+    if (matchedBlocked.length === 0) return true
+    return matchedBlocked.every((word) => allowedWords.has(word))
+  })
+
+  return filtered.length > 0 ? filtered : values
+}
+
+function dedupeSpecEntries(values: Array<[string, string]>) {
+  const seen = new Set<string>()
+  const rows: Array<[string, string]> = []
+  for (const [key, value] of values) {
+    const rowKey = `${key.toLowerCase()}::${value.toLowerCase()}`
+    if (seen.has(rowKey)) continue
+    seen.add(rowKey)
+    rows.push([key, value])
+  }
+  return rows
+}
+
+function sanitizeDescriptionText(input: string) {
+  return input
+    .split(/\n+/)
+    .map((line) => sanitizeContent(line))
+    .filter((line) => line.length > 35)
+    .filter((line) => !/(data-csa|aplus|widget|module|desktop|wrapper|padding|margin|background-image|function|position relative|display table)/i.test(line))
+    .filter((line) => !/[{}]/.test(line))
+    .join(' ')
+    .trim()
+}
+
+async function getSuggestedCategoryId(title: string, appId: string, token: string): Promise<string | null> {
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<GetSuggestedCategoriesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
+  <Query>${title.replace(/&/g, '&amp;').replace(/[<>]/g, '')}</Query>
+</GetSuggestedCategoriesRequest>`
+
+  try {
+    const res = await fetch('https://api.ebay.com/ws/api.dll', {
+      method: 'POST',
+      headers: {
+        'X-EBAY-API-CALL-NAME': 'GetSuggestedCategories',
+        'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
+        'X-EBAY-API-APP-NAME': appId,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'text/xml',
+      },
+      body: xml,
+      signal: AbortSignal.timeout(12000),
+    })
+    const text = await res.text()
+    return text.match(/<CategoryID>(\d+)<\/CategoryID>/)?.[1] || null
+  } catch {
+    return null
+  }
 }
 
 function toParagraphs(text: string): string[] {
@@ -375,7 +463,7 @@ function buildDescription(title: string, features: string[], about: string, imag
   const uniqueImages = dedupeImageUrls(images)
   const normalizedFeatures = features.filter(Boolean).slice(0, 10)
   const featureBullets = normalizedFeatures.map(f => `<li style="margin-bottom:8px;">${f}</li>`).join('\n')
-  const descriptionParagraphs = toParagraphs(about)
+  const descriptionParagraphs = toParagraphs(sanitizeDescriptionText(about))
   const overviewBlock = descriptionParagraphs.length > 0
     ? descriptionParagraphs
       .map((paragraph) => `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">${paragraph}</p>`)
@@ -383,7 +471,7 @@ function buildDescription(title: string, features: string[], about: string, imag
     : `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">This listing is based on the matching manufacturer product data for ${displayTitle}. Review the item specifics and feature summary below for the most important fit, function, and package details.</p>`
 
   const heroImages = uniqueImages.slice(0, 2)
-  const detailImages = uniqueImages.slice(2, 5)
+  const detailImages = uniqueImages.slice(2, 4)
   const heroImageBlock = heroImages.length > 0
     ? `<div style="display:flex;gap:12px;justify-content:center;align-items:flex-start;padding:16px 0 10px;flex-wrap:wrap;">
 ${heroImages.map(u => `      <img src="${u}" alt="" style="width:${heroImages.length === 1 ? '360px' : '250px'};max-width:100%;height:250px;object-fit:contain;border:1px solid #e6e6e6;border-radius:8px;background:#fafafa;">`).join('\n')}
@@ -397,7 +485,7 @@ ${detailImages.map(u => `      <img src="${u}" alt="" style="width:210px;max-wid
 
   // Spec table
   const skipKeys = /customer|review|rating|star|bought|month|seller|return|warranty|asin|date first|best seller|discontinued|department|item model|upc|ean|isbn/i
-  const specRows = specs
+  const specRows = dedupeSpecEntries(specs)
     .filter(([k]) => !skipKeys.test(k))
     .slice(0, 12)
     .map(([k, v]) => `<tr><td style="font-weight:700;padding:8px 12px;width:38%;border-bottom:1px solid #eee;font-size:14px;">${titleCaseLabel(k)}</td><td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;">${v}</td></tr>`)
@@ -668,12 +756,12 @@ export async function POST(req: NextRequest) {
           .filter((value) => (validatedRich || clientRich ? !isGenericFeature(value) : true))
       )
     ).slice(0, 10),
-    description: chooseBestDescription(
+    description: sanitizeDescriptionText(chooseBestDescription(
       clientRich ? String(inputDescription || '') : '',
       validatedAmazon.description,
       fetchedAmazon.description,
       String(inputDescription || '')
-    ),
+    )),
     specs: [
       ...(Array.isArray(specs) ? specs : []),
       ...validatedAmazon.specs,
@@ -685,12 +773,13 @@ export async function POST(req: NextRequest) {
       .slice(0, 16),
     _apiError: fetchedAmazon._apiError,
   }
+  amazon.specs = dedupeSpecEntries(amazon.specs)
 
   const host = req.headers.get('host') || ''
   const proto = host.startsWith('localhost') ? 'http' : 'https'
   const siteUrl = `${proto}://${host}`
 
-  const allImages = dedupeImageUrls(amazon.images)
+  const allImages = filterVariantSpecificImages(dedupeImageUrls(amazon.images), listingTitle, amazon.specs)
 
   const filteredImages = allImages
     .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
@@ -738,6 +827,7 @@ export async function POST(req: NextRequest) {
     ? `<PictureDetails><GalleryType>Gallery</GalleryType>${usablePictureList.map(u => `<PictureURL>${xmlEncodeUrl(u)}</PictureURL>`).join('')}</PictureDetails>`
     : ''
 
+  const suggestedCategoryId = await getSuggestedCategoryId(safeTitle, appId, credentials.accessToken)
   const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId, price, pictureXml, extraSpecifics }
 
   // Parse eBay response — skip deprecated warnings to surface real errors
@@ -811,14 +901,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Attempt 3: category 29223 (Everything Else > Everything Else — true leaf, no required specifics)
+  // Attempt 3: ask eBay for a better suggested category before falling back to junk categories
+  if ((et === 'leaf' || et === 'specific') && suggestedCategoryId && suggestedCategoryId !== categoryId) {
+    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: suggestedCategoryId, extraSpecifics: extraSpecifics }), appId, credentials.accessToken)
+    p = parse(responseText)
+    et = errType(p.short, p.long, p.codes)
+  }
+
+  // Attempt 4: category 29223 (Everything Else > Everything Else) as last-resort recovery only
   if (et === 'leaf' || et === 'specific') {
     responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '29223', extraSpecifics: '' }), appId, credentials.accessToken)
     p = parse(responseText)
     et = errType(p.short, p.long, p.codes)
   }
 
-  // Attempt 4: category 45100 (Other Everything Else) as final resort
+  // Attempt 5: category 45100 (Other Everything Else) as absolute final resort
   if (et === 'leaf' || et === 'specific') {
     responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: '45100', extraSpecifics: '' }), appId, credentials.accessToken)
   }
