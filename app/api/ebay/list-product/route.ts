@@ -240,8 +240,22 @@ async function getSuggestedCategoryIds(title: string, appId: string, token: stri
       signal: AbortSignal.timeout(12000),
     })
     const text = await res.text()
-    const matches = [...text.matchAll(/<CategoryID>(\d+)<\/CategoryID>/g)].map((match) => match[1])
-    return Array.from(new Set(matches)).reverse()
+    const suggestionBlocks = [...text.matchAll(/<SuggestedCategory>([\s\S]*?)<\/SuggestedCategory>/g)]
+      .map((match) => match[1])
+
+    const leafCandidates = suggestionBlocks
+      .map((block) => {
+        const ids = [...block.matchAll(/<CategoryID>(\d+)<\/CategoryID>/g)].map((match) => match[1])
+        return ids[ids.length - 1]
+      })
+      .filter((value): value is string => Boolean(value))
+
+    if (leafCandidates.length > 0) {
+      return Array.from(new Set(leafCandidates))
+    }
+
+    const allIds = [...text.matchAll(/<CategoryID>(\d+)<\/CategoryID>/g)].map((match) => match[1])
+    return Array.from(new Set(allIds)).reverse()
   } catch {
     return []
   }
