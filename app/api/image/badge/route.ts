@@ -34,15 +34,15 @@ async function buildFallbackImage(title: string, asin: string) {
       <rect x="410" y="965" width="140" height="20" rx="10" fill="#d7c18a" />
     </svg>
   `
-  const stampWidth = 210
+  const stampWidth = 170
   const stamp = await sharp(stampBuffer).resize({ width: stampWidth }).png().toBuffer()
 
   return sharp(Buffer.from(svg))
     .composite([
       {
         input: stamp,
-        top: 34,
-        left: width - stampWidth - 34,
+        top: height - stampWidth - 46,
+        left: 34,
       },
     ])
     .jpeg({ quality: 92 })
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
     const width = metadata.width || 1200
     const height = metadata.height || 1200
 
-    const stampWidth = Math.max(120, Math.min(180, Math.round(width * 0.16)))
+    const stampWidth = Math.max(92, Math.min(138, Math.round(width * 0.12)))
     const stamp = await sharp(stampBuffer)
       .resize({ width: stampWidth })
       .png()
@@ -105,8 +105,8 @@ export async function GET(req: NextRequest) {
       .composite([
         {
           input: stamp,
-          top: Math.max(14, Math.round(height * 0.03)),
-          left: Math.max(14, width - stampWidth - Math.max(14, Math.round(width * 0.03))),
+          top: Math.max(14, height - stampWidth - Math.max(16, Math.round(height * 0.04))),
+          left: Math.max(14, Math.round(width * 0.04)),
         },
       ])
       .jpeg({ quality: 92 })

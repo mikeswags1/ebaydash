@@ -143,6 +143,14 @@ function toParagraphs(text: string): string[] {
     .slice(0, 3)
 }
 
+function titleCaseLabel(value: string) {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
 function dedupeImageUrls(values: Array<string | undefined | null>) {
   return Array.from(
     new Set(values.filter((value): value is string => Boolean(value && value.startsWith('http'))))
@@ -324,11 +332,16 @@ function buildDescription(title: string, features: string[], about: string, imag
       .join('\n')
     : `<p style="font-size:14px;line-height:1.85;padding:0 14px 12px;margin:0;color:#333;">This listing is based on the matching manufacturer product data for ${displayTitle}. Review the item specifics and feature summary below for the most important fit, function, and package details.</p>`
 
-  // Thumbnail row — 3 images max, kept small so they fit the description box cleanly
-  const thumbs = images.slice(0, 3)
-  const imageBlock = thumbs.length > 0
-    ? `<div style="display:flex;gap:10px;justify-content:center;padding:12px 0;">
-${thumbs.map(u => `      <img src="${u}" alt="" style="width:120px;height:120px;object-fit:contain;border:1px solid #e0e0e0;border-radius:6px;background:#fafafa;">`).join('\n')}
+  const heroImages = images.slice(0, 2)
+  const detailImages = images.slice(2, 4)
+  const heroImageBlock = heroImages.length > 0
+    ? `<div style="display:flex;gap:12px;justify-content:center;align-items:flex-start;padding:16px 0 10px;flex-wrap:wrap;">
+${heroImages.map(u => `      <img src="${u}" alt="" style="width:${heroImages.length === 1 ? '320px' : '240px'};max-width:100%;height:auto;object-fit:contain;border:1px solid #e6e6e6;border-radius:8px;background:#fafafa;">`).join('\n')}
+    </div>`
+    : ''
+  const detailImageBlock = detailImages.length > 0
+    ? `<div style="display:flex;gap:12px;justify-content:center;align-items:flex-start;padding:8px 0 0;flex-wrap:wrap;">
+${detailImages.map(u => `      <img src="${u}" alt="" style="width:240px;max-width:100%;height:auto;object-fit:contain;border:1px solid #e6e6e6;border-radius:8px;background:#fafafa;">`).join('\n')}
     </div>`
     : ''
 
@@ -336,24 +349,24 @@ ${thumbs.map(u => `      <img src="${u}" alt="" style="width:120px;height:120px;
   const skipKeys = /customer|review|rating|star|bought|month|seller|return|warranty|asin|date first|best seller|discontinued|department|item model|upc|ean|isbn/i
   const specRows = specs
     .filter(([k]) => !skipKeys.test(k))
-    .slice(0, 16)
-    .map(([k, v]) => `<tr><td style="font-weight:700;padding:6px 12px;width:38%;border-bottom:1px solid #eee;font-size:14px;">${k}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;font-size:14px;">${v}</td></tr>`)
+    .slice(0, 12)
+    .map(([k, v]) => `<tr><td style="font-weight:700;padding:8px 12px;width:38%;border-bottom:1px solid #eee;font-size:14px;">${titleCaseLabel(k)}</td><td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;">${v}</td></tr>`)
     .join('\n')
 
   const sectionHeader = (label: string) =>
-    `<div style="background:#444;color:#fff;text-align:center;padding:11px 14px;font-size:15px;font-weight:700;letter-spacing:0.06em;margin-top:18px;border-radius:3px;">${label}</div>`
+    `<div style="background:#6e6e6e;color:#fff;text-align:center;padding:11px 14px;font-size:15px;font-weight:700;letter-spacing:0.04em;margin-top:18px;border-radius:2px;">${label}</div>`
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;color:#222;background:#fff;box-sizing:border-box;">
-<div style="max-width:620px;margin:0 auto;padding:0 8px;box-sizing:border-box;overflow:hidden;">
+<div style="max-width:760px;margin:0 auto;padding:18px 14px 28px;box-sizing:border-box;overflow:hidden;border:1px solid #d8d8d8;border-radius:8px;">
 
   <!-- Title -->
-  <h1 style="font-size:26px;font-weight:700;padding:18px 4px 14px;margin:0;border-bottom:2px solid #eee;line-height:1.4;word-wrap:break-word;">${displayTitle}</h1>
+  <h1 style="font-size:26px;font-weight:700;padding:10px 10px 14px;margin:0;border-bottom:1px solid #e4e4e4;line-height:1.35;word-wrap:break-word;text-align:center;">${displayTitle}</h1>
 
   <!-- Product images -->
-  ${imageBlock}
+  ${heroImageBlock}
 
   <!-- Overview -->
   ${sectionHeader('Product Overview')}
@@ -368,10 +381,13 @@ ${thumbs.map(u => `      <img src="${u}" alt="" style="width:120px;height:120px;
   <!-- Specs (if available) -->
   ${specRows ? `${sectionHeader('Specifications')}<table style="width:100%;border-collapse:collapse;margin-top:2px;"><tbody>${specRows}</tbody></table>` : ''}
 
+  <!-- Additional Images -->
+  ${detailImageBlock}
+
   <!-- Shipping -->
   ${sectionHeader('Shipping')}
   <ul style="font-size:14px;line-height:1.9;padding:12px 14px 12px 30px;margin:0;color:#333;">
-    <li><strong>Free Shipping:</strong> Free USPS Priority Mail on every order. Estimated 2&ndash;4 business days.</li>
+    <li><strong>Free & Fast Shipping:</strong> Free USPS Priority Mail on every order. Estimated 2&ndash;4 business days.</li>
     <li><strong>Handling:</strong> Ships same day or next business day after cleared payment.</li>
     <li><strong>Tracking:</strong> Tracking number emailed as soon as your order ships.</li>
   </ul>
@@ -398,8 +414,8 @@ ${thumbs.map(u => `      <img src="${u}" alt="" style="width:120px;height:120px;
   </p>
 
   <!-- Footer -->
-  <p style="text-align:center;font-size:15px;font-weight:700;padding:20px 14px;margin:0;border-top:2px solid #eee;color:#444;letter-spacing:0.02em;">
-    Thank you for your purchase &mdash; we appreciate your business!
+  <p style="text-align:center;font-size:14px;font-weight:400;padding:24px 14px 6px;margin:0;border-top:1px solid #e4e4e4;color:#666;letter-spacing:0.01em;">
+    Thank you for supporting our small business.
   </p>
 
 </div>
