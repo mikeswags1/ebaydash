@@ -151,10 +151,35 @@ function titleCaseLabel(value: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+function canonicalizeImageUrl(value: string) {
+  try {
+    const url = new URL(value)
+    const normalizedPath = url.pathname
+      .replace(/\._[^./]+(?=\.[a-z0-9]+$)/i, '')
+      .replace(/\.[A-Z0-9,_-]+\.(jpg|jpeg|png|webp)$/i, '.$1')
+      .replace(/%2B/gi, '+')
+    return `${url.hostname}${normalizedPath}`.toLowerCase()
+  } catch {
+    return value
+      .replace(/\?.*$/, '')
+      .replace(/\._[^./]+(?=\.[a-z0-9]+$)/i, '')
+      .toLowerCase()
+  }
+}
+
 function dedupeImageUrls(values: Array<string | undefined | null>) {
-  return Array.from(
-    new Set(values.filter((value): value is string => Boolean(value && value.startsWith('http'))))
-  )
+  const seen = new Set<string>()
+  const unique: string[] = []
+
+  for (const value of values) {
+    if (!value || !value.startsWith('http')) continue
+    const key = canonicalizeImageUrl(value)
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(value)
+  }
+
+  return unique
 }
 
 
@@ -323,25 +348,26 @@ function buildDescription(title: string, features: string[], about: string, imag
     .replace(/&amp;/g, '&').replace(/&#38;/g, '&')
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 
+  const uniqueImages = dedupeImageUrls(images)
   const normalizedFeatures = features.filter(Boolean).slice(0, 10)
   const featureBullets = normalizedFeatures.map(f => `<li style="margin-bottom:8px;">${f}</li>`).join('\n')
   const descriptionParagraphs = toParagraphs(about)
   const overviewBlock = descriptionParagraphs.length > 0
     ? descriptionParagraphs
-      .map((paragraph) => `<p style="font-size:14px;line-height:1.85;padding:0 14px 12px;margin:0;color:#333;">${paragraph}</p>`)
+      .map((paragraph) => `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">${paragraph}</p>`)
       .join('\n')
-    : `<p style="font-size:14px;line-height:1.85;padding:0 14px 12px;margin:0;color:#333;">This listing is based on the matching manufacturer product data for ${displayTitle}. Review the item specifics and feature summary below for the most important fit, function, and package details.</p>`
+    : `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">This listing is based on the matching manufacturer product data for ${displayTitle}. Review the item specifics and feature summary below for the most important fit, function, and package details.</p>`
 
-  const heroImages = images.slice(0, 2)
-  const detailImages = images.slice(2, 6)
+  const heroImages = uniqueImages.slice(0, 2)
+  const detailImages = uniqueImages.slice(2, 5)
   const heroImageBlock = heroImages.length > 0
     ? `<div style="display:flex;gap:12px;justify-content:center;align-items:flex-start;padding:16px 0 10px;flex-wrap:wrap;">
-${heroImages.map(u => `      <img src="${u}" alt="" style="width:${heroImages.length === 1 ? '320px' : '240px'};max-width:100%;height:auto;object-fit:contain;border:1px solid #e6e6e6;border-radius:8px;background:#fafafa;">`).join('\n')}
+${heroImages.map(u => `      <img src="${u}" alt="" style="width:${heroImages.length === 1 ? '360px' : '250px'};max-width:100%;height:250px;object-fit:contain;border:1px solid #e6e6e6;border-radius:8px;background:#fafafa;">`).join('\n')}
     </div>`
     : ''
   const detailImageBlock = detailImages.length > 0
     ? `<div style="display:flex;gap:12px;justify-content:center;align-items:flex-start;padding:8px 0 0;flex-wrap:wrap;">
-${detailImages.map(u => `      <img src="${u}" alt="" style="width:220px;max-width:100%;height:auto;object-fit:contain;border:1px solid #e6e6e6;border-radius:8px;background:#fafafa;">`).join('\n')}
+${detailImages.map(u => `      <img src="${u}" alt="" style="width:210px;max-width:100%;height:210px;object-fit:contain;border:1px solid #e6e6e6;border-radius:8px;background:#fafafa;">`).join('\n')}
     </div>`
     : ''
 
@@ -363,7 +389,7 @@ ${detailImages.map(u => `      <img src="${u}" alt="" style="width:220px;max-wid
 <div style="max-width:760px;margin:0 auto;padding:18px 14px 28px;box-sizing:border-box;overflow:hidden;border:1px solid #d8d8d8;border-radius:8px;">
 
   <!-- Title -->
-  <h1 style="font-size:28px;font-weight:700;padding:10px 10px 14px;margin:0;border-bottom:1px solid #e4e4e4;line-height:1.35;word-wrap:break-word;text-align:center;">${displayTitle}</h1>
+  <h1 style="font-size:28px;font-weight:700;padding:10px 10px 14px;margin:0;border-bottom:1px solid #e4e4e4;line-height:1.35;word-wrap:break-word;overflow-wrap:anywhere;text-align:center;">${displayTitle}</h1>
 
   <!-- Product images -->
   ${heroImageBlock}
@@ -374,9 +400,9 @@ ${detailImages.map(u => `      <img src="${u}" alt="" style="width:220px;max-wid
 
   <!-- Features -->
   ${sectionHeader('Product Features')}
-  ${featureBullets ? `<ul style="font-size:15px;font-weight:500;line-height:1.85;padding:14px 14px 14px 30px;margin:0;color:#111;">
+  ${featureBullets ? `<ul style="font-size:14px;font-weight:500;line-height:1.8;padding:14px 14px 14px 30px;margin:0;color:#111;overflow-wrap:anywhere;">
     ${featureBullets}
-  </ul>` : `<p style="font-size:14px;line-height:1.85;padding:12px 14px;margin:0;color:#333;">Review the product details and compatibility notes above to confirm the fit and package contents for your order.</p>`}
+  </ul>` : `<p style="font-size:14px;line-height:1.8;padding:12px 14px;margin:0;color:#333;overflow-wrap:anywhere;">Review the product details and compatibility notes above to confirm the fit and package contents for your order.</p>`}
 
   <!-- Specs (if available) -->
   ${specRows ? `${sectionHeader('Specifications')}<table style="width:100%;border-collapse:collapse;margin-top:2px;"><tbody>${specRows}</tbody></table>` : ''}

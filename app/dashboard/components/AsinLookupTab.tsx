@@ -144,9 +144,9 @@ export function AsinLookupTab({
                         ${asinResult.amazonPrice.toFixed(2)}
                       </div>
                     </div>
-                    <div style={{ padding: '6px 12px', borderRadius: '20px', background: asinResult.available ? 'rgba(34,197,94,0.12)' : 'rgba(232,63,80,0.12)', border: `1px solid ${asinResult.available ? 'rgba(34,197,94,0.3)' : 'rgba(232,63,80,0.3)'}` }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: asinResult.available ? 'var(--grn)' : 'var(--red)' }}>
-                        {asinResult.available ? 'In Stock' : 'Out of Stock'}
+                    <div style={{ padding: '6px 12px', borderRadius: '20px', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--grn)' }}>
+                        Ready to Buy
                       </span>
                     </div>
                   </div>
