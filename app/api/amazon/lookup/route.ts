@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
     title: product.title,
     amazonPrice: product.amazonPrice,
     imageUrl: product.imageUrl,
+    images: product.images,
     available: product.available,
     source: product.source,
   })

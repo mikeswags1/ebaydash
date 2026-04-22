@@ -133,6 +133,16 @@ function sanitizeContent(text: string): string {
     .trim()
 }
 
+function toParagraphs(text: string): string[] {
+  return text
+    .split(/\n+/)
+    .map((part) => sanitizeContent(part))
+    .flatMap((part) => part.split(/(?<=[.!?])\s+(?=[A-Z0-9])/))
+    .map((part) => part.trim())
+    .filter((part) => part.length > 35)
+    .slice(0, 3)
+}
+
 
 async function fetchAmazonDetails(
   asin: string, rapidKey: string, fallbackImage?: string
@@ -291,7 +301,7 @@ async function uploadToEPS(externalUrl: string, token: string, appId: string): P
 }
 
 // ── Description builder ──────────────────────────────────────────────────────
-function buildDescription(title: string, features: string[], _about: string, images: string[], specs: Array<[string, string]> = []): string {
+function buildDescription(title: string, features: string[], about: string, images: string[], specs: Array<[string, string]> = []): string {
 
   // Decode HTML entities in title so &quot; / &amp; etc. render correctly
   const displayTitle = title
@@ -299,7 +309,14 @@ function buildDescription(title: string, features: string[], _about: string, ima
     .replace(/&amp;/g, '&').replace(/&#38;/g, '&')
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 
-  const featureBullets = features.map(f => `<li style="margin-bottom:8px;">${f}</li>`).join('\n')
+  const normalizedFeatures = features.slice(0, 8)
+  const featureBullets = normalizedFeatures.map(f => `<li style="margin-bottom:8px;">${f}</li>`).join('\n')
+  const descriptionParagraphs = toParagraphs(about)
+  const overviewBlock = descriptionParagraphs.length > 0
+    ? descriptionParagraphs
+      .map((paragraph) => `<p style="font-size:14px;line-height:1.85;padding:0 14px 12px;margin:0;color:#333;">${paragraph}</p>`)
+      .join('\n')
+    : `<p style="font-size:14px;line-height:1.85;padding:0 14px 12px;margin:0;color:#333;">This listing is based on the matching manufacturer product data for ${displayTitle}. Review the item specifics and feature summary below for the most important fit, function, and package details.</p>`
 
   // Thumbnail row — 3 images max, kept small so they fit the description box cleanly
   const thumbs = images.slice(0, 3)
@@ -331,6 +348,10 @@ ${thumbs.map(u => `      <img src="${u}" alt="" style="width:120px;height:120px;
 
   <!-- Product images -->
   ${imageBlock}
+
+  <!-- Overview -->
+  ${sectionHeader('Product Overview')}
+  ${overviewBlock}
 
   <!-- Features -->
   ${sectionHeader('Product Features')}
@@ -463,7 +484,7 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
-  const { asin, title, ebayPrice, imageUrl, niche } = await req.json()
+  const { asin, title, ebayPrice, amazonPrice, imageUrl, niche } = await req.json()
   if (!asin || !title || ebayPrice === undefined || ebayPrice === null) {
     return apiError('ASIN, title, and eBay price are required.', { status: 400, code: 'INVALID_LISTING_INPUT' })
   }
@@ -490,9 +511,17 @@ export async function POST(req: NextRequest) {
 
   const appId = process.env.EBAY_APP_ID || ''
 
-  const validatedAmazon = await fetchAmazonProductByAsin({ asin, fallbackImage: imageUrl })
-  if (!validatedAmazon?.imageUrl || validatedAmazon.amazonPrice <= 0) {
-    return apiError('ASIN validation failed. This Amazon product is missing a usable primary image or price.', {
+  const fallbackAmazonPrice = Number.isFinite(Number(amazonPrice))
+    ? Number(amazonPrice)
+    : undefined
+  const validatedAmazon = await fetchAmazonProductByAsin({
+    asin,
+    fallbackImage: imageUrl,
+    fallbackTitle: title,
+    fallbackPrice: fallbackAmazonPrice,
+  })
+  if (!validatedAmazon) {
+    return apiError('ASIN validation failed because the ASIN is invalid or could not be recovered.', {
       status: 400,
       code: 'ASIN_VALIDATION_FAILED',
     })
@@ -536,25 +565,26 @@ export async function POST(req: NextRequest) {
 
   const filteredImages = allImages
     .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
-    .slice(0, 8)
+    .slice(0, 12)
 
-  if (filteredImages.length === 0) {
-    return apiError('This product does not have a usable source image yet. Run ASIN Lookup or choose a product with a valid Amazon image before publishing.', {
-      status: 400,
-      code: 'MISSING_LISTING_IMAGES',
-    })
-  }
-
-  const badgeUrl = `${siteUrl}/api/image/badge?url=${encodeURIComponent(filteredImages[0])}`
+  const fallbackListingImage = `${siteUrl}/api/image/fallback?asin=${encodeURIComponent(asin)}&title=${encodeURIComponent(listingTitle)}`
+  const primarySourceImage = filteredImages[0] || validatedAmazon.imageUrl || imageUrl || fallbackListingImage
+  const badgeUrl = `${siteUrl}/api/image/badge?url=${encodeURIComponent(primarySourceImage)}&asin=${encodeURIComponent(asin)}&title=${encodeURIComponent(listingTitle)}`
+  const cleanGalleryUrls = filteredImages.slice(1).map((u) => `${siteUrl}/api/image/proxy?url=${encodeURIComponent(u)}`)
   const descriptionImageUrls = [
     badgeUrl,
-    ...filteredImages.slice(1, 3).map((u) => `${siteUrl}/api/image/proxy?url=${encodeURIComponent(u)}`),
+    ...cleanGalleryUrls.slice(0, 2),
   ]
 
-  const epsSourceUrls = [badgeUrl, ...filteredImages.slice(1)]
+  const epsSourceUrls = [badgeUrl, ...(cleanGalleryUrls.length > 0 ? cleanGalleryUrls : [fallbackListingImage])]
   const pictureList = await Promise.all(
     epsSourceUrls.map((u) => uploadToEPS(u, credentials.accessToken, appId))
   )
+
+  const usablePictureList = pictureList.filter(Boolean)
+  if (usablePictureList.length === 0) {
+    usablePictureList.push(badgeUrl)
+  }
 
   const description = buildDescription(
     safeTitle,
@@ -566,8 +596,8 @@ export async function POST(req: NextRequest) {
 
 
   const xmlEncodeUrl = (u: string) => u.replace(/&/g, '&amp;').replace(/</g, '').replace(/>/g, '')
-  const pictureXml = pictureList.length > 0
-    ? `<PictureDetails><GalleryType>Gallery</GalleryType>${pictureList.map(u => `<PictureURL>${xmlEncodeUrl(u)}</PictureURL>`).join('')}</PictureDetails>`
+  const pictureXml = usablePictureList.length > 0
+    ? `<PictureDetails><GalleryType>Gallery</GalleryType>${usablePictureList.map(u => `<PictureURL>${xmlEncodeUrl(u)}</PictureURL>`).join('')}</PictureDetails>`
     : ''
 
   const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId, price, pictureXml, extraSpecifics }
@@ -707,9 +737,12 @@ export async function POST(req: NextRequest) {
       amazonImages: amazon.images.length,
       featuresCount: amazon.features.length,
       featuresSource: amazon.features.length > 0 && amazon.features[0].startsWith('Brand new') ? 'fallback' : 'amazon',
-      epsUploaded: pictureList.filter(u => u.includes('ebayimg.com')).length,
-      pictureListLength: pictureList.length,
+      epsUploaded: usablePictureList.filter(u => u.includes('ebayimg.com')).length,
+      pictureListLength: usablePictureList.length,
       apiError: (amazon as { _apiError?: string })._apiError,
+      validatedSource: validatedAmazon.source,
+      usedFallbackTitle: validatedAmazon.usedFallbackTitle,
+      usedFallbackPrice: validatedAmazon.usedFallbackPrice,
     },
   })
 }

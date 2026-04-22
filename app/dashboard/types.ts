@@ -5,10 +5,11 @@ export interface AsinResult {
   title: string
   amazonPrice: number
   imageUrl?: string
+  images?: string[]
   available: boolean
   amazonUrl?: string
   ebayTitle?: string
-  source: 'api' | 'manual' | 'db' | 'search' | 'scrape'
+  source: 'api' | 'manual' | 'db' | 'search' | 'scrape' | 'cache' | 'fallback'
 }
 
 export interface EbayOrder {

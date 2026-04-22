@@ -474,20 +474,6 @@ export default function Dashboard() {
       setListingState((prev) => ({ ...prev, error: 'Enter a valid eBay price before publishing.' }))
       return
     }
-    if (listingState.validating) {
-      setListingState((prev) => ({
-        ...prev,
-        error: 'ASIN validation is still running. Wait for the exact Amazon product to finish loading.',
-      }))
-      return
-    }
-    if (!listingState.validated || !listingState.modal.imageUrl) {
-      setListingState((prev) => ({
-        ...prev,
-        error: 'Validate this ASIN first. Publishing is blocked until the exact Amazon product returns a usable image and price.',
-      }))
-      return
-    }
 
     setListingState((prev) => ({ ...prev, loading: true, error: null }))
 
