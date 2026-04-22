@@ -232,6 +232,7 @@ export async function GET(req: NextRequest) {
           fallbackImage: product.imageUrl,
           fallbackTitle: product.title,
           fallbackPrice: product.amazonPrice,
+          strictAsin: true,
         }).catch(() => null)
 
         if (!validated) return product

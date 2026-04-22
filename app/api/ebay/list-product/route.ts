@@ -578,6 +578,7 @@ export async function POST(req: NextRequest) {
     fallbackImage: imageUrl,
     fallbackTitle: title,
     fallbackPrice: fallbackAmazonPrice,
+    strictAsin: true,
   })
   if (!validatedAmazon) {
     return apiError('ASIN validation failed because the ASIN is invalid or could not be recovered.', {

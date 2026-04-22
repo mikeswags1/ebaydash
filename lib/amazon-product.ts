@@ -6,6 +6,7 @@ type FetchAmazonProductOptions = {
   fallbackImage?: string
   fallbackTitle?: string
   fallbackPrice?: number
+  strictAsin?: boolean
 }
 
 export type ValidatedAmazonProduct = {
@@ -458,14 +459,16 @@ export async function fetchAmazonProductByAsin(
     })
   }
 
-  const titleFallback = await fetchSearchFallbackByTitle(
-    options.fallbackTitle || '',
-    options.fallbackImage,
-    options.fallbackPrice
-  )
-  if (titleFallback) {
-    await saveCachedAmazonProduct(titleFallback)
-    return titleFallback
+  if (!options.strictAsin) {
+    const titleFallback = await fetchSearchFallbackByTitle(
+      options.fallbackTitle || '',
+      options.fallbackImage,
+      options.fallbackPrice
+    )
+    if (titleFallback) {
+      await saveCachedAmazonProduct(titleFallback)
+      return titleFallback
+    }
   }
 
   return toProduct({

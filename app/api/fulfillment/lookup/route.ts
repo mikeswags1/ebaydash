@@ -116,23 +116,39 @@ export async function GET(req: NextRequest) {
       const snapshot = rows[0].amazon_snapshot && typeof rows[0].amazon_snapshot === 'object'
         ? rows[0].amazon_snapshot as Record<string, unknown>
         : null
-      const validated = await fetchAmazonProductByAsin({ asin })
+      const storedPrice = parseFloat(String(rows[0].amazon_price || '0')) || 0
+      const storedImages = Array.isArray(rows[0].amazon_images)
+        ? rows[0].amazon_images.map((value) => String(value || '')).filter((value) => value.startsWith('http'))
+        : []
+      const snapshotImages = Array.isArray(snapshot?.images)
+        ? snapshot.images.map((value) => String(value || '')).filter((value) => value.startsWith('http'))
+        : []
+      const storedImageUrl =
+        String(snapshot?.imageUrl || '') ||
+        String(rows[0].amazon_image_url || '') ||
+        snapshotImages[0] ||
+        storedImages[0] ||
+        undefined
+
+      if (snapshot && storedPrice > 0) {
+        return apiOk({
+          asin,
+          title: String(snapshot.title || rows[0].title || asin),
+          amazonPrice: storedPrice,
+          imageUrl: storedImageUrl,
+          images: snapshotImages.length > 0 ? snapshotImages : storedImages,
+          features: Array.isArray(snapshot.features) ? snapshot.features : [],
+          description: String(snapshot.description || ''),
+          specs: Array.isArray(snapshot.specs) ? snapshot.specs : [],
+          amazonUrl: String(snapshot.amazonUrl || `https://www.amazon.com/dp/${asin}`),
+          available: true,
+          source: 'db' as const,
+        })
+      }
+
+      const validated = await fetchAmazonProductByAsin({ asin, strictAsin: true })
 
       if (!validated) {
-        const storedPrice = parseFloat(String(rows[0].amazon_price || '0')) || 0
-        const storedImages = Array.isArray(rows[0].amazon_images)
-          ? rows[0].amazon_images.map((value) => String(value || '')).filter((value) => value.startsWith('http'))
-          : []
-        const snapshotImages = Array.isArray(snapshot?.images)
-          ? snapshot.images.map((value) => String(value || '')).filter((value) => value.startsWith('http'))
-          : []
-        const storedImageUrl =
-          String(snapshot?.imageUrl || '') ||
-          String(rows[0].amazon_image_url || '') ||
-          snapshotImages[0] ||
-          storedImages[0] ||
-          undefined
-
         if (storedPrice > 0) {
           const storedTitle = String(snapshot?.title || rows[0].title || asin)
           return apiOk({
@@ -242,7 +258,7 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.score - a.score)[0]
 
     if (bestCandidate?.asin && bestCandidate.score >= 0.45) {
-      const validated = await fetchAmazonProductByAsin({ asin: bestCandidate.asin })
+      const validated = await fetchAmazonProductByAsin({ asin: bestCandidate.asin, strictAsin: true })
 
       if (validated) {
         await saveRecoveredMapping({
@@ -296,7 +312,7 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.score - a.score)[0]
 
     if (bestScraped?.asin && bestScraped.score >= 0.45) {
-      const validated = await fetchAmazonProductByAsin({ asin: bestScraped.asin, fallbackImage: bestScraped.imageUrl })
+      const validated = await fetchAmazonProductByAsin({ asin: bestScraped.asin, fallbackImage: bestScraped.imageUrl, strictAsin: true })
 
       if (validated) {
         await saveRecoveredMapping({

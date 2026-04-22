@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const product = await fetchAmazonProductByAsin({ asin })
+  const product = await fetchAmazonProductByAsin({ asin, strictAsin: true })
   if (!product) {
     return apiError('ASIN validation failed. The Amazon product is missing a valid title, price, or primary image.', {
       status: 404,
