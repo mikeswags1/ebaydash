@@ -218,6 +218,10 @@ function sanitizeDescriptionText(input: string) {
     .trim()
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 async function getSuggestedCategoryIds(title: string, appId: string, token: string): Promise<string[]> {
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetSuggestedCategoriesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
@@ -984,6 +988,23 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const extractReplacementCategoryId = (r: string) => {
+    const messages = [
+      ...[...r.matchAll(/<LongMessage>(.*?)<\/LongMessage>/g)].map((match) => match[1]),
+      ...[...r.matchAll(/<ShortMessage>(.*?)<\/ShortMessage>/g)].map((match) => match[1]),
+    ]
+
+    for (const message of messages) {
+      const direct = message.match(/old category\s+\d+\s+replaced with new category\s+(\d+)/i)
+      if (direct?.[1]) return direct[1]
+
+      const generic = message.match(/replaced with new category\s+(\d+)/i)
+      if (generic?.[1]) return generic[1]
+    }
+
+    return null
+  }
+
   // Classify the dominant error type
   const errType = (short: string, long: string, codes: string[]) => {
     const t = (short + ' ' + long).toLowerCase()
@@ -991,6 +1012,16 @@ export async function POST(req: NextRequest) {
     if (t.includes('not valid') && t.includes('category')) return 'leaf'
     if (codes.includes('21919303') || (t.includes('item specific') && (t.includes('missing') || t.includes('required')))) return 'specific'
     return 'other'
+  }
+
+  const isTransientSystemError = (short: string, long: string, codes: string[]) => {
+    const text = `${short} ${long}`.toLowerCase()
+    return (
+      codes.includes('10007') ||
+      text.includes('system error') ||
+      text.includes('unable to process your request') ||
+      text.includes('please try again later')
+    )
   }
 
   // Extract every "item specific X is missing" from eBay's error response and build XML for them
@@ -1017,43 +1048,96 @@ export async function POST(req: NextRequest) {
     }).join('')
   }
 
+  const attemptListing = async (params: typeof xmlParams & { itemSpecificsXml: string }) => {
+    let activeCategoryId = params.categoryId
+    let responseText = ''
+    let parsed = { short: '', long: '', codes: [] as string[], longs: [] as string[] }
+    let errorKind: 'leaf' | 'specific' | 'other' = 'other'
+    const attemptedCategoryIds: string[] = []
+    let transientRetryUsed = false
+
+    for (let guard = 0; guard < 4; guard += 1) {
+      attemptedCategoryIds.push(activeCategoryId)
+      responseText = await submitToEbay(buildXml({ ...params, categoryId: activeCategoryId }), appId, credentials.accessToken)
+      parsed = parse(responseText)
+      errorKind = errType(parsed.short, parsed.long, parsed.codes)
+
+      const replacementCategoryId = extractReplacementCategoryId(responseText)
+      if (replacementCategoryId && replacementCategoryId !== activeCategoryId && !attemptedCategoryIds.includes(replacementCategoryId)) {
+        activeCategoryId = replacementCategoryId
+        continue
+      }
+
+      if (isTransientSystemError(parsed.short, parsed.long, parsed.codes) && !transientRetryUsed) {
+        transientRetryUsed = true
+        await sleep(700)
+        continue
+      }
+
+      break
+    }
+
+    return {
+      responseText,
+      parsed,
+      errorKind,
+      categoryId: activeCategoryId,
+      attemptedCategoryIds,
+    }
+  }
+
   // ── Retry chain ──────────────────────────────────────────────────────────────
   // Attempt 1: suggested category (preferred) or niche category with product-derived specifics
-  let responseText = await submitToEbay(buildXml(xmlParams), appId, credentials.accessToken)
-  let p = parse(responseText)
-  let et = errType(p.short, p.long, p.codes)
+  let attempt = await attemptListing({ ...xmlParams, itemSpecificsXml })
+  let responseText = attempt.responseText
+  let p = attempt.parsed
+  let et = attempt.errorKind
+  let finalCategoryId = attempt.categoryId
+  let attemptedCategoryIds = [...attempt.attemptedCategoryIds]
 
   // Attempt 2: same category + auto-extracted required specifics from error
   if (et === 'specific') {
     const auto = autoSpecificsXml(responseText)
-    responseText = await submitToEbay(buildXml({ ...xmlParams, itemSpecificsXml: itemSpecificsXml + auto }), appId, credentials.accessToken)
-    p = parse(responseText)
-    et = errType(p.short, p.long, p.codes)
+    attempt = await attemptListing({ ...xmlParams, categoryId: finalCategoryId, itemSpecificsXml: itemSpecificsXml + auto })
+    responseText = attempt.responseText
+    p = attempt.parsed
+    et = attempt.errorKind
+    finalCategoryId = attempt.categoryId
+    attemptedCategoryIds = [...attemptedCategoryIds, ...attempt.attemptedCategoryIds]
     // Attempt 2b: only auto specifics (in case extracted specifics conflict)
     if (et === 'specific') {
       const auto2 = autoSpecificsXml(responseText)
-      responseText = await submitToEbay(buildXml({ ...xmlParams, itemSpecificsXml: auto2 }), appId, credentials.accessToken)
-      p = parse(responseText)
-      et = errType(p.short, p.long, p.codes)
+      attempt = await attemptListing({ ...xmlParams, categoryId: finalCategoryId, itemSpecificsXml: auto2 })
+      responseText = attempt.responseText
+      p = attempt.parsed
+      et = attempt.errorKind
+      finalCategoryId = attempt.categoryId
+      attemptedCategoryIds = [...attemptedCategoryIds, ...attempt.attemptedCategoryIds]
     }
   }
 
   // Attempt 3: if the preferred suggested category fails, try the remaining suggested categories from deepest to shallowest
   if ((et === 'leaf' || et === 'specific') && leafSuggestedCategoryIds.length > 1) {
     for (const categoryId of leafSuggestedCategoryIds.slice(1)) {
-      if (categoryId === preferredCategoryId) continue
-      responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId, itemSpecificsXml }), appId, credentials.accessToken)
-      p = parse(responseText)
-      et = errType(p.short, p.long, p.codes)
+      if (categoryId === preferredCategoryId || attemptedCategoryIds.includes(categoryId)) continue
+      attempt = await attemptListing({ ...xmlParams, categoryId, itemSpecificsXml })
+      responseText = attempt.responseText
+      p = attempt.parsed
+      et = attempt.errorKind
+      finalCategoryId = attempt.categoryId
+      attemptedCategoryIds = [...attemptedCategoryIds, ...attempt.attemptedCategoryIds]
       if (et !== 'leaf' && et !== 'specific') break
     }
   }
 
   // Attempt 4: if the suggested tree still fails, try the niche category once with the same specifics
-  if ((et === 'leaf' || et === 'specific') && nicheIsLeaf && nicheCategoryId !== preferredCategoryId) {
-    responseText = await submitToEbay(buildXml({ ...xmlParams, categoryId: nicheCategoryId, itemSpecificsXml }), appId, credentials.accessToken)
-    p = parse(responseText)
-    et = errType(p.short, p.long, p.codes)
+  if ((et === 'leaf' || et === 'specific') && nicheIsLeaf && nicheCategoryId !== preferredCategoryId && !attemptedCategoryIds.includes(nicheCategoryId)) {
+    attempt = await attemptListing({ ...xmlParams, categoryId: nicheCategoryId, itemSpecificsXml })
+    responseText = attempt.responseText
+    p = attempt.parsed
+    et = attempt.errorKind
+    finalCategoryId = attempt.categoryId
+    attemptedCategoryIds = [...attemptedCategoryIds, ...attempt.attemptedCategoryIds]
   }
 
   const itemIdMatch = responseText.match(/<ItemID>(\d+)<\/ItemID>/)
@@ -1082,7 +1166,12 @@ export async function POST(req: NextRequest) {
     return apiError(errMsg, {
       status: 400,
       code: 'EBAY_LISTING_FAILED',
-      details: { raw: responseText.slice(0, 1200) },
+      details: {
+        raw: responseText.slice(0, 1200),
+        suggestedCategoryIds,
+        attemptedCategoryIds: Array.from(new Set(attemptedCategoryIds)),
+        finalCategoryId,
+      },
     })
   }
 
