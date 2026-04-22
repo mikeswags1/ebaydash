@@ -707,11 +707,11 @@ ${detailImages.map(u => `      <img src="${u}" alt="" style="width:210px;max-wid
 
 // ── Auth helper ──────────────────────────────────────────────────────────────
 // ── eBay API call ────────────────────────────────────────────────────────────
-async function submitToEbay(xml: string, appId: string, token: string): Promise<string> {
+async function callEbayTradingApi(callName: string, xml: string, appId: string, token: string): Promise<string> {
   const res = await fetch('https://api.ebay.com/ws/api.dll', {
     method: 'POST',
     headers: {
-      'X-EBAY-API-CALL-NAME': 'AddFixedPriceItem',
+      'X-EBAY-API-CALL-NAME': callName,
       'X-EBAY-API-SITEID': '0',
       'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
       'X-EBAY-API-APP-NAME': appId,
@@ -723,6 +723,14 @@ async function submitToEbay(xml: string, appId: string, token: string): Promise<
     body: xml,
   })
   return res.text()
+}
+
+async function submitToEbay(xml: string, appId: string, token: string): Promise<string> {
+  return callEbayTradingApi('AddFixedPriceItem', xml, appId, token)
+}
+
+async function verifyToEbay(xml: string, appId: string, token: string): Promise<string> {
+  return callEbayTradingApi('VerifyAddFixedPriceItem', xml, appId, token)
 }
 
 function buildXml(params: {
@@ -1048,6 +1056,67 @@ export async function POST(req: NextRequest) {
     }).join('')
   }
 
+  const verifyCategoryCandidate = async (params: typeof xmlParams & { itemSpecificsXml: string }) => {
+    let activeCategoryId = params.categoryId
+    let workingSpecificsXml = params.itemSpecificsXml
+    let responseText = ''
+    let parsed = { short: '', long: '', codes: [] as string[], longs: [] as string[] }
+    let errorKind: 'leaf' | 'specific' | 'other' = 'other'
+    const attemptedCategoryIds: string[] = []
+    let transientRetryUsed = false
+
+    for (let guard = 0; guard < 6; guard += 1) {
+      attemptedCategoryIds.push(activeCategoryId)
+      responseText = await verifyToEbay(buildXml({ ...params, categoryId: activeCategoryId, itemSpecificsXml: workingSpecificsXml }), appId, credentials.accessToken)
+      parsed = parse(responseText)
+      errorKind = errType(parsed.short, parsed.long, parsed.codes)
+      const verifyAck = responseText.match(/<Ack>(.*?)<\/Ack>/)?.[1] || ''
+
+      if (verifyAck && verifyAck !== 'Failure' && errorKind !== 'leaf' && errorKind !== 'specific') {
+        return {
+          ok: true,
+          categoryId: activeCategoryId,
+          itemSpecificsXml: workingSpecificsXml,
+          responseText,
+          parsed,
+          attemptedCategoryIds,
+        }
+      }
+
+      const replacementCategoryId = extractReplacementCategoryId(responseText)
+      if (replacementCategoryId && replacementCategoryId !== activeCategoryId && !attemptedCategoryIds.includes(replacementCategoryId)) {
+        activeCategoryId = replacementCategoryId
+        continue
+      }
+
+      if (errorKind === 'specific') {
+        const auto = autoSpecificsXml(responseText)
+        if (auto && !workingSpecificsXml.includes(auto)) {
+          workingSpecificsXml += auto
+          continue
+        }
+      }
+
+      if (isTransientSystemError(parsed.short, parsed.long, parsed.codes) && !transientRetryUsed) {
+        transientRetryUsed = true
+        await sleep(700)
+        continue
+      }
+
+      break
+    }
+
+    return {
+      ok: false,
+      categoryId: activeCategoryId,
+      itemSpecificsXml: workingSpecificsXml,
+      responseText,
+      parsed,
+      attemptedCategoryIds,
+      errorKind,
+    }
+  }
+
   const attemptListing = async (params: typeof xmlParams & { itemSpecificsXml: string }) => {
     let activeCategoryId = params.categoryId
     let responseText = ''
@@ -1086,14 +1155,44 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const categoryCandidates = Array.from(
+    new Set([
+      ...leafSuggestedCategoryIds,
+      ...(nicheIsLeaf ? [nicheCategoryId] : []),
+    ].filter(Boolean))
+  )
+
+  let verifiedParams = { categoryId: preferredCategoryId, itemSpecificsXml }
+  let verificationAttempts: string[] = []
+  let verificationResponseText = ''
+  let verificationError = ''
+
+  for (const categoryId of categoryCandidates) {
+    const verification = await verifyCategoryCandidate({ ...xmlParams, categoryId, itemSpecificsXml })
+    verificationAttempts.push(...verification.attemptedCategoryIds)
+
+    if (verification.ok) {
+      verifiedParams = {
+        categoryId: verification.categoryId,
+        itemSpecificsXml: verification.itemSpecificsXml,
+      }
+      verificationResponseText = verification.responseText
+      verificationError = ''
+      break
+    }
+
+    verificationResponseText = verification.responseText
+    verificationError = verification.parsed.long || verification.parsed.short
+  }
+
   // ── Retry chain ──────────────────────────────────────────────────────────────
-  // Attempt 1: suggested category (preferred) or niche category with product-derived specifics
-  let attempt = await attemptListing({ ...xmlParams, itemSpecificsXml })
+  // Attempt 1: verified category with verified specifics
+  let attempt = await attemptListing({ ...xmlParams, ...verifiedParams })
   let responseText = attempt.responseText
   let p = attempt.parsed
   let et = attempt.errorKind
   let finalCategoryId = attempt.categoryId
-  let attemptedCategoryIds = [...attempt.attemptedCategoryIds]
+  let attemptedCategoryIds = [...verificationAttempts, ...attempt.attemptedCategoryIds]
 
   // Attempt 2: same category + auto-extracted required specifics from error
   if (et === 'specific') {
@@ -1155,6 +1254,7 @@ export async function POST(req: NextRequest) {
     const errMsg =
       allLong.find(m => !isWarningOnly(m)) ||
       allShort.find(m => !isWarningOnly(m)) ||
+      verificationError ||
       allLong[0] || allShort[0] ||
       responseText.slice(0, 400)
     if (errMsg.toLowerCase().includes('expired') || errMsg.toLowerCase().includes('auth token')) {
@@ -1168,6 +1268,7 @@ export async function POST(req: NextRequest) {
       code: 'EBAY_LISTING_FAILED',
       details: {
         raw: responseText.slice(0, 1200),
+        verificationRaw: verificationResponseText.slice(0, 1200),
         suggestedCategoryIds,
         attemptedCategoryIds: Array.from(new Set(attemptedCategoryIds)),
         finalCategoryId,
