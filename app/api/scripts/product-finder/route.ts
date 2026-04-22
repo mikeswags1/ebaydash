@@ -52,6 +52,46 @@ function getTitleScore(sourceTitle: string, candidateTitle: string) {
   return overlap / Math.max(sourceWords.size, candidateWords.size)
 }
 
+function canonicalizeImageKey(value?: string) {
+  return String(value || '')
+    .replace(/\?.*$/, '')
+    .replace(/\._[^./]+(?=\.[a-z0-9]+$)/i, '')
+    .toLowerCase()
+}
+
+function dedupeProducts(products: Product[]) {
+  const kept: Product[] = []
+
+  for (const product of products) {
+    const productImageKey = canonicalizeImageKey(product.imageUrl)
+    const duplicate = kept.find((existing) => {
+      const titleScore = getTitleScore(existing.title, product.title)
+      const sameImage = productImageKey && productImageKey === canonicalizeImageKey(existing.imageUrl)
+      const closePrice = Math.abs(existing.amazonPrice - product.amazonPrice) <= 3
+      return sameImage || (titleScore >= 0.72 && closePrice)
+    })
+
+    if (!duplicate) {
+      kept.push(product)
+      continue
+    }
+
+    const duplicateScore =
+      duplicate.profit * Math.log10(parseSales(duplicate.salesVolume) + 1) *
+      (duplicate._rating ? duplicate._rating / 5 : 0.6) * Math.log10((duplicate._numRatings ?? 0) + 10)
+    const productScore =
+      product.profit * Math.log10(parseSales(product.salesVolume) + 1) *
+      (product._rating ? product._rating / 5 : 0.6) * Math.log10((product._numRatings ?? 0) + 10)
+
+    if (productScore > duplicateScore) {
+      const index = kept.indexOf(duplicate)
+      kept[index] = product
+    }
+  }
+
+  return kept
+}
+
 function calcMetrics(amazonPrice: number) {
   const targetProfit = amazonPrice < 15  ? 7
     : amazonPrice < 40  ? 12
@@ -282,7 +322,7 @@ export async function GET(req: NextRequest) {
       })
     )
 
-    const filteredEnriched = enriched.filter((product): product is Product => Boolean(product))
+    const filteredEnriched = dedupeProducts(enriched.filter((product): product is Product => Boolean(product)))
     const droppedSourceAsins = new Set(
       results
         .slice(0, 20)
@@ -335,6 +375,7 @@ export async function GET(req: NextRequest) {
           (p._rating ? p._rating / 5 : 0.6) * Math.log10((p._numRatings ?? 0) + 10)
         return score(b) - score(a)
       })
+      results.splice(0, results.length, ...dedupeProducts(results))
       try {
         await sql`INSERT INTO product_cache (niche, results) VALUES (${niche}, ${JSON.stringify(results)})
           ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, cached_at = NOW()`
