@@ -266,12 +266,13 @@ async function getSuggestedCategoryIds(title: string, appId: string, token: stri
 }
 
 async function isLeafCategory(categoryId: string, appId: string, token: string): Promise<boolean> {
+  if (!categoryId) return false
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetCategoryFeaturesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
   <CategoryID>${categoryId}</CategoryID>
   <DetailLevel>ReturnAll</DetailLevel>
-  <ViewAllNodes>true</ViewAllNodes>
+  <ViewAllNodes>false</ViewAllNodes>
 </GetCategoryFeaturesRequest>`
 
   try {
@@ -289,7 +290,20 @@ async function isLeafCategory(categoryId: string, appId: string, token: string):
       signal: AbortSignal.timeout(12000),
     })
     const text = await res.text()
-    return /<LeafCategory>true<\/LeafCategory>/i.test(text)
+    const categoryBlock =
+      text.match(new RegExp(`<Category>[^]*?<CategoryID>${categoryId}<\\/CategoryID>[^]*?<LeafCategory>(true|false)<\\/LeafCategory>[^]*?<\\/Category>`, 'i')) ||
+      text.match(new RegExp(`<CategoryID>${categoryId}<\\/CategoryID>[^]*?<LeafCategory>(true|false)<\\/LeafCategory>`, 'i'))
+
+    if (categoryBlock?.[1]) {
+      return categoryBlock[1].toLowerCase() === 'true'
+    }
+
+    const leafMatch = text.match(/<LeafCategory>(true|false)<\/LeafCategory>/i)
+    if (leafMatch?.[1]) {
+      return leafMatch[1].toLowerCase() === 'true'
+    }
+
+    return false
   } catch {
     return false
   }
