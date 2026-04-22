@@ -106,10 +106,10 @@ export function SellOnEbayModal({
 
             <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', background: validated ? 'rgba(46,207,118,0.08)' : 'rgba(200,162,80,0.08)', border: validated ? '1px solid rgba(46,207,118,0.2)' : '1px solid rgba(200,162,80,0.18)', fontSize: '12px', color: validated ? 'var(--grn)' : 'var(--gold)', lineHeight: 1.6 }}>
               {validating
-                ? 'Pulling Amazon listing data and images now. You can still publish while recovery checks continue in the background.'
+                ? 'Validating the exact Amazon product, current price, and images now. Publishing unlocks as soon as the live Amazon price is confirmed.'
                 : validated
-                  ? 'ASIN verified. This listing will use the validated Amazon title, image, and cost data.'
-                  : 'Recovery mode is active. If Amazon data is incomplete, the lister will keep recovering title, price, and images before it gives up.'}
+                  ? 'ASIN verified. This listing will use the validated Amazon title, image, and current cost data.'
+                  : 'Amazon validation did not finish cleanly. Review the product again before publishing so the cost and profit stay accurate.'}
             </div>
 
             {listError ? (
@@ -137,8 +137,8 @@ export function SellOnEbayModal({
             ) : null}
 
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button className="btn btn-gold" style={{ flex: 1, fontSize: '14px', padding: '14px' }} disabled={listLoading || !listPrice} onClick={onPublish}>
-                {listLoading ? 'Publishing...' : validating ? 'Publish with Recovery' : 'Publish to eBay'}
+              <button className="btn btn-gold" style={{ flex: 1, fontSize: '14px', padding: '14px' }} disabled={listLoading || validating || !validated || !listPrice} onClick={onPublish}>
+                {listLoading ? 'Publishing...' : validating ? 'Validating Amazon Price...' : 'Publish to eBay'}
               </button>
               <button onClick={onClose} className="btn btn-ghost" style={{ fontSize: '13px', padding: '14px 18px' }}>
                 Cancel

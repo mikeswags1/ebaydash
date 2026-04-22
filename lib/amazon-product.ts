@@ -65,6 +65,35 @@ function dedupeImages(values: string[]) {
   return Array.from(new Set(values.filter((url) => url.startsWith('http'))))
 }
 
+function chooseResolvedAmazonPrice(products: ValidatedAmazonProduct[], fallbackPrice?: number) {
+  const positivePrices = products
+    .map((product) => ({
+      source: product.source,
+      price: Number(product.amazonPrice || 0),
+    }))
+    .filter((entry) => Number.isFinite(entry.price) && entry.price > 0)
+
+  if (positivePrices.length === 0) {
+    return Number.isFinite(fallbackPrice) && Number(fallbackPrice) > 0 ? Number(fallbackPrice) : 0
+  }
+
+  const scrapeLike = positivePrices.filter((entry) => entry.source === 'scrape' || entry.source === 'search')
+  const trustedSet = scrapeLike.length > 0 ? scrapeLike : positivePrices
+  const trustedMin = Math.min(...trustedSet.map((entry) => entry.price))
+  const trustedMax = Math.max(...trustedSet.map((entry) => entry.price))
+
+  if (trustedSet.length >= 2 && trustedMax <= trustedMin * 1.2) {
+    return parseFloat(trustedMin.toFixed(2))
+  }
+
+  const cached = positivePrices.find((entry) => entry.source === 'cache')
+  if (cached && cached.price <= trustedMin * 1.15) {
+    return parseFloat(cached.price.toFixed(2))
+  }
+
+  return parseFloat(trustedMin.toFixed(2))
+}
+
 function hasRichContent(product: Pick<ValidatedAmazonProduct, 'images' | 'features' | 'description'> | null | undefined) {
   if (!product) return false
   return product.images.length >= 2 || product.features.length >= 3 || product.description.length >= 120
@@ -126,11 +155,12 @@ function mergeProducts(asin: string, products: Array<ValidatedAmazonProduct | nu
     ...validProducts.flatMap((product) => product.images),
     normalizeImageUrl(options.fallbackImage),
   ])
+  const resolvedPrice = chooseResolvedAmazonPrice(validProducts, options.fallbackPrice)
 
   return toProduct({
     asin,
     title: preferred.title,
-    amazonPrice: preferred.amazonPrice,
+    amazonPrice: resolvedPrice,
     images,
     features: validProducts.flatMap((product) => product.features),
     description: validProducts.find((product) => product.description)?.description || '',
