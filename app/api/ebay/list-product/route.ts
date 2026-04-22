@@ -300,8 +300,8 @@ function buildDescription(title: string, features: string[], _about: string, ima
 
   const featureBullets = features.map(f => `<li style="margin-bottom:8px;">${f}</li>`).join('\n')
 
-  // Thumbnail row — 2 images max, small size so they fit the description box
-  const thumbs = images.slice(0, 2)
+  // Thumbnail row — 3 images max, kept small so they fit the description box cleanly
+  const thumbs = images.slice(0, 3)
   const imageBlock = thumbs.length > 0
     ? `<div style="display:flex;gap:10px;justify-content:center;padding:12px 0;">
 ${thumbs.map(u => `      <img src="${u}" alt="" style="width:120px;height:120px;object-fit:contain;border:1px solid #e0e0e0;border-radius:6px;background:#fafafa;">`).join('\n')}
@@ -528,7 +528,7 @@ export async function POST(req: NextRequest) {
 
   const filteredImages = allImages
     .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
-    .slice(0, 3)
+    .slice(0, 8)
 
   if (filteredImages.length === 0) {
     return apiError('This product does not have a usable source image yet. Run ASIN Lookup or choose a product with a valid Amazon image before publishing.', {
@@ -537,19 +537,25 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // Proxy URLs used only inside the HTML description (fetched by buyer's browser, not eBay)
-  const proxyUrls = filteredImages.map((u, i) =>
-    i === 0
-      ? `${siteUrl}/api/image/badge?url=${encodeURIComponent(u)}`
-      : `${siteUrl}/api/image/proxy?url=${encodeURIComponent(u)}`
+  const badgeUrl = `${siteUrl}/api/image/badge?url=${encodeURIComponent(filteredImages[0])}`
+  const descriptionImageUrls = [
+    badgeUrl,
+    ...filteredImages.slice(1, 3).map((u) => `${siteUrl}/api/image/proxy?url=${encodeURIComponent(u)}`),
+  ]
+
+  const epsSourceUrls = [badgeUrl, ...filteredImages.slice(1)]
+  const pictureList = await Promise.all(
+    epsSourceUrls.map((u) => uploadToEPS(u, credentials.accessToken, appId))
   )
 
-  // Upload original Amazon URLs directly to eBay EPS — no proxy hop, simpler chain.
-  // EPS fetches from Amazon CDN directly; falls back to the original URL if upload fails.
-  const pictureList = await Promise.all(filteredImages.map((u) => uploadToEPS(u, credentials.accessToken, appId)))
+  const description = buildDescription(
+    safeTitle,
+    amazon.features,
+    amazon.description,
+    descriptionImageUrls,
+    amazon.specs
+  )
 
-  // Description inline images go through our proxy (Amazon URLs work in buyer browsers)
-  const description = buildDescription(safeTitle, amazon.features, amazon.description, proxyUrls, amazon.specs)
 
   const xmlEncodeUrl = (u: string) => u.replace(/&/g, '&amp;').replace(/</g, '').replace(/>/g, '')
   const pictureXml = pictureList.length > 0
@@ -699,3 +705,5 @@ export async function POST(req: NextRequest) {
     },
   })
 }
+
+
