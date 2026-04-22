@@ -289,7 +289,7 @@ async function fetchAmazonDetails(
       return {
         images: scraped.images.length > 0 ? scraped.images : (fallbackImage ? [fallbackImage] : []),
         features,
-        description: '',
+        description: sanitizeContent(scraped.description || ''),
         specs: scraped.specs,
       }
     }

@@ -16,6 +16,7 @@ export interface AmazonProduct {
   price: number
   images: string[]
   features: string[]
+  description: string
   specs: Array<[string, string]>
   available: boolean
 }
@@ -45,8 +46,15 @@ function decodeHtmlEntities(input: string): string {
     .replace(/\\\//g, '/')
 }
 
+function upgradeAmazonImageUrl(url: string): string {
+  return decodeHtmlEntities(url)
+    .replace(/\\/g, '')
+    .replace(/\._[^.]+(?=\.(jpg|jpeg|png|webp))/gi, '')
+    .replace(/\.(jpg|jpeg|png|webp)\?.*$/i, '.$1')
+}
+
 function dedupeImages(values: string[]) {
-  return Array.from(new Set(values.filter((url) => url.startsWith('http'))))
+  return Array.from(new Set(values.filter((url) => url.startsWith('http')).map((url) => upgradeAmazonImageUrl(url))))
 }
 
 function extractDynamicImageUrls(html: string): string[] {
@@ -58,7 +66,7 @@ function extractDynamicImageUrls(html: string): string[] {
     const decoded = decodeHtmlEntities(dynamicImageMatch[1])
     for (const match of decoded.matchAll(/https:[^"]+\.(?:jpg|jpeg|png|webp)/gi)) {
       if (urls.length >= 12) break
-      const url = decodeHtmlEntities(match[0]).replace(/\\/g, '')
+      const url = upgradeAmazonImageUrl(match[0])
       if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
     }
   }
@@ -71,9 +79,21 @@ function extractDynamicImageUrls(html: string): string[] {
   ]) {
     for (const match of html.matchAll(pattern)) {
       if (urls.length >= 12) break
-      const url = decodeHtmlEntities(match[1]).replace(/\\/g, '')
+      const url = upgradeAmazonImageUrl(match[1])
       if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
     }
+  }
+
+  for (const match of html.matchAll(/"mainUrl":"(https:[^"]+)"/g)) {
+    if (urls.length >= 12) break
+    const url = upgradeAmazonImageUrl(match[1])
+    if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
+  }
+
+  for (const match of html.matchAll(/"thumb":"(https:[^"]+)"/g)) {
+    if (urls.length >= 12) break
+    const url = upgradeAmazonImageUrl(match[1])
+    if (url.startsWith('http') && !urls.includes(url)) urls.push(url)
   }
 
   return urls
@@ -112,7 +132,8 @@ function extractColorImageUrls(html: string): string[] {
   for (const pattern of [/"hiRes"\s*:\s*"(https:[^"]+)"/g, /"large"\s*:\s*"(https:[^"]+)"/g]) {
     for (const match of initialArray.matchAll(pattern)) {
       if (images.length >= 12) break
-      if (!images.includes(match[1])) images.push(match[1])
+      const url = upgradeAmazonImageUrl(match[1])
+      if (!images.includes(url)) images.push(url)
     }
     if (images.length > 0) break
   }
@@ -174,7 +195,7 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
       const mainImg =
         html.match(/id="landingImage"[^>]*data-a-dynamic-image="([^"]+)"/) ||
         html.match(/id="imgBlkFront"[^>]*src="(https:[^"]+)"/)
-      if (mainImg) images = [decodeHtmlEntities(mainImg[1].split('"')[0]).replace(/\\/g, '')]
+      if (mainImg) images = [upgradeAmazonImageUrl(mainImg[1].split('"')[0])]
     }
 
     const features: string[] = []
@@ -209,6 +230,16 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
       }
     }
 
+    const descriptionSources = [
+      extractBetween(html, 'id="productDescription"', '</div>'),
+      extractBetween(html, 'id="bookDescription_feature_div"', '</div>'),
+      extractBetween(html, 'id="aplus_feature_div"', '</div>'),
+      extractBetween(html, '"productDescription":"', '","'),
+    ]
+    const description = descriptionSources
+      .map((source) => stripTags(decodeHtmlEntities(source)))
+      .find((source) => source.length > 60) || ''
+
     const available = !html.includes('Currently unavailable') && !html.includes('unavailable.')
 
     return {
@@ -217,6 +248,7 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
       price,
       images,
       features,
+      description,
       specs,
       available,
     }

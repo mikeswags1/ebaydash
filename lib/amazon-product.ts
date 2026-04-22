@@ -393,6 +393,7 @@ async function fetchProductFromScrape(asin: string, fallbackImage?: string) {
     amazonPrice: scraped.price,
     images: [...scraped.images, normalizeImageUrl(fallbackImage)],
     features: scraped.features,
+    description: scraped.description,
     specs: scraped.specs,
     available: scraped.available && scraped.price > 0,
     source: 'scrape',

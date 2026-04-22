@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import { queryRows, sql } from '@/lib/db'
+import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 
 const EBAY_FEE   = 0.15   // 15% eBay take rate used in new pricing model
@@ -24,6 +25,7 @@ const REJECT_KEYWORDS = [
 type Product = {
   asin: string; title: string; amazonPrice: number; ebayPrice: number
   profit: number; roi: number; imageUrl?: string; risk: string; salesVolume?: string
+  images?: string[]; features?: string[]; description?: string; specs?: Array<[string, string]>
   _rating?: number; _numRatings?: number
 }
 
@@ -222,6 +224,33 @@ export async function GET(req: NextRequest) {
       }
       return score(b) - score(a)
     })
+
+    const enriched = await Promise.all(
+      results.slice(0, 12).map(async (product) => {
+        const validated = await fetchAmazonProductByAsin({
+          asin: product.asin,
+          fallbackImage: product.imageUrl,
+          fallbackTitle: product.title,
+          fallbackPrice: product.amazonPrice,
+        }).catch(() => null)
+
+        if (!validated) return product
+
+        return {
+          ...product,
+          title: validated.title || product.title,
+          amazonPrice: validated.amazonPrice || product.amazonPrice,
+          imageUrl: validated.imageUrl || product.imageUrl,
+          images: validated.images,
+          features: validated.features,
+          description: validated.description,
+          specs: validated.specs,
+        }
+      })
+    )
+
+    results.splice(0, enriched.length, ...enriched)
+
     try {
       await sql`
         INSERT INTO product_cache (niche, results) VALUES (${niche}, ${JSON.stringify(results)})
