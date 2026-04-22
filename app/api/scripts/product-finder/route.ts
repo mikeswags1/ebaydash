@@ -10,6 +10,7 @@ const EBAY_FEE   = 0.15   // 15% eBay take rate used in new pricing model
 const MIN_PROFIT = 6
 const MAX_COST   = 300
 const CACHE_TTL  = 23 * 60 * 60 * 1000 // 23 hours — refresh once per day
+const CACHE_VERSION = 2
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -172,9 +173,11 @@ async function ensureCacheTable() {
     await sql`CREATE TABLE IF NOT EXISTS product_cache (
       niche      TEXT        PRIMARY KEY,
       results    JSONB       NOT NULL,
-      cached_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      cached_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      version    INTEGER     NOT NULL DEFAULT 1
     )`
   } catch { /* already exists */ }
+  await sql`ALTER TABLE product_cache ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1`.catch(() => {})
 }
 
 export async function GET(req: NextRequest) {
@@ -199,14 +202,14 @@ export async function GET(req: NextRequest) {
   } catch { /* table may not exist yet */ }
 
   // ── Check cache ──────────────────────────────────────────────────────────────
-  let cacheRow: { results: Product[]; cached_at: Date } | null = null
+  let cacheRow: { results: Product[]; cached_at: Date; version?: number } | null = null
   try {
-    const rows = await queryRows<{ results: Product[]; cached_at: Date }>`SELECT results, cached_at FROM product_cache WHERE niche = ${niche}`
-    if (rows[0]) cacheRow = rows[0] as { results: Product[]; cached_at: Date }
+    const rows = await queryRows<{ results: Product[]; cached_at: Date; version?: number }>`SELECT results, cached_at, version FROM product_cache WHERE niche = ${niche}`
+    if (rows[0]) cacheRow = rows[0] as { results: Product[]; cached_at: Date; version?: number }
   } catch { /* ignore */ }
 
   const cacheAge = cacheRow ? Date.now() - new Date(cacheRow.cached_at).getTime() : Infinity
-  const cacheIsFresh = cacheAge < CACHE_TTL
+  const cacheIsFresh = cacheAge < CACHE_TTL && (cacheRow?.version || 1) === CACHE_VERSION
 
   if (cacheIsFresh && !forceRefresh) {
     // Serve from cache — filter out already-listed ASINs for this user
@@ -334,8 +337,8 @@ export async function GET(req: NextRequest) {
 
     try {
       await sql`
-        INSERT INTO product_cache (niche, results) VALUES (${niche}, ${JSON.stringify(results)})
-        ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, cached_at = NOW()
+        INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results)}, ${CACHE_VERSION})
+        ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()
       `
     } catch { /* non-fatal */ }
   }
@@ -377,8 +380,8 @@ export async function GET(req: NextRequest) {
       })
       results.splice(0, results.length, ...dedupeProducts(results))
       try {
-        await sql`INSERT INTO product_cache (niche, results) VALUES (${niche}, ${JSON.stringify(results)})
-          ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, cached_at = NOW()`
+        await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results)}, ${CACHE_VERSION})
+          ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()`
       } catch { /* non-fatal */ }
       const filtered = results.filter(p => !listedAsins.has(p.asin))
       return apiOk({ niche, results: filtered, count: filtered.length, source: 'scrape' })

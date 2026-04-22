@@ -32,7 +32,7 @@ import {
   validateAmazonAsin,
 } from './api'
 import { EBAY_FEE_RATE } from './constants'
-import { getGrossRevenue, listProductsInBatches, parseDashboardSearchMessage } from './utils'
+import { getGrossRevenue, getRecommendedEbayPrice, listProductsInBatches, parseDashboardSearchMessage } from './utils'
 
 type ConnectionState = {
   ebayConnected: boolean
@@ -425,21 +425,47 @@ export default function Dashboard() {
     void (async () => {
       try {
         const validated = await validateAmazonAsin(product.asin)
+        const nextRecommendedPrice = getRecommendedEbayPrice(validated.amazonPrice)
+
+        setFinderState((prev) => ({
+          ...prev,
+          results: prev.results
+            ? prev.results.map((entry) =>
+                entry.asin === product.asin
+                  ? {
+                      ...entry,
+                      title: validated.title,
+                      amazonPrice: validated.amazonPrice,
+                      ebayPrice: nextRecommendedPrice,
+                      imageUrl: validated.imageUrl || entry.imageUrl,
+                      images: validated.images || entry.images,
+                      features: validated.features || entry.features,
+                      description: validated.description || entry.description,
+                      specs: validated.specs || entry.specs,
+                    }
+                  : entry
+              )
+            : prev.results,
+        }))
+
         setListingState((prev) => {
           if (!prev.modal || prev.modal.asin !== product.asin) return prev
 
+          const shouldRefreshPrice = prev.price === product.ebayPrice.toFixed(2)
           return {
             ...prev,
             modal: {
               ...prev.modal,
               title: validated.title,
               amazonPrice: validated.amazonPrice,
+              ebayPrice: nextRecommendedPrice,
               imageUrl: validated.imageUrl || prev.modal.imageUrl,
               images: validated.images || prev.modal.images,
               features: validated.features || prev.modal.features,
               description: validated.description || prev.modal.description,
               specs: validated.specs || prev.modal.specs,
             },
+            price: shouldRefreshPrice ? nextRecommendedPrice.toFixed(2) : prev.price,
             validating: false,
             validated: Boolean(validated.imageUrl && validated.amazonPrice > 0),
             error: null,
