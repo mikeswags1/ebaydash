@@ -29,6 +29,7 @@ import {
   publishProduct,
   runDashboardScript,
   saveUserNiche,
+  validateAmazonAsin,
 } from './api'
 import { EBAY_FEE_RATE } from './constants'
 import { getGrossRevenue, listProductsInBatches, parseDashboardSearchMessage } from './utils'
@@ -79,6 +80,8 @@ type FinderState = {
 type ListingState = {
   modal: FinderProduct | null
   price: string
+  validating: boolean
+  validated: boolean
   loading: boolean
   result: ListResult | null
   error: string | null
@@ -130,6 +133,8 @@ export default function Dashboard() {
   const [listingState, setListingState] = useState<ListingState>({
     modal: null,
     price: '',
+    validating: false,
+    validated: false,
     loading: false,
     result: null,
     error: null,
@@ -407,14 +412,58 @@ export default function Dashboard() {
     setListingState({
       modal: product,
       price: product.ebayPrice.toFixed(2),
+      validating: true,
+      validated: false,
       loading: false,
       result: null,
       error: null,
     })
+    void (async () => {
+      try {
+        const validated = await validateAmazonAsin(product.asin)
+        setListingState((prev) => {
+          if (!prev.modal || prev.modal.asin !== product.asin) return prev
+
+          return {
+            ...prev,
+            modal: {
+              ...prev.modal,
+              title: validated.title,
+              amazonPrice: validated.amazonPrice,
+              imageUrl: validated.imageUrl || prev.modal.imageUrl,
+            },
+            validating: false,
+            validated: Boolean(validated.imageUrl && validated.amazonPrice > 0),
+            error:
+              validated.imageUrl && validated.amazonPrice > 0
+                ? null
+                : 'ASIN validation did not return a usable Amazon image and price.',
+          }
+        })
+      } catch (error) {
+        setListingState((prev) => {
+          if (!prev.modal || prev.modal.asin !== product.asin) return prev
+
+          return {
+            ...prev,
+            validating: false,
+            validated: false,
+            error: getErrorMessage(error, 'ASIN validation failed. Verify the Amazon product before publishing.'),
+          }
+        })
+      }
+    })()
   }, [])
 
   const closeListModal = useCallback(() => {
-    setListingState((prev) => ({ ...prev, modal: null, result: null, error: null }))
+    setListingState((prev) => ({
+      ...prev,
+      modal: null,
+      validating: false,
+      validated: false,
+      result: null,
+      error: null,
+    }))
   }, [])
 
   const handlePublishCurrentProduct = useCallback(async () => {
@@ -423,6 +472,20 @@ export default function Dashboard() {
     const parsedPrice = parseFloat(listingState.price)
     if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
       setListingState((prev) => ({ ...prev, error: 'Enter a valid eBay price before publishing.' }))
+      return
+    }
+    if (listingState.validating) {
+      setListingState((prev) => ({
+        ...prev,
+        error: 'ASIN validation is still running. Wait for the exact Amazon product to finish loading.',
+      }))
+      return
+    }
+    if (!listingState.validated || !listingState.modal.imageUrl) {
+      setListingState((prev) => ({
+        ...prev,
+        error: 'Validate this ASIN first. Publishing is blocked until the exact Amazon product returns a usable image and price.',
+      }))
       return
     }
 
@@ -570,6 +633,8 @@ export default function Dashboard() {
         product={listingState.modal}
         listPrice={listingState.price}
         onListPriceChange={(value) => setListingState((prev) => ({ ...prev, price: value }))}
+        validating={listingState.validating}
+        validated={listingState.validated}
         listLoading={listingState.loading}
         listResult={listingState.result}
         listError={listingState.error}

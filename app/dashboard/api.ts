@@ -79,6 +79,10 @@ export async function lookupAsinByItemId(itemId: string) {
   return requestJson<AsinResult>(`/api/fulfillment/lookup?itemId=${itemId}`)
 }
 
+export async function validateAmazonAsin(asin: string) {
+  return requestJson<AsinResult>(`/api/amazon/lookup?asin=${encodeURIComponent(asin)}`)
+}
+
 export async function runDashboardScript(file: string) {
   return requestJson<{ ok: true; message?: string }>(`/api/scripts/run?script=${file}`)
 }

@@ -8,7 +8,7 @@ export interface AsinResult {
   available: boolean
   amazonUrl?: string
   ebayTitle?: string
-  source: 'api' | 'manual' | 'db' | 'search'
+  source: 'api' | 'manual' | 'db' | 'search' | 'scrape'
 }
 
 export interface EbayOrder {

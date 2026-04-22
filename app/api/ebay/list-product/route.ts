@@ -5,6 +5,7 @@ import { apiError, apiOk } from '@/lib/api-response'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { sql } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
+import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
 
 // ── VeRO Protection ──────────────────────────────────────────────────────────
@@ -462,18 +463,14 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
-  const { asin, title, ebayPrice, amazonPrice, imageUrl, niche } = await req.json()
-  if (!asin || !title || ebayPrice === undefined || ebayPrice === null || amazonPrice === undefined || amazonPrice === null) {
-    return apiError('ASIN, title, Amazon cost, and eBay price are required.', { status: 400, code: 'INVALID_LISTING_INPUT' })
+  const { asin, title, ebayPrice, imageUrl, niche } = await req.json()
+  if (!asin || !title || ebayPrice === undefined || ebayPrice === null) {
+    return apiError('ASIN, title, and eBay price are required.', { status: 400, code: 'INVALID_LISTING_INPUT' })
   }
 
   const parsedEbayPrice = Number(ebayPrice)
-  const parsedAmazonPrice = Number(amazonPrice)
   if (!Number.isFinite(parsedEbayPrice) || parsedEbayPrice <= 0) {
     return apiError('Enter a valid eBay price before publishing.', { status: 400, code: 'INVALID_LISTING_PRICE' })
-  }
-  if (!Number.isFinite(parsedAmazonPrice) || parsedAmazonPrice <= 0) {
-    return apiError('Enter a valid Amazon source price before publishing.', { status: 400, code: 'INVALID_AMAZON_PRICE' })
   }
 
   if (isVero(title)) {
@@ -493,7 +490,18 @@ export async function POST(req: NextRequest) {
 
   const appId = process.env.EBAY_APP_ID || ''
 
-  const cleanTitle = title
+  const validatedAmazon = await fetchAmazonProductByAsin({ asin, fallbackImage: imageUrl })
+  if (!validatedAmazon?.imageUrl || validatedAmazon.amazonPrice <= 0) {
+    return apiError('ASIN validation failed. This Amazon product is missing a usable primary image or price.', {
+      status: 400,
+      code: 'ASIN_VALIDATION_FAILED',
+    })
+  }
+
+  const listingTitle = validatedAmazon.title || title
+  const listingAmazonPrice = validatedAmazon.amazonPrice
+
+  const cleanTitle = listingTitle
     // Decode HTML entities first so &quot; → " then gets stripped cleanly
     .replace(/&quot;|&#34;/gi, '"')
     .replace(/&amp;|&#38;/gi, '&')
@@ -516,7 +524,7 @@ export async function POST(req: NextRequest) {
     .join('')
 
   const rapidKey = process.env.RAPIDAPI_KEY || ''
-  const amazon = await fetchAmazonDetails(asin, rapidKey, imageUrl)
+  const amazon = await fetchAmazonDetails(asin, rapidKey, validatedAmazon.imageUrl)
 
   const host = req.headers.get('host') || ''
   const proto = host.startsWith('localhost') ? 'http' : 'https'
@@ -524,7 +532,7 @@ export async function POST(req: NextRequest) {
 
   const allImages = amazon.images.length > 0
     ? amazon.images
-    : (imageUrl ? [imageUrl] : [])
+    : validatedAmazon.images
 
   const filteredImages = allImages
     .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
@@ -682,10 +690,10 @@ export async function POST(req: NextRequest) {
   await ensureListedAsinsFinancialColumns()
   await sql`
     INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate)
-    VALUES (${session.user.id}, ${asin}, ${title.slice(0, 200)}, ${listingId}, ${parsedAmazonPrice.toFixed(2)}, ${price}, ${0.1325})
+    VALUES (${session.user.id}, ${asin}, ${listingTitle.slice(0, 200)}, ${listingId}, ${listingAmazonPrice.toFixed(2)}, ${price}, ${0.1325})
     ON CONFLICT (user_id, asin) DO UPDATE SET
       ebay_listing_id = ${listingId},
-      amazon_price = ${parsedAmazonPrice.toFixed(2)},
+      amazon_price = ${listingAmazonPrice.toFixed(2)},
       ebay_price = ${price},
       ebay_fee_rate = ${0.1325},
       listed_at = NOW()

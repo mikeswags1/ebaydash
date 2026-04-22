@@ -5,6 +5,7 @@ import { apiError, apiOk } from '@/lib/api-response'
 import { queryRows, sql } from '@/lib/db'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
+import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 
 async function getEbayItemTitle(itemId: string, token: string, appId: string): Promise<string | null> {
@@ -56,6 +57,29 @@ async function saveRecoveredMapping(args: {
   `.catch(() => {})
 }
 
+function normalizeTitle(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(pack|set|pcs|piece|pieces|count|with|for|the|a|an|of|to|in)\b/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+function getTitleScore(ebayTitle: string, candidateTitle: string) {
+  const ebayWords = new Set(normalizeTitle(ebayTitle).split(' ').filter(Boolean))
+  const candidateWords = new Set(normalizeTitle(candidateTitle).split(' ').filter(Boolean))
+  if (ebayWords.size === 0 || candidateWords.size === 0) return 0
+
+  let overlap = 0
+  for (const word of ebayWords) {
+    if (candidateWords.has(word)) overlap += 1
+  }
+
+  return overlap / Math.max(ebayWords.size, candidateWords.size)
+}
+
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
@@ -83,46 +107,32 @@ export async function GET(req: NextRequest) {
 
     if (rows[0]?.asin) {
       const asin = String(rows[0].asin)
-      const amzRes = await fetch(
-        `https://real-time-amazon-data.p.rapidapi.com/product-details?asin=${asin}&country=US`,
-        {
-          headers: {
-            'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com',
-            'x-rapidapi-key': rapidKey,
-          },
-          signal: AbortSignal.timeout(8000),
-        }
-      )
+      const validated = await fetchAmazonProductByAsin({ asin })
 
-      if (!amzRes.ok) {
-        return apiError('Amazon lookup failed for this item.', {
+      if (!validated) {
+        return apiError('Amazon lookup failed for this saved ASIN.', {
           status: 502,
           code: 'AMAZON_LOOKUP_FAILED',
-          details: `status=${amzRes.status}`,
         })
       }
 
-      const amzJson = await amzRes.json()
-      const data = amzJson?.data ?? amzJson
-      const price = parseFloat(String(data.product_price || '0').replace(/[^0-9.]/g, '')) || 0
-
-      if (price > 0) {
+      if (validated.amazonPrice > 0) {
         await saveRecoveredMapping({
           userId: session.user.id,
           itemId,
           asin,
-          title: String(data.product_title || rows[0].title || asin),
-          amazonPrice: price,
+          title: String(validated.title || rows[0].title || asin),
+          amazonPrice: validated.amazonPrice,
         })
       }
 
       return apiOk({
         asin,
-        title: String(data.product_title || rows[0].title || asin),
-        amazonPrice: price,
-        imageUrl: String(data.product_photo || '') || undefined,
+        title: String(validated.title || rows[0].title || asin),
+        amazonPrice: validated.amazonPrice,
+        imageUrl: validated.imageUrl,
         amazonUrl: `https://www.amazon.com/dp/${asin}`,
-        available: data.product_availability !== 'Currently unavailable' && price > 0,
+        available: validated.available,
         source: 'db' as const,
       })
     }
@@ -165,56 +175,84 @@ export async function GET(req: NextRequest) {
   }
 
   if (products.length > 0) {
-    const top = products[0]
-    const asin = String(top.asin || '')
-    const price = parseFloat(String(top.product_price || '0').replace(/[^0-9.]/g, '')) || 0
+    const bestCandidate = products
+      .map((product) => ({
+        asin: String(product.asin || ''),
+        title: String(product.product_title || ''),
+        score: getTitleScore(ebayTitle, String(product.product_title || '')),
+      }))
+      .filter((product) => product.asin && product.title)
+      .sort((a, b) => b.score - a.score)[0]
 
-    if (asin && price > 0) {
-      await saveRecoveredMapping({
-        userId: session.user.id,
-        itemId,
-        asin,
-        title: String(top.product_title || ebayTitle),
-        amazonPrice: price,
-      })
+    if (bestCandidate?.asin && bestCandidate.score >= 0.45) {
+      const validated = await fetchAmazonProductByAsin({ asin: bestCandidate.asin })
+
+      if (validated) {
+        await saveRecoveredMapping({
+          userId: session.user.id,
+          itemId,
+          asin: validated.asin,
+          title: validated.title,
+          amazonPrice: validated.amazonPrice,
+        })
+
+        return apiOk({
+          asin: validated.asin,
+          title: validated.title,
+          amazonPrice: validated.amazonPrice,
+          imageUrl: validated.imageUrl,
+          amazonUrl: `https://www.amazon.com/dp/${validated.asin}`,
+          available: validated.available,
+          ebayTitle,
+          source: 'search' as const,
+        })
+      }
     }
-
-    return apiOk({
-      asin,
-      title: String(top.product_title || ebayTitle),
-      amazonPrice: price,
-      imageUrl: String(top.product_photo || '') || undefined,
-      amazonUrl: `https://www.amazon.com/dp/${asin}`,
-      available: price > 0,
-      ebayTitle,
-      source: 'search' as const,
-    })
   }
 
   const scraped = await scrapeAmazonSearch(ebayTitle)
   if (scraped.length > 0) {
-    const top = scraped[0]
+    const bestScraped = scraped
+      .map((product) => ({
+        ...product,
+        score: getTitleScore(ebayTitle, product.title),
+      }))
+      .sort((a, b) => b.score - a.score)[0]
 
-    if (top.asin && top.price > 0) {
+    if (bestScraped?.asin && bestScraped.score >= 0.45) {
+      const validated = await fetchAmazonProductByAsin({ asin: bestScraped.asin, fallbackImage: bestScraped.imageUrl })
+
+      if (validated) {
+        await saveRecoveredMapping({
+          userId: session.user.id,
+          itemId,
+          asin: validated.asin,
+          title: validated.title,
+          amazonPrice: validated.amazonPrice,
+        })
+
+        return apiOk({
+          asin: validated.asin,
+          title: validated.title,
+          amazonPrice: validated.amazonPrice,
+          imageUrl: validated.imageUrl,
+          amazonUrl: `https://www.amazon.com/dp/${validated.asin}`,
+          available: validated.available,
+          ebayTitle,
+          source: 'search' as const,
+        })
+      }
+    }
+
+    if (bestScraped?.asin && bestScraped.price > 0) {
       await saveRecoveredMapping({
         userId: session.user.id,
         itemId,
-        asin: top.asin,
-        title: top.title,
-        amazonPrice: top.price,
+        asin: bestScraped.asin,
+        title: bestScraped.title,
+        amazonPrice: bestScraped.price,
       })
     }
-
-    return apiOk({
-      asin: top.asin,
-      title: top.title,
-      amazonPrice: top.price,
-      imageUrl: top.imageUrl || undefined,
-      amazonUrl: `https://www.amazon.com/dp/${top.asin}`,
-      available: top.price > 0,
-      ebayTitle,
-      source: 'search' as const,
-    })
   }
 
   return apiError(`No Amazon match was found for "${ebayTitle.slice(0, 60)}". Try the title manually if this listing uses custom wording.`, {

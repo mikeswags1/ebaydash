@@ -6,6 +6,8 @@ export function SellOnEbayModal({
   product,
   listPrice,
   onListPriceChange,
+  validating,
+  validated,
   listLoading,
   listResult,
   listError,
@@ -15,6 +17,8 @@ export function SellOnEbayModal({
   product: FinderProduct | null
   listPrice: string
   onListPriceChange: (value: string) => void
+  validating: boolean
+  validated: boolean
   listLoading: boolean
   listResult: ListResult | null
   listError: string | null
@@ -100,6 +104,14 @@ export function SellOnEbayModal({
               <PreviewStat label="Margin" value={`${preview.margin.toFixed(1)}%`} tone={preview.margin >= 0 ? 'var(--gold)' : 'var(--red)'} />
             </div>
 
+            <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', background: validated ? 'rgba(46,207,118,0.08)' : 'rgba(200,162,80,0.08)', border: validated ? '1px solid rgba(46,207,118,0.2)' : '1px solid rgba(200,162,80,0.18)', fontSize: '12px', color: validated ? 'var(--grn)' : 'var(--gold)', lineHeight: 1.6 }}>
+              {validating
+                ? 'Validating the exact Amazon ASIN, price, and primary image before publishing...'
+                : validated
+                  ? 'ASIN verified. This listing will use the validated Amazon title, image, and cost data.'
+                  : 'Publish is locked until ASIN validation confirms a real Amazon title, price, and primary image.'}
+            </div>
+
             {listError ? (
               <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', background: 'rgba(232,63,80,0.08)', border: '1px solid rgba(232,63,80,0.2)', fontSize: '12px', color: 'var(--red)', lineHeight: 1.6 }}>
                 {listError === 'RECONNECT_REQUIRED' ? (
@@ -125,8 +137,8 @@ export function SellOnEbayModal({
             ) : null}
 
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button className="btn btn-gold" style={{ flex: 1, fontSize: '14px', padding: '14px' }} disabled={listLoading || !listPrice} onClick={onPublish}>
-                {listLoading ? 'Publishing...' : 'Publish to eBay'}
+              <button className="btn btn-gold" style={{ flex: 1, fontSize: '14px', padding: '14px' }} disabled={listLoading || validating || !validated || !listPrice} onClick={onPublish}>
+                {listLoading ? 'Publishing...' : validating ? 'Validating ASIN...' : 'Publish to eBay'}
               </button>
               <button onClick={onClose} className="btn btn-ghost" style={{ fontSize: '13px', padding: '14px 18px' }}>
                 Cancel
