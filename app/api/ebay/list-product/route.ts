@@ -688,11 +688,15 @@ function buildDescription(title: string, features: string[], about: string, imag
     .slice(0, 3)
     .map(([key, value]) => `${titleCaseLabel(key)} ${value}`)
     .join(', ')
+  const featureSummary = finalBullets
+    .slice(0, 3)
+    .map((value) => value.replace(/: /g, ' '))
+    .join(', ')
   const overviewBlock = descriptionParagraphs.length > 0
     ? descriptionParagraphs
       .map((paragraph) => `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">${paragraph}</p>`)
       .join('\n')
-    : `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">${displayTitle} is a ${inferredBrand ? `${inferredBrand} ` : ''}product listing built from the matching product record and key item details. ${topSpecsSentence ? `Highlights include ${topSpecsSentence}.` : 'Review the feature summary and specifications below for fit, function, and package details.'}</p>`
+    : `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">${displayTitle}${inferredBrand ? ` from ${inferredBrand}` : ''} is designed for dependable everyday use. ${featureSummary ? `Key highlights include ${featureSummary}.` : topSpecsSentence ? `Important details include ${topSpecsSentence}.` : 'Review the feature summary and specifications below for the most important product details.'}</p>`
 
   const heroImages = uniqueImages.slice(0, 2)
   const detailImages = uniqueImages.slice(2, 4)
@@ -966,13 +970,10 @@ export async function POST(req: NextRequest) {
   const preferredFeatureSources = [
     ...validatedAmazon.features,
     ...(validatedRich ? [] : fetchedAmazon.features),
-    ...(fetchedRich && !validatedRich ? fetchedAmazon.features : []),
   ]
   const amazon = {
     images: dedupeImageUrls([
       ...validatedAmazon.images,
-      ...(validatedRich ? [] : fetchedAmazon.images),
-      ...(fetchedRich ? fetchedAmazon.images : []),
       validatedAmazon.imageUrl,
       imageUrl,
     ]),
@@ -1009,7 +1010,7 @@ export async function POST(req: NextRequest) {
 
   const filteredImages = dedupeImageUrls(allImages)
     .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
-    .slice(0, 8)
+    .slice(0, 6)
 
   const fallbackListingImage = `${siteUrl}/api/image/fallback?asin=${encodeURIComponent(asin)}&title=${encodeURIComponent(listingTitle)}`
   const primarySourceImage = filteredImages[0] || validatedAmazon.imageUrl || imageUrl || fallbackListingImage
@@ -1074,7 +1075,7 @@ export async function POST(req: NextRequest) {
       ].filter(Boolean)
     )
   )
-  const preferredCategoryId = leafSuggestedCategoryIds[0] || fallbackLeafCategoryIds[0] || nicheCategoryId
+  const preferredCategoryId = fallbackLeafCategoryIds[0] || leafSuggestedCategoryIds[0] || nicheCategoryId
   const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId: preferredCategoryId, price, pictureXml, itemSpecificsXml }
 
   // Parse eBay response — skip deprecated warnings to surface real errors

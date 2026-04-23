@@ -61,6 +61,29 @@ function sanitizeText(value: unknown) {
     .trim()
 }
 
+function normalizeTitle(value: string) {
+  return sanitizeText(value)
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(pack|set|piece|pcs|count|for|with|and|the|a|an|of|to|in)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function getTitleScore(sourceTitle: string, candidateTitle: string) {
+  const sourceWords = new Set(normalizeTitle(sourceTitle).split(' ').filter(Boolean))
+  const candidateWords = new Set(normalizeTitle(candidateTitle).split(' ').filter(Boolean))
+  if (sourceWords.size === 0 || candidateWords.size === 0) return 0
+
+  let overlap = 0
+  for (const word of sourceWords) {
+    if (candidateWords.has(word)) overlap += 1
+  }
+
+  return overlap / Math.max(sourceWords.size, candidateWords.size)
+}
+
 function dedupeImages(values: string[]) {
   return Array.from(new Set(values.filter((url) => url.startsWith('http'))))
 }
@@ -75,6 +98,11 @@ function chooseResolvedAmazonPrice(products: ValidatedAmazonProduct[], fallbackP
 
   if (positivePrices.length === 0) {
     return Number.isFinite(fallbackPrice) && Number(fallbackPrice) > 0 ? Number(fallbackPrice) : 0
+  }
+
+  const scrapePrice = positivePrices.find((entry) => entry.source === 'scrape')
+  if (scrapePrice) {
+    return parseFloat(scrapePrice.price.toFixed(2))
   }
 
   const apiPrice = positivePrices.find((entry) => entry.source === 'api')
@@ -156,26 +184,36 @@ function mergeProducts(asin: string, products: Array<ValidatedAmazonProduct | nu
   if (validProducts.length === 0) return null
 
   const preferred =
-    validProducts.find((product) => product.source === 'api') ||
     validProducts.find((product) => product.source === 'scrape') ||
+    validProducts.find((product) => product.source === 'api') ||
+    validProducts.find((product) => product.source === 'search') ||
     validProducts[0]
 
+  const alignedProducts = validProducts.filter((product) => {
+    if (product.source === preferred.source) return true
+    return getTitleScore(preferred.title, product.title) >= 0.72
+  })
+
+  const trustedProducts = alignedProducts.length > 0 ? alignedProducts : [preferred]
   const images = dedupeImages([
-    ...validProducts.flatMap((product) => product.images),
+    ...trustedProducts.flatMap((product) => product.images),
     normalizeImageUrl(options.fallbackImage),
   ])
-  const resolvedPrice = chooseResolvedAmazonPrice(validProducts, options.fallbackPrice)
+  const resolvedPrice = chooseResolvedAmazonPrice(trustedProducts, options.fallbackPrice)
+  const richestProduct =
+    trustedProducts.find((product) => hasRichContent(product)) ||
+    preferred
 
   return toProduct({
     asin,
     title: preferred.title,
     amazonPrice: resolvedPrice,
     images,
-    features: validProducts.flatMap((product) => product.features),
-    description: validProducts.find((product) => product.description)?.description || '',
-    specs: validProducts.flatMap((product) => product.specs),
-    brand: preferred.brand,
-    available: validProducts.some((product) => product.available),
+    features: richestProduct.features,
+    description: richestProduct.description || preferred.description,
+    specs: richestProduct.specs,
+    brand: richestProduct.brand || preferred.brand,
+    available: trustedProducts.some((product) => product.available),
     source: preferred.source,
     fallbackTitle: options.fallbackTitle,
     fallbackPrice: options.fallbackPrice,

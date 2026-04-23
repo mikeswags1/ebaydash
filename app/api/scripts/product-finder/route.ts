@@ -5,10 +5,8 @@ import { apiError, apiOk } from '@/lib/api-response'
 import { queryRows, sql } from '@/lib/db'
 import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
-import { EBAY_DEFAULT_FEE_RATE, getRecommendedEbayPrice } from '@/lib/listing-pricing'
+import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice, isHealthyListing } from '@/lib/listing-pricing'
 
-const MIN_PROFIT = 10
-const MIN_ROI   = 35
 const MAX_COST   = 300
 const CACHE_TTL  = 23 * 60 * 60 * 1000 // 23 hours — refresh once per day
 const CACHE_VERSION = 2
@@ -96,10 +94,8 @@ function dedupeProducts(products: Product[]) {
 
 function calcMetrics(amazonPrice: number) {
   const ebayPrice = getRecommendedEbayPrice(amazonPrice, EBAY_DEFAULT_FEE_RATE)
-  const fees   = parseFloat((ebayPrice * EBAY_DEFAULT_FEE_RATE).toFixed(2))
-  const profit = parseFloat((ebayPrice - amazonPrice - fees).toFixed(2))
-  const roi    = parseFloat(((profit / amazonPrice) * 100).toFixed(0))
-  return { ebayPrice, fees, profit, roi }
+  const { fees, profit, roi, margin } = getListingMetrics(amazonPrice, ebayPrice, EBAY_DEFAULT_FEE_RATE)
+  return { ebayPrice, fees, profit, roi, margin }
 }
 
 function isRejected(title: string) {
@@ -253,7 +249,7 @@ export async function GET(req: NextRequest) {
       if (!price || price <= 0 || price > MAX_COST) continue
       if (!title || isRejected(title)) continue
       const { ebayPrice, profit, roi } = calcMetrics(price)
-      if (profit < MIN_PROFIT || roi < MIN_ROI) continue
+      if (!isHealthyListing(price, ebayPrice, EBAY_DEFAULT_FEE_RATE)) continue
       const risk = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
       results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk, salesVolume,
         _rating: parseFloat(String(p.product_star_rating || '0')) || 0,
@@ -366,7 +362,7 @@ export async function GET(req: NextRequest) {
           if (!p.price || p.price <= 0 || p.price > MAX_COST) continue
           if (!p.title || isRejected(p.title)) continue
           const { ebayPrice, profit, roi } = calcMetrics(p.price)
-          if (profit < MIN_PROFIT || roi < MIN_ROI) continue
+          if (!isHealthyListing(p.price, ebayPrice, EBAY_DEFAULT_FEE_RATE)) continue
           const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
           results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
             imageUrl: p.imageUrl, risk, salesVolume: undefined, _rating: p.rating, _numRatings: p.reviewCount })
