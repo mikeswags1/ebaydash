@@ -830,6 +830,7 @@ function buildXml(params: {
 }) {
   const rootTag = params.requestType === 'verify' ? 'VerifyAddFixedPriceItemRequest' : 'AddFixedPriceItemRequest'
   const shippingService = params.shippingService || 'USPSPriority'
+  const expeditedService = /USPSPriority|FedExHomeDelivery/i.test(shippingService) ? 'true' : 'false'
   return `<?xml version="1.0" encoding="utf-8"?>
 <${rootTag} xmlns="urn:ebay:apis:eBLBaseComponents">
   <RequesterCredentials>
@@ -860,7 +861,7 @@ function buildXml(params: {
         <ShippingService>${shippingService}</ShippingService>
         <ShippingServiceCost>0.00</ShippingServiceCost>
         <FreeShipping>true</FreeShipping>
-        <ExpeditedService>false</ExpeditedService>
+        <ExpeditedService>${expeditedService}</ExpeditedService>
         <ShippingServiceAdditionalCost>0.00</ShippingServiceAdditionalCost>
       </ShippingServiceOptions>
     </ShippingDetails>
