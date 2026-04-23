@@ -421,6 +421,8 @@ function inferTypeFromProduct(title: string, niche: string | null, specs: Array<
   if (typeSpec?.[1]) return sanitizeContent(typeSpec[1]).slice(0, 120)
 
   const normalizedTitle = sanitizeContent(title).toLowerCase()
+  if (/magnesium|vitamin|supplement|capsule|gummy|softgel|glycinate|mineral/.test(normalizedTitle)) return 'Dietary Supplement'
+  if (/bracelet|necklace|ring|earring|pendant|anklet|jewelry/.test(normalizedTitle)) return 'Bracelet'
   if (/camera|security cam|indoor cam|surveillance/.test(normalizedTitle)) return 'Security Camera'
   if (/first aid|medical kit|emergency kit/.test(normalizedTitle)) return 'First Aid Kit'
   if (/flashlight|torch|lantern/.test(normalizedTitle)) return 'Flashlight'
@@ -829,8 +831,8 @@ function buildXml(params: {
   price: string; pictureXml: string; itemSpecificsXml: string; shippingService?: string; requestType?: 'add' | 'verify'
 }) {
   const rootTag = params.requestType === 'verify' ? 'VerifyAddFixedPriceItemRequest' : 'AddFixedPriceItemRequest'
-  const shippingService = params.shippingService || 'USPSPriority'
-  const expeditedService = /USPSPriority|FedExHomeDelivery/i.test(shippingService) ? 'true' : 'false'
+  const shippingService = params.shippingService || 'StandardShipping'
+  const expeditedService = /USPSPriority|FedExHomeDelivery|StandardShipping/i.test(shippingService) ? 'true' : 'false'
   return `<?xml version="1.0" encoding="utf-8"?>
 <${rootTag} xmlns="urn:ebay:apis:eBLBaseComponents">
   <RequesterCredentials>
@@ -1168,7 +1170,15 @@ export async function POST(req: NextRequest) {
         'Sport': 'See Description', 'Department': 'Unisex Adults', 'Size': 'One Size',
         'Material': 'See Description', 'Style': 'See Description', 'Brand': inferredBrandValue,
       }
-      const val = defaults[name] ?? 'See Description'
+      const normalizedName = name.toLowerCase()
+      const val =
+        defaults[name]
+        ?? (normalizedName.includes('brand') ? inferredBrandValue : null)
+        ?? (normalizedName.includes('type') ? inferredTypeValue : null)
+        ?? (normalizedName.includes('department') ? 'Unisex Adults' : null)
+        ?? (normalizedName.includes('size') ? 'One Size' : null)
+        ?? (normalizedName.includes('material') ? 'See Description' : null)
+        ?? 'See Description'
       return [`\n      <NameValueList><Name>${name}</Name><Value>${val}</Value></NameValueList>`]
     }).join('')
   }
@@ -1236,14 +1246,14 @@ export async function POST(req: NextRequest) {
 
   const attemptListing = async (params: typeof xmlParams & { itemSpecificsXml: string; shippingService?: string }) => {
     let activeCategoryId = params.categoryId
-    let activeShippingService = params.shippingService || 'USPSPriority'
+    let activeShippingService = params.shippingService || 'StandardShipping'
     let responseText = ''
     let parsed = { short: '', long: '', codes: [] as string[], longs: [] as string[] }
     let errorKind: 'leaf' | 'specific' | 'other' = 'other'
     const attemptedCategoryIds: string[] = []
     const attemptedShippingServices: string[] = [activeShippingService]
     let transientRetryUsed = false
-    const shippingFallbacks = ['USPSPriority', 'UPSGround', 'FedExHomeDelivery', 'StandardShipping']
+    const shippingFallbacks = ['StandardShipping', 'USPSPriority', 'FedExHomeDelivery', 'UPSGround']
 
     for (let guard = 0; guard < 4; guard += 1) {
       attemptedCategoryIds.push(activeCategoryId)
@@ -1289,8 +1299,10 @@ export async function POST(req: NextRequest) {
 
   const categoryCandidates = Array.from(
     new Set([
-      ...leafSuggestedCategoryIds,
       ...fallbackLeafCategoryIds,
+      ...suggestedCategoryIds,
+      ...leafSuggestedCategoryIds,
+      nicheCategoryId,
     ].filter(Boolean))
   )
 
@@ -1315,6 +1327,10 @@ export async function POST(req: NextRequest) {
 
     verificationResponseText = verification.responseText
     verificationError = verification.parsed.long || verification.parsed.short
+  }
+
+  if (!verificationResponseText && categoryCandidates.length === 0) {
+    verificationError = 'No usable eBay category candidates were returned for this listing.'
   }
 
   // ── Retry chain ──────────────────────────────────────────────────────────────
@@ -1361,14 +1377,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Attempt 4: if the suggested tree still fails, try the niche category once with the same specifics
-  if ((et === 'leaf' || et === 'specific') && nicheIsLeaf && nicheCategoryId !== preferredCategoryId && !attemptedCategoryIds.includes(nicheCategoryId)) {
-    attempt = await attemptListing({ ...xmlParams, categoryId: nicheCategoryId, itemSpecificsXml })
-    responseText = attempt.responseText
-    p = attempt.parsed
-    et = attempt.errorKind
-    finalCategoryId = attempt.categoryId
-    attemptedCategoryIds = [...attemptedCategoryIds, ...attempt.attemptedCategoryIds]
+  // Attempt 4: if the preferred tree still fails, try every remaining candidate once.
+  if (et === 'leaf' || et === 'specific') {
+    for (const categoryId of categoryCandidates) {
+      if (!categoryId || attemptedCategoryIds.includes(categoryId)) continue
+      attempt = await attemptListing({ ...xmlParams, categoryId, itemSpecificsXml })
+      responseText = attempt.responseText
+      p = attempt.parsed
+      et = attempt.errorKind
+      finalCategoryId = attempt.categoryId
+      attemptedCategoryIds = [...attemptedCategoryIds, ...attempt.attemptedCategoryIds]
+      if (et !== 'leaf' && et !== 'specific') break
+    }
   }
 
   const itemIdMatch = responseText.match(/<ItemID>(\d+)<\/ItemID>/)
