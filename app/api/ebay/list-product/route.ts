@@ -1008,14 +1008,21 @@ export async function POST(req: NextRequest) {
   const proto = host.startsWith('localhost') ? 'http' : 'https'
   const siteUrl = `${proto}://${host}`
 
-  const allImages = filterVariantSpecificImages(dedupeImageUrls(amazon.images), listingTitle, amazon.specs)
+  const validatedGallery = dedupeImageUrls(validatedAmazon.images)
+  const allImages = filterVariantSpecificImages(
+    validatedGallery.length > 0
+      ? validatedGallery
+      : dedupeImageUrls([validatedAmazon.imageUrl, imageUrl]),
+    listingTitle,
+    amazon.specs
+  )
 
   const filteredImages = dedupeImageUrls(allImages)
     .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
     .slice(0, 6)
 
   const fallbackListingImage = `${siteUrl}/api/image/fallback?asin=${encodeURIComponent(asin)}&title=${encodeURIComponent(listingTitle)}`
-  const primarySourceImage = filteredImages[0] || validatedAmazon.imageUrl || imageUrl || fallbackListingImage
+  const primarySourceImage = filteredImages[0] || validatedAmazon.imageUrl || fallbackListingImage
   const primaryProxyImage = primarySourceImage.includes('/api/image/')
     ? primarySourceImage
     : `${siteUrl}/api/image/proxy?url=${encodeURIComponent(primarySourceImage)}`

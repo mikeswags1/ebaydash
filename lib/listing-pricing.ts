@@ -1,16 +1,16 @@
 export const EBAY_DEFAULT_FEE_RATE = 0.15
-export const MIN_HEALTHY_PROFIT = 18
-export const MIN_HEALTHY_ROI = 55
-export const MIN_HEALTHY_MARGIN = 20
+export const MIN_HEALTHY_PROFIT = 22
+export const MIN_HEALTHY_ROI = 70
+export const MIN_HEALTHY_MARGIN = 24
 
 export function getTargetProfit(amazonPrice: number) {
-  if (amazonPrice < 15) return 12
-  if (amazonPrice < 25) return 16
-  if (amazonPrice < 40) return 20
-  if (amazonPrice < 75) return 28
-  if (amazonPrice < 125) return Math.max(38, amazonPrice * 0.34)
-  if (amazonPrice < 200) return Math.max(58, amazonPrice * 0.37)
-  return Math.max(82, amazonPrice * 0.4)
+  if (amazonPrice < 15) return 14
+  if (amazonPrice < 25) return 18
+  if (amazonPrice < 40) return 24
+  if (amazonPrice < 75) return 34
+  if (amazonPrice < 125) return Math.max(46, amazonPrice * 0.38)
+  if (amazonPrice < 200) return Math.max(68, amazonPrice * 0.42)
+  return Math.max(96, amazonPrice * 0.45)
 }
 
 export function getRecommendedEbayPrice(amazonPrice: number, feeRate = EBAY_DEFAULT_FEE_RATE) {

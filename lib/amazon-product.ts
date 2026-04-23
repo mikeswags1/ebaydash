@@ -100,26 +100,10 @@ function chooseResolvedAmazonPrice(products: ValidatedAmazonProduct[], fallbackP
     return Number.isFinite(fallbackPrice) && Number(fallbackPrice) > 0 ? Number(fallbackPrice) : 0
   }
 
-  const scrapePrice = positivePrices.find((entry) => entry.source === 'scrape')
-  if (scrapePrice) {
-    return parseFloat(scrapePrice.price.toFixed(2))
-  }
-
-  const apiPrice = positivePrices.find((entry) => entry.source === 'api')
-  if (apiPrice) {
-    return parseFloat(apiPrice.price.toFixed(2))
-  }
-
-  const scrapeLike = positivePrices.filter((entry) => entry.source === 'scrape' || entry.source === 'search')
-  if (scrapeLike.length > 0) {
-    const trustedMin = Math.min(...scrapeLike.map((entry) => entry.price))
-    const trustedMax = Math.max(...scrapeLike.map((entry) => entry.price))
-
-    if (scrapeLike.length >= 2 && trustedMax <= trustedMin * 1.2) {
-      return parseFloat(trustedMax.toFixed(2))
-    }
-
-    return parseFloat(trustedMax.toFixed(2))
+  const liveSources = positivePrices.filter((entry) => ['scrape', 'api', 'search'].includes(entry.source))
+  if (liveSources.length > 0) {
+    const liveMax = Math.max(...liveSources.map((entry) => entry.price))
+    return parseFloat(liveMax.toFixed(2))
   }
 
   const cached = positivePrices.find((entry) => entry.source === 'cache')
@@ -195,10 +179,10 @@ function mergeProducts(asin: string, products: Array<ValidatedAmazonProduct | nu
   })
 
   const trustedProducts = alignedProducts.length > 0 ? alignedProducts : [preferred]
-  const images = dedupeImages([
-    ...trustedProducts.flatMap((product) => product.images),
-    normalizeImageUrl(options.fallbackImage),
-  ])
+  const trustedImages = dedupeImages(trustedProducts.flatMap((product) => product.images))
+  const images = trustedImages.length > 0
+    ? trustedImages
+    : dedupeImages([normalizeImageUrl(options.fallbackImage)])
   const resolvedPrice = chooseResolvedAmazonPrice(trustedProducts, options.fallbackPrice)
   const richestProduct =
     trustedProducts.find((product) => hasRichContent(product)) ||
