@@ -826,9 +826,10 @@ async function verifyToEbay(xml: string, appId: string, token: string): Promise<
 
 function buildXml(params: {
   token: string; safeTitle: string; description: string; categoryId: string
-  price: string; pictureXml: string; itemSpecificsXml: string; requestType?: 'add' | 'verify'
+  price: string; pictureXml: string; itemSpecificsXml: string; shippingService?: string; requestType?: 'add' | 'verify'
 }) {
   const rootTag = params.requestType === 'verify' ? 'VerifyAddFixedPriceItemRequest' : 'AddFixedPriceItemRequest'
+  const shippingService = params.shippingService || 'USPSPriority'
   return `<?xml version="1.0" encoding="utf-8"?>
 <${rootTag} xmlns="urn:ebay:apis:eBLBaseComponents">
   <RequesterCredentials>
@@ -856,7 +857,7 @@ function buildXml(params: {
       <ShippingType>Flat</ShippingType>
       <ShippingServiceOptions>
         <ShippingServicePriority>1</ShippingServicePriority>
-        <ShippingService>USPSGround</ShippingService>
+        <ShippingService>${shippingService}</ShippingService>
         <ShippingServiceCost>0.00</ShippingServiceCost>
         <FreeShipping>true</FreeShipping>
         <ExpeditedService>false</ExpeditedService>
@@ -1131,6 +1132,12 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  const extractUnavailableShippingService = (short: string, long: string) => {
+    const text = `${short} ${long}`
+    const match = text.match(/shipping service\s+(.+?)\s+is not available/i)
+    return match?.[1]?.trim() || null
+  }
+
   // Extract every "item specific X is missing" from eBay's error response and build XML for them
   const inferredBrandValue = inferBrandFromProduct(listingTitle, amazon.specs) || 'Generic'
   const inferredTypeValue = inferTypeFromProduct(listingTitle, niche, amazon.specs)
@@ -1219,17 +1226,20 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const attemptListing = async (params: typeof xmlParams & { itemSpecificsXml: string }) => {
+  const attemptListing = async (params: typeof xmlParams & { itemSpecificsXml: string; shippingService?: string }) => {
     let activeCategoryId = params.categoryId
+    let activeShippingService = params.shippingService || 'USPSPriority'
     let responseText = ''
     let parsed = { short: '', long: '', codes: [] as string[], longs: [] as string[] }
     let errorKind: 'leaf' | 'specific' | 'other' = 'other'
     const attemptedCategoryIds: string[] = []
+    const attemptedShippingServices: string[] = [activeShippingService]
     let transientRetryUsed = false
+    const shippingFallbacks = ['USPSPriority', 'UPSGround', 'FedExHomeDelivery', 'StandardShipping']
 
     for (let guard = 0; guard < 4; guard += 1) {
       attemptedCategoryIds.push(activeCategoryId)
-      responseText = await submitToEbay(buildXml({ ...params, categoryId: activeCategoryId }), appId, credentials.accessToken)
+      responseText = await submitToEbay(buildXml({ ...params, categoryId: activeCategoryId, shippingService: activeShippingService }), appId, credentials.accessToken)
       parsed = parse(responseText)
       errorKind = errType(parsed.short, parsed.long, parsed.codes)
 
@@ -1237,6 +1247,16 @@ export async function POST(req: NextRequest) {
       if (replacementCategoryId && replacementCategoryId !== activeCategoryId && !attemptedCategoryIds.includes(replacementCategoryId)) {
         activeCategoryId = replacementCategoryId
         continue
+      }
+
+      const unavailableShippingService = extractUnavailableShippingService(parsed.short, parsed.long)
+      if (unavailableShippingService) {
+        const nextShippingService = shippingFallbacks.find((service) => !attemptedShippingServices.includes(service))
+        if (nextShippingService) {
+          activeShippingService = nextShippingService
+          attemptedShippingServices.push(nextShippingService)
+          continue
+        }
       }
 
       if (isTransientSystemError(parsed.short, parsed.long, parsed.codes) && !transientRetryUsed) {
@@ -1254,6 +1274,8 @@ export async function POST(req: NextRequest) {
       errorKind,
       categoryId: activeCategoryId,
       attemptedCategoryIds,
+      shippingService: activeShippingService,
+      attemptedShippingServices,
     }
   }
 
