@@ -34,7 +34,7 @@ async function buildFallbackImage(title: string, asin: string) {
       <rect x="410" y="965" width="140" height="20" rx="10" fill="#d7c18a" />
     </svg>
   `
-  const stampWidth = 250
+  const stampWidth = 300
   const stamp = await sharp(stampBuffer).resize({ width: stampWidth }).png().toBuffer()
 
   return sharp(Buffer.from(svg))
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
     const width = metadata.width || 1200
     const height = metadata.height || 1200
 
-    const stampWidth = Math.max(150, Math.min(240, Math.round(width * 0.2)))
+    const stampWidth = Math.max(190, Math.min(320, Math.round(width * 0.24)))
     const stamp = await sharp(stampBuffer)
       .resize({ width: stampWidth })
       .png()

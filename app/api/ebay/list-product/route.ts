@@ -69,6 +69,20 @@ const NICHE_CATEGORY: Record<string, string> = {
   'Sports Memorabilia':    '64482',
 }
 
+const NICHE_FALLBACK_LEAF_CATEGORY: Record<string, string> = {
+  'Phone Accessories': '9394',
+  'Computer Parts': '58058',
+  'Audio & Headphones': '14985',
+  'Smart Home Devices': '183406',
+  'Kitchen Gadgets': '20625',
+  'Camping & Hiking': '16034',
+  'Sporting Goods': '15273',
+  'Fitness Equipment': '15273',
+  'Pet Supplies': '1281',
+  'Safety Gear': '31776',
+  'Medical Supplies': '31776',
+}
+
 const NICHE_SPECIFICS: Record<string, Array<[string, string]>> = {
   'Audio & Headphones':    [['Connectivity', 'Wireless'], ['Type', 'Bluetooth Speaker']],
   'Phone Accessories':     [['Compatible Brand', 'Universal'], ['Type', 'Phone Accessory']],
@@ -401,6 +415,37 @@ function inferBrandFromProduct(title: string, specs: Array<[string, string]>) {
   return firstWord.length > 1 ? firstWord.slice(0, 80) : ''
 }
 
+function inferTypeFromProduct(title: string, niche: string | null, specs: Array<[string, string]>) {
+  const typeSpec = specs.find(([key]) => /^type$/i.test(key))
+  if (typeSpec?.[1]) return sanitizeContent(typeSpec[1]).slice(0, 120)
+
+  const normalizedTitle = sanitizeContent(title).toLowerCase()
+  if (/camera|security cam|indoor cam|surveillance/.test(normalizedTitle)) return 'Security Camera'
+  if (/first aid|medical kit|emergency kit/.test(normalizedTitle)) return 'First Aid Kit'
+  if (/flashlight|torch|lantern/.test(normalizedTitle)) return 'Flashlight'
+  if (/sock|socks/.test(normalizedTitle)) return 'Athletic Socks'
+  if (/toy|montessori|activity desk/.test(normalizedTitle)) return 'Educational Toy'
+  if (/jersey frame|shadow box|display case/.test(normalizedTitle)) return 'Display Case'
+  if (/headphone|earbud|speaker/.test(normalizedTitle)) return 'Audio Accessory'
+  if (/phone case|charger|mount|screen protector/.test(normalizedTitle)) return 'Phone Accessory'
+
+  const nicheDefaults: Record<string, string> = {
+    'Smart Home Devices': 'Smart Home Device',
+    'Safety Gear': 'Safety Equipment',
+    'Medical Supplies': 'Medical Supply',
+    'Sporting Goods': 'Sporting Goods',
+    'Fitness Equipment': 'Fitness Accessory',
+    'Camping & Hiking': 'Outdoor Gear',
+    'Kitchen Gadgets': 'Kitchen Gadget',
+    'Pet Supplies': 'Pet Accessory',
+    'Phone Accessories': 'Phone Accessory',
+    'Computer Parts': 'Computer Accessory',
+    'Audio & Headphones': 'Audio Accessory',
+  }
+
+  return niche ? nicheDefaults[niche] || 'General Accessory' : 'General Accessory'
+}
+
 function pickRelevantSpecs(specs: Array<[string, string]>) {
   const skipKeys = /customer|review|rating|star|bought|month|seller|return|warranty|asin|date first|best seller|discontinued|department|item model|upc|ean|isbn|manufacturer part|is discontinued/i
   return dedupeSpecEntries(specs)
@@ -408,15 +453,15 @@ function pickRelevantSpecs(specs: Array<[string, string]>) {
     .slice(0, 14)
 }
 
-function buildItemSpecificsXml(title: string, specs: Array<[string, string]>, fallbackXml: string) {
+function buildItemSpecificsXml(title: string, specs: Array<[string, string]>, fallbackXml: string, niche: string | null) {
   const relevantSpecs = pickRelevantSpecs(specs)
   const nameMap = new Map<string, string>()
 
   const brand = inferBrandFromProduct(title, relevantSpecs)
-  if (brand) nameMap.set('Brand', brand)
+  nameMap.set('Brand', brand || 'Generic')
+  nameMap.set('Type', inferTypeFromProduct(title, niche, relevantSpecs))
 
   const preferredKeys = [
-    'Type',
     'Model',
     'Compatible Brand',
     'Connectivity',
@@ -445,7 +490,8 @@ function buildItemSpecificsXml(title: string, specs: Array<[string, string]>, fa
   }
 
   if (nameMap.size === 0) {
-    return `<NameValueList><Name>Brand</Name><Value>${inferBrandFromProduct(title, specs) || 'See Description'}</Value></NameValueList>${fallbackXml}`
+    return `<NameValueList><Name>Brand</Name><Value>${inferBrandFromProduct(title, specs) || 'Generic'}</Value></NameValueList>
+      <NameValueList><Name>Type</Name><Value>${inferTypeFromProduct(title, niche, specs)}</Value></NameValueList>${fallbackXml}`
   }
 
   return Array.from(nameMap.entries())
@@ -607,7 +653,7 @@ async function uploadToEPS(externalUrl: string, token: string, appId: string): P
   } catch (e) {
     console.error('[EPS] fetch error:', e instanceof Error ? e.message : e)
   }
-  return externalUrl
+  return ''
 }
 
 // ── Description builder ──────────────────────────────────────────────────────
@@ -698,6 +744,9 @@ ${detailImages.map(u => `      <img src="${u}" alt="" style="width:210px;max-wid
 
   <!-- Shipping -->
   ${sectionHeader('Shipping')}
+  <div style="padding:12px 14px 0;">
+    <span style="display:inline-block;background:#1f9d4d;color:#fff;font-size:12px;font-weight:700;padding:8px 12px;border-radius:999px;letter-spacing:0.02em;">Free Delivery</span>
+  </div>
   <ul style="font-size:14px;line-height:1.9;padding:12px 14px 12px 30px;margin:0;color:#333;">
     <li><strong>Free & Fast Shipping:</strong> Free USPS Priority Mail on every order. Estimated 2&ndash;4 business days.</li>
     <li><strong>Handling:</strong> Ships same day or next business day after cleared payment.</li>
@@ -956,7 +1005,7 @@ export async function POST(req: NextRequest) {
     _apiError: fetchedAmazon._apiError,
   }
   amazon.specs = dedupeSpecEntries(amazon.specs)
-  const itemSpecificsXml = buildItemSpecificsXml(listingTitle, amazon.specs, fallbackSpecificsXml)
+  const itemSpecificsXml = buildItemSpecificsXml(listingTitle, amazon.specs, fallbackSpecificsXml, niche)
 
   const host = req.headers.get('host') || ''
   const proto = host.startsWith('localhost') ? 'http' : 'https'
@@ -964,9 +1013,9 @@ export async function POST(req: NextRequest) {
 
   const allImages = filterVariantSpecificImages(dedupeImageUrls(amazon.images), listingTitle, amazon.specs)
 
-  const filteredImages = allImages
+  const filteredImages = dedupeImageUrls(allImages)
     .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
-    .slice(0, 12)
+    .slice(0, 8)
 
   const fallbackListingImage = `${siteUrl}/api/image/fallback?asin=${encodeURIComponent(asin)}&title=${encodeURIComponent(listingTitle)}`
   const primarySourceImage = filteredImages[0] || validatedAmazon.imageUrl || imageUrl || fallbackListingImage
@@ -991,9 +1040,15 @@ export async function POST(req: NextRequest) {
     epsSourceUrls.map((u) => uploadToEPS(u, credentials.accessToken, appId))
   )
 
-  const usablePictureList = pictureList.filter(Boolean)
+  const usablePictureList = dedupeImageUrls(
+    pictureList.filter((u): u is string => Boolean(u) && u.length <= 500)
+  )
   if (usablePictureList.length === 0) {
-    usablePictureList.push(badgeUrl)
+    usablePictureList.push(
+      ...filteredImages
+        .filter((u) => u.length <= 500)
+        .slice(0, 6)
+    )
   }
 
   const description = buildDescription(
@@ -1017,7 +1072,14 @@ export async function POST(req: NextRequest) {
   const suggestedCategoryIds = Array.from(new Set(categorySuggestionGroups.flat()))
   const leafSuggestedCategoryIds = await getLeafCategoryCandidates(suggestedCategoryIds, appId, credentials.accessToken)
   const nicheIsLeaf = await isLeafCategory(nicheCategoryId, appId, credentials.accessToken)
-  const fallbackLeafCategoryIds = nicheIsLeaf ? [nicheCategoryId] : []
+  const fallbackLeafCategoryIds = Array.from(
+    new Set(
+      [
+        nicheIsLeaf ? nicheCategoryId : '',
+        NICHE_FALLBACK_LEAF_CATEGORY[niche || ''] || '',
+      ].filter(Boolean)
+    )
+  )
   const preferredCategoryId = leafSuggestedCategoryIds[0] || fallbackLeafCategoryIds[0] || nicheCategoryId
   const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId: preferredCategoryId, price, pictureXml, itemSpecificsXml }
 
@@ -1075,6 +1137,9 @@ export async function POST(req: NextRequest) {
   }
 
   // Extract every "item specific X is missing" from eBay's error response and build XML for them
+  const inferredBrandValue = inferBrandFromProduct(listingTitle, amazon.specs) || 'Generic'
+  const inferredTypeValue = inferTypeFromProduct(listingTitle, niche, amazon.specs)
+
   const autoSpecificsXml = (r: string): string => {
     const longs = [...r.matchAll(/<LongMessage>(.*?)<\/LongMessage>/g)].map(m => m[1])
     const seen = new Set<string>()
@@ -1086,12 +1151,12 @@ export async function POST(req: NextRequest) {
       seen.add(name)
       // Use sensible defaults for common required fields
       const defaults: Record<string, string> = {
-        'Type': 'See Description', 'Model': 'See Description', 'Color': 'See Description',
+        'Type': inferredTypeValue, 'Model': 'See Description', 'Color': 'See Description',
         'Connectivity': 'See Description', 'Compatible Brand': 'Universal',
         'Screen Size': 'See Description', 'Processor': 'See Description',
         'Storage Capacity': 'See Description', 'Operating System': 'See Description',
         'Sport': 'See Description', 'Department': 'Unisex Adults', 'Size': 'One Size',
-        'Material': 'See Description', 'Style': 'See Description',
+        'Material': 'See Description', 'Style': 'See Description', 'Brand': inferredBrandValue,
       }
       const val = defaults[name] ?? 'See Description'
       return [`\n      <NameValueList><Name>${name}</Name><Value>${val}</Value></NameValueList>`]
