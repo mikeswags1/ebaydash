@@ -682,6 +682,7 @@ function buildDescription(title: string, features: string[], about: string, imag
   const finalBullets = Array.from(new Set([...normalizedFeatures, ...specBullets])).slice(0, 10)
   const cleanAbout = sanitizeDescriptionText(about)
   const descriptionParagraphs = toParagraphs(cleanAbout)
+  const detailParagraphs = descriptionParagraphs.slice(0, 2)
   const inferredBrand = inferBrandFromProduct(displayTitle, relevantSpecs)
   const topSpecsSentence = relevantSpecs
     .slice(0, 3)
@@ -735,7 +736,9 @@ ${detailImages.map(u => `      <img src="${u}" alt="" style="width:210px;max-wid
   ${sectionHeader('Product Features')}
   ${finalBullets.length > 0 ? `<ul style="font-size:14px;font-weight:500;line-height:1.8;padding:14px 14px 14px 30px;margin:0;color:#111;overflow-wrap:anywhere;">
     ${finalBullets.map(f => `<li style="margin-bottom:8px;">${f}</li>`).join('\n')}
-  </ul>` : `<p style="font-size:14px;line-height:1.8;padding:12px 14px;margin:0;color:#333;overflow-wrap:anywhere;">Review the product details and compatibility notes above to confirm the fit and package contents for your order.</p>`}
+  </ul>` : (detailParagraphs.length > 0
+    ? `<div style="padding:12px 14px 16px;color:#333;font-size:14px;line-height:1.8;overflow-wrap:anywhere;">${detailParagraphs.map((paragraph) => `<p style="margin:0 0 10px;">${paragraph}</p>`).join('')}</div>`
+    : `<p style="font-size:14px;line-height:1.8;padding:12px 14px;margin:0;color:#333;overflow-wrap:anywhere;">Key product details are included in the images and item specifics for this listing.</p>`)}
 
   <!-- Specs (if available) -->
   ${specRows ? `${sectionHeader('Specifications')}<table style="width:100%;border-collapse:collapse;margin-top:2px;"><tbody>${specRows}</tbody></table>` : ''}
@@ -960,20 +963,13 @@ export async function POST(req: NextRequest) {
   const fetchedAmazon = await fetchAmazonDetails(asin, rapidKey, validatedAmazon.imageUrl)
   const validatedRich = hasRichAmazonContent(validatedAmazon)
   const fetchedRich = hasRichAmazonContent(fetchedAmazon)
-  const clientRich = hasRichAmazonContent({
-    images: Array.isArray(images) ? images : [],
-    features: Array.isArray(features) ? features : [],
-    description: String(inputDescription || ''),
-  })
   const preferredFeatureSources = [
-    ...(Array.isArray(features) ? features : []),
     ...validatedAmazon.features,
-    ...(validatedRich || clientRich ? [] : fetchedAmazon.features),
+    ...(validatedRich ? [] : fetchedAmazon.features),
     ...(fetchedRich && !validatedRich ? fetchedAmazon.features : []),
   ]
   const amazon = {
     images: dedupeImageUrls([
-      ...(Array.isArray(images) ? images : []),
       ...validatedAmazon.images,
       ...(validatedRich ? [] : fetchedAmazon.images),
       ...(fetchedRich ? fetchedAmazon.images : []),
@@ -985,17 +981,14 @@ export async function POST(req: NextRequest) {
         preferredFeatureSources
           .map((value) => sanitizeContent(String(value || '')))
           .filter((value) => value.length > 6)
-          .filter((value) => (validatedRich || clientRich ? !isGenericFeature(value) : true))
+          .filter((value) => (validatedRich ? !isGenericFeature(value) : true))
       )
     ).slice(0, 10),
     description: sanitizeDescriptionText(chooseBestDescription(
-      clientRich ? String(inputDescription || '') : '',
       validatedAmazon.description,
       fetchedAmazon.description,
-      String(inputDescription || '')
     )),
     specs: [
-      ...(Array.isArray(specs) ? specs : []),
       ...validatedAmazon.specs,
       ...(validatedRich ? [] : fetchedAmazon.specs),
       ...(fetchedRich ? fetchedAmazon.specs : []),

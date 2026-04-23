@@ -87,8 +87,10 @@ export async function runDashboardScript(file: string) {
   return requestJson<{ ok: true; message?: string }>(`/api/scripts/run?script=${file}`)
 }
 
-export async function fetchFinderProducts(niche: string) {
-  return requestJson<{ ok: true; results: FinderProduct[] }>(`/api/scripts/product-finder?niche=${encodeURIComponent(niche)}`)
+export async function fetchFinderProducts(niche: string, refresh = false) {
+  const params = new URLSearchParams({ niche })
+  if (refresh) params.set('refresh', '1')
+  return requestJson<{ ok: true; results: FinderProduct[] }>(`/api/scripts/product-finder?${params.toString()}`)
 }
 
 export async function publishProduct(input: {

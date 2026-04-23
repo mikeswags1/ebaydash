@@ -454,14 +454,18 @@ export default function Dashboard() {
       return
     }
 
-    if (result.listedAsins.length > 0) {
-      setFinderState((prev) => ({
-        ...prev,
-        results: prev.results ? prev.results.filter((product) => !result.listedAsins.includes(product.asin)) : prev.results,
-      }))
-    }
-
     if (result.errors > 0) {
+      if (result.listedAsins.length > 0 && nicheState.value) {
+        try {
+          const refreshed = await fetchFinderProducts(nicheState.value, true)
+          setFinderState((prev) => ({ ...prev, results: refreshed.results || [] }))
+        } catch {
+          setFinderState((prev) => ({
+            ...prev,
+            results: prev.results ? prev.results.filter((product) => !result.listedAsins.includes(product.asin)) : prev.results,
+          }))
+        }
+      }
       setBanner({
         tone: 'error',
         text: `${result.listedAsins.length} product${result.listedAsins.length === 1 ? '' : 's'} listed, ${result.errors} failed. Review the remaining items and try again.`,
@@ -469,11 +473,23 @@ export default function Dashboard() {
       return
     }
 
+    if (nicheState.value) {
+      try {
+        const refreshed = await fetchFinderProducts(nicheState.value, true)
+        setFinderState((prev) => ({ ...prev, results: refreshed.results || [] }))
+      } catch {
+        setFinderState((prev) => ({
+          ...prev,
+          results: prev.results ? prev.results.filter((product) => !result.listedAsins.includes(product.asin)) : prev.results,
+        }))
+      }
+    }
+
     setBanner({
       tone: 'success',
       text: `${result.listedAsins.length} product${result.listedAsins.length === 1 ? '' : 's'} listed successfully.`,
     })
-  }, [connectionState.ebayConnected, finderState.results, publishFinderProduct])
+  }, [connectionState.ebayConnected, finderState.results, nicheState.value, publishFinderProduct])
 
   const handleRunScript = useCallback(async (file: string) => {
     setScriptRunning(file)
@@ -557,10 +573,17 @@ export default function Dashboard() {
       })
 
       setListingState((prev) => ({ ...prev, result: data }))
-      setFinderState((prev) => ({
-        ...prev,
-        results: prev.results ? prev.results.filter((product) => product.asin !== productToPublish.asin) : prev.results,
-      }))
+      if (nicheState.value) {
+        try {
+          const refreshed = await fetchFinderProducts(nicheState.value, true)
+          setFinderState((prev) => ({ ...prev, results: refreshed.results || [] }))
+        } catch {
+          setFinderState((prev) => ({
+            ...prev,
+            results: prev.results ? prev.results.filter((product) => product.asin !== productToPublish.asin) : prev.results,
+          }))
+        }
+      }
       setBanner({ tone: 'success', text: `Listing ${data.listingId} is now live on eBay.` })
     } catch (error) {
       setListingState((prev) => ({

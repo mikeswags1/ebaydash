@@ -7,7 +7,8 @@ import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 import { EBAY_DEFAULT_FEE_RATE, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 
-const MIN_PROFIT = 6
+const MIN_PROFIT = 10
+const MIN_ROI   = 35
 const MAX_COST   = 300
 const CACHE_TTL  = 23 * 60 * 60 * 1000 // 23 hours — refresh once per day
 const CACHE_VERSION = 2
@@ -189,11 +190,19 @@ export async function GET(req: NextRequest) {
   // Only block ASINs that are currently active on eBay (ended_at IS NULL)
   // If a listing sold out or was removed, that ASIN becomes available again
   let listedAsins = new Set<string>()
+  let listedTitles: string[] = []
   try {
     await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ`.catch(() => {})
-    const listedRows = await queryRows<{ asin: string }>`SELECT asin FROM listed_asins WHERE user_id = ${session.user.id} AND ended_at IS NULL`
+    const listedRows = await queryRows<{ asin: string; title: string | null }>`SELECT asin, title FROM listed_asins WHERE user_id = ${session.user.id} AND ended_at IS NULL`
     listedAsins = new Set(listedRows.map((r) => String(r.asin)))
+    listedTitles = listedRows.map((r) => String(r.title || '')).filter(Boolean)
   } catch { /* table may not exist yet */ }
+
+  const matchesActiveListing = (title: string) =>
+    listedTitles.some((listedTitle) => getTitleScore(listedTitle, title) >= 0.82)
+
+  const shouldBlockProduct = (product: Pick<Product, 'asin' | 'title'>) =>
+    listedAsins.has(product.asin) || matchesActiveListing(product.title)
 
   // ── Check cache ──────────────────────────────────────────────────────────────
   let cacheRow: { results: Product[]; cached_at: Date; version?: number } | null = null
@@ -207,7 +216,7 @@ export async function GET(req: NextRequest) {
 
   if (cacheIsFresh && !forceRefresh) {
     // Serve from cache — filter out already-listed ASINs for this user
-    const filtered = (cacheRow!.results as Product[]).filter(p => !listedAsins.has(p.asin))
+    const filtered = (cacheRow!.results as Product[]).filter(p => !shouldBlockProduct(p))
     return apiOk({ niche, results: filtered, count: filtered.length, source: 'cache' })
   }
 
@@ -216,7 +225,7 @@ export async function GET(req: NextRequest) {
   if (!rapidKey) {
     // No API key — fall back to cache if available
     if (cacheRow) {
-      const filtered = (cacheRow.results as Product[]).filter(p => !listedAsins.has(p.asin))
+      const filtered = (cacheRow.results as Product[]).filter(p => !shouldBlockProduct(p))
       return apiOk({ niche, results: filtered, count: filtered.length, source: 'cache' })
     }
     return apiError('Product sourcing is not configured right now.', {
@@ -235,16 +244,16 @@ export async function GET(req: NextRequest) {
     for (const p of products) {
       if (results.length >= 40) break
       const asin = String(p.asin || '')
-      if (!asin || seenAsins.has(asin) || listedAsins.has(asin)) continue
+      const title       = String(p.product_title || '')
+      if (!asin || seenAsins.has(asin) || shouldBlockProduct({ asin, title })) continue
       seenAsins.add(asin)
       const price       = parsePrice(p.product_price) || parsePrice(p.product_original_price)
-      const title       = String(p.product_title || '')
       const imageUrl    = String(p.product_photo || '')
       const salesVolume = String(p.sales_volume || '')
       if (!price || price <= 0 || price > MAX_COST) continue
       if (!title || isRejected(title)) continue
       const { ebayPrice, profit, roi } = calcMetrics(price)
-      if (profit < MIN_PROFIT) continue
+      if (profit < MIN_PROFIT || roi < MIN_ROI) continue
       const risk = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
       results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk, salesVolume,
         _rating: parseFloat(String(p.product_star_rating || '0')) || 0,
@@ -340,7 +349,7 @@ export async function GET(req: NextRequest) {
   // ── API failed — try direct Amazon scrape, then fall back to cache ──────────
   if (apiQuotaExceeded && results.length === 0) {
     if (cacheRow) {
-      const filtered = (cacheRow.results as Product[]).filter(p => !listedAsins.has(p.asin))
+      const filtered = (cacheRow.results as Product[]).filter(p => !shouldBlockProduct(p))
       return apiOk({ niche, results: filtered, count: filtered.length, source: 'stale_cache' })
     }
 
@@ -352,12 +361,12 @@ export async function GET(req: NextRequest) {
         const scraped = await scrapeAmazonSearch(query)
         for (const p of scraped) {
           if (results.length >= 20) break
-          if (!p.asin || seenAsins.has(p.asin) || listedAsins.has(p.asin)) continue
+          if (!p.asin || seenAsins.has(p.asin) || shouldBlockProduct({ asin: p.asin, title: p.title })) continue
           seenAsins.add(p.asin)
           if (!p.price || p.price <= 0 || p.price > MAX_COST) continue
           if (!p.title || isRejected(p.title)) continue
           const { ebayPrice, profit, roi } = calcMetrics(p.price)
-          if (profit < MIN_PROFIT) continue
+          if (profit < MIN_PROFIT || roi < MIN_ROI) continue
           const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
           results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
             imageUrl: p.imageUrl, risk, salesVolume: undefined, _rating: p.rating, _numRatings: p.reviewCount })
@@ -377,7 +386,7 @@ export async function GET(req: NextRequest) {
         await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results)}, ${CACHE_VERSION})
           ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()`
       } catch { /* non-fatal */ }
-      const filtered = results.filter(p => !listedAsins.has(p.asin))
+      const filtered = results.filter(p => !shouldBlockProduct(p))
       return apiOk({ niche, results: filtered, count: filtered.length, source: 'scrape' })
     }
 
@@ -388,6 +397,6 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const filtered = results.filter(p => !listedAsins.has(p.asin))
+  const filtered = results.filter(p => !shouldBlockProduct(p))
   return apiOk({ niche, results: filtered, count: filtered.length, source: 'live' })
 }

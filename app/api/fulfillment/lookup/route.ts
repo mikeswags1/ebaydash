@@ -130,22 +130,6 @@ export async function GET(req: NextRequest) {
         storedImages[0] ||
         undefined
 
-      if (snapshot && storedPrice > 0) {
-        return apiOk({
-          asin,
-          title: String(snapshot.title || rows[0].title || asin),
-          amazonPrice: storedPrice,
-          imageUrl: storedImageUrl,
-          images: snapshotImages.length > 0 ? snapshotImages : storedImages,
-          features: Array.isArray(snapshot.features) ? snapshot.features : [],
-          description: String(snapshot.description || ''),
-          specs: Array.isArray(snapshot.specs) ? snapshot.specs : [],
-          amazonUrl: String(snapshot.amazonUrl || `https://www.amazon.com/dp/${asin}`),
-          available: true,
-          source: 'db' as const,
-        })
-      }
-
       const validated = await fetchAmazonProductByAsin({ asin, strictAsin: true })
 
       if (!validated) {
@@ -196,10 +180,10 @@ export async function GET(req: NextRequest) {
 
         return apiOk({
           asin,
-          title: String(validated.title || rows[0].title || asin),
+          title: String(validated.title || snapshot?.title || rows[0].title || asin),
           amazonPrice: validated.amazonPrice,
-          imageUrl: validated.imageUrl,
-          images: validated.images,
+          imageUrl: validated.imageUrl || storedImageUrl,
+          images: validated.images.length > 0 ? validated.images : (snapshotImages.length > 0 ? snapshotImages : storedImages),
           features: validated.features,
           description: validated.description,
           specs: validated.specs,

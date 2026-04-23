@@ -77,21 +77,30 @@ function chooseResolvedAmazonPrice(products: ValidatedAmazonProduct[], fallbackP
     return Number.isFinite(fallbackPrice) && Number(fallbackPrice) > 0 ? Number(fallbackPrice) : 0
   }
 
-  const scrapeLike = positivePrices.filter((entry) => entry.source === 'scrape' || entry.source === 'search')
-  const trustedSet = scrapeLike.length > 0 ? scrapeLike : positivePrices
-  const trustedMin = Math.min(...trustedSet.map((entry) => entry.price))
-  const trustedMax = Math.max(...trustedSet.map((entry) => entry.price))
+  const apiPrice = positivePrices.find((entry) => entry.source === 'api')
+  if (apiPrice) {
+    return parseFloat(apiPrice.price.toFixed(2))
+  }
 
-  if (trustedSet.length >= 2 && trustedMax <= trustedMin * 1.2) {
-    return parseFloat(trustedMin.toFixed(2))
+  const scrapeLike = positivePrices.filter((entry) => entry.source === 'scrape' || entry.source === 'search')
+  if (scrapeLike.length > 0) {
+    const trustedMin = Math.min(...scrapeLike.map((entry) => entry.price))
+    const trustedMax = Math.max(...scrapeLike.map((entry) => entry.price))
+
+    if (scrapeLike.length >= 2 && trustedMax <= trustedMin * 1.2) {
+      return parseFloat(trustedMax.toFixed(2))
+    }
+
+    return parseFloat(trustedMax.toFixed(2))
   }
 
   const cached = positivePrices.find((entry) => entry.source === 'cache')
-  if (cached && cached.price <= trustedMin * 1.15) {
+  if (cached) {
     return parseFloat(cached.price.toFixed(2))
   }
 
-  return parseFloat(trustedMin.toFixed(2))
+  const fallbackResolved = Math.max(...positivePrices.map((entry) => entry.price))
+  return parseFloat(fallbackResolved.toFixed(2))
 }
 
 function hasRichContent(product: Pick<ValidatedAmazonProduct, 'images' | 'features' | 'description'> | null | undefined) {
