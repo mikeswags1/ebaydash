@@ -1,4 +1,5 @@
 import type { BannerState, FinderProduct } from './types'
+import { EBAY_DEFAULT_FEE_RATE, getRecommendedEbayPrice as getSharedRecommendedEbayPrice } from '@/lib/listing-pricing'
 
 export function parseDashboardSearchMessage(search: string): BannerState | null {
   const params = new URLSearchParams(search)
@@ -46,9 +47,7 @@ export function getListingPreview(ebayPrice: string, amazonPrice: number, shippi
 }
 
 export function getRecommendedEbayPrice(amazonPrice: number) {
-  const targetProfit = amazonPrice < 15 ? 7 : amazonPrice < 40 ? 12 : amazonPrice < 100 ? 20 : amazonPrice * 0.12
-  const rawEbayPrice = (amazonPrice + targetProfit) / (1 - 0.15)
-  return Math.ceil(rawEbayPrice) - 0.01
+  return getSharedRecommendedEbayPrice(amazonPrice, EBAY_DEFAULT_FEE_RATE)
 }
 
 export async function listProductsInBatches(args: {

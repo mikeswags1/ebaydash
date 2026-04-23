@@ -5,8 +5,8 @@ import { apiError, apiOk } from '@/lib/api-response'
 import { queryRows, sql } from '@/lib/db'
 import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
+import { EBAY_DEFAULT_FEE_RATE, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 
-const EBAY_FEE   = 0.15   // 15% eBay take rate used in new pricing model
 const MIN_PROFIT = 6
 const MAX_COST   = 300
 const CACHE_TTL  = 23 * 60 * 60 * 1000 // 23 hours — refresh once per day
@@ -94,14 +94,8 @@ function dedupeProducts(products: Product[]) {
 }
 
 function calcMetrics(amazonPrice: number) {
-  const targetProfit = amazonPrice < 15  ? 7
-    : amazonPrice < 40  ? 12
-    : amazonPrice < 100 ? 20
-    : amazonPrice * 0.12
-  const rawEbayPrice = (amazonPrice + targetProfit) / (1 - EBAY_FEE)
-  // Round to nearest .99
-  const ebayPrice = Math.ceil(rawEbayPrice) - 0.01
-  const fees   = parseFloat((ebayPrice * EBAY_FEE).toFixed(2))
+  const ebayPrice = getRecommendedEbayPrice(amazonPrice, EBAY_DEFAULT_FEE_RATE)
+  const fees   = parseFloat((ebayPrice * EBAY_DEFAULT_FEE_RATE).toFixed(2))
   const profit = parseFloat((ebayPrice - amazonPrice - fees).toFixed(2))
   const roi    = parseFloat(((profit / amazonPrice) * 100).toFixed(0))
   return { ebayPrice, fees, profit, roi }

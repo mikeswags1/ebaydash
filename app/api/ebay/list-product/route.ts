@@ -7,6 +7,7 @@ import { sql } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
+import { getRecommendedEbayPrice } from '@/lib/listing-pricing'
 
 // ── VeRO Protection ──────────────────────────────────────────────────────────
 const VERO_BRANDS = [
@@ -744,9 +745,6 @@ ${detailImages.map(u => `      <img src="${u}" alt="" style="width:210px;max-wid
 
   <!-- Shipping -->
   ${sectionHeader('Shipping')}
-  <div style="padding:12px 14px 0;">
-    <span style="display:inline-block;background:#1f9d4d;color:#fff;font-size:12px;font-weight:700;padding:8px 12px;border-radius:999px;letter-spacing:0.02em;">Free Delivery</span>
-  </div>
   <ul style="font-size:14px;line-height:1.9;padding:12px 14px 12px 30px;margin:0;color:#333;">
     <li><strong>Free & Fast Shipping:</strong> Free USPS Priority Mail on every order. Estimated 2&ndash;4 business days.</li>
     <li><strong>Handling:</strong> Ships same day or next business day after cleared payment.</li>
@@ -821,10 +819,11 @@ async function verifyToEbay(xml: string, appId: string, token: string): Promise<
 
 function buildXml(params: {
   token: string; safeTitle: string; description: string; categoryId: string
-  price: string; pictureXml: string; itemSpecificsXml: string
+  price: string; pictureXml: string; itemSpecificsXml: string; requestType?: 'add' | 'verify'
 }) {
+  const rootTag = params.requestType === 'verify' ? 'VerifyAddFixedPriceItemRequest' : 'AddFixedPriceItemRequest'
   return `<?xml version="1.0" encoding="utf-8"?>
-<AddFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+<${rootTag} xmlns="urn:ebay:apis:eBLBaseComponents">
   <RequesterCredentials>
     <eBayAuthToken>${params.token}</eBayAuthToken>
   </RequesterCredentials>
@@ -850,10 +849,10 @@ function buildXml(params: {
       <ShippingType>Flat</ShippingType>
       <ShippingServiceOptions>
         <ShippingServicePriority>1</ShippingServicePriority>
-        <ShippingService>USPSPriority</ShippingService>
+        <ShippingService>USPSGround</ShippingService>
         <ShippingServiceCost>0.00</ShippingServiceCost>
         <FreeShipping>true</FreeShipping>
-        <ExpeditedService>true</ExpeditedService>
+        <ExpeditedService>false</ExpeditedService>
         <ShippingServiceAdditionalCost>0.00</ShippingServiceAdditionalCost>
       </ShippingServiceOptions>
     </ShippingDetails>
@@ -867,7 +866,7 @@ function buildXml(params: {
       ${params.itemSpecificsXml}
     </ItemSpecifics>
   </Item>
-</AddFixedPriceItemRequest>`
+</${rootTag}>`
 }
 
 // ── Route handler ────────────────────────────────────────────────────────────
@@ -950,7 +949,9 @@ export async function POST(req: NextRequest) {
     : cleanTitle.slice(0, 80).replace(/\s+\S*$/, '').trim()
 
   const nicheCategoryId = NICHE_CATEGORY[niche] || '177'
-  const price = parsedEbayPrice.toFixed(2)
+  const floorPrice = getRecommendedEbayPrice(listingAmazonPrice)
+  const finalEbayPrice = Math.max(parsedEbayPrice, floorPrice)
+  const price = finalEbayPrice.toFixed(2)
   const fallbackSpecificsXml = (NICHE_SPECIFICS[niche] || [])
     .map(([n, v]) => `\n      <NameValueList><Name>${n}</Name><Value>${v}</Value></NameValueList>`)
     .join('')
@@ -1174,7 +1175,7 @@ export async function POST(req: NextRequest) {
 
     for (let guard = 0; guard < 6; guard += 1) {
       attemptedCategoryIds.push(activeCategoryId)
-      responseText = await verifyToEbay(buildXml({ ...params, categoryId: activeCategoryId, itemSpecificsXml: workingSpecificsXml }), appId, credentials.accessToken)
+      responseText = await verifyToEbay(buildXml({ ...params, categoryId: activeCategoryId, itemSpecificsXml: workingSpecificsXml, requestType: 'verify' }), appId, credentials.accessToken)
       parsed = parse(responseText)
       errorKind = errType(parsed.short, parsed.long, parsed.codes)
       const verifyAck = responseText.match(/<Ack>(.*?)<\/Ack>/)?.[1] || ''

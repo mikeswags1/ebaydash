@@ -153,7 +153,8 @@ export default function Dashboard() {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         const validated = await validateAmazonAsin(product.asin)
-        const hasValidAmazonData = Boolean(validated.imageUrl && validated.amazonPrice > 0)
+        const resolvedImageUrl = validated.imageUrl || product.imageUrl || validated.images?.[0]
+        const hasValidAmazonData = Boolean(resolvedImageUrl && validated.amazonPrice > 0)
 
         if (!hasValidAmazonData) {
           throw new Error('INCOMPLETE_AMAZON_VALIDATION')
@@ -168,8 +169,8 @@ export default function Dashboard() {
           ebayPrice: nextRecommendedPrice,
           profit: preview.profit,
           roi: preview.roi,
-          imageUrl: validated.imageUrl || product.imageUrl,
-          images: validated.images || product.images,
+          imageUrl: resolvedImageUrl || product.imageUrl,
+          images: (validated.images && validated.images.length > 0 ? validated.images : product.images) || product.images,
           features: validated.features || product.features,
           description: validated.description || product.description,
           specs: validated.specs || product.specs,
