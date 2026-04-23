@@ -828,11 +828,30 @@ async function verifyToEbay(xml: string, appId: string, token: string): Promise<
 
 function buildXml(params: {
   token: string; safeTitle: string; description: string; categoryId: string
-  price: string; pictureXml: string; itemSpecificsXml: string; shippingService?: string; requestType?: 'add' | 'verify'
+  price: string; pictureXml: string; itemSpecificsXml: string; shippingService?: string; requestType?: 'add' | 'verify'; simplifiedShipping?: boolean
 }) {
   const rootTag = params.requestType === 'verify' ? 'VerifyAddFixedPriceItemRequest' : 'AddFixedPriceItemRequest'
-  const shippingService = params.shippingService || 'StandardShipping'
-  const expeditedService = /USPSPriority|FedExHomeDelivery|StandardShipping/i.test(shippingService) ? 'true' : 'false'
+  const shippingService = params.shippingService || 'USPSPriority'
+  const shippingDetailsXml = params.simplifiedShipping
+    ? `<ShippingDetails>
+      <ShippingType>Flat</ShippingType>
+      <ShippingServiceOptions>
+        <ShippingServicePriority>1</ShippingServicePriority>
+        <ShippingService>${shippingService}</ShippingService>
+        <FreeShipping>true</FreeShipping>
+        <ShippingServiceCost currencyID="USD">0.00</ShippingServiceCost>
+      </ShippingServiceOptions>
+    </ShippingDetails>`
+    : `<ShippingDetails>
+      <ShippingType>Flat</ShippingType>
+      <ShippingServiceOptions>
+        <ShippingServicePriority>1</ShippingServicePriority>
+        <ShippingService>${shippingService}</ShippingService>
+        <ShippingServiceCost currencyID="USD">0.00</ShippingServiceCost>
+        <FreeShipping>true</FreeShipping>
+        <ShippingServiceAdditionalCost currencyID="USD">0.00</ShippingServiceAdditionalCost>
+      </ShippingServiceOptions>
+    </ShippingDetails>`
   return `<?xml version="1.0" encoding="utf-8"?>
 <${rootTag} xmlns="urn:ebay:apis:eBLBaseComponents">
   <RequesterCredentials>
@@ -856,17 +875,7 @@ function buildXml(params: {
     <Quantity>2</Quantity>
     ${params.pictureXml}
     <ShipToLocations>US</ShipToLocations>
-    <ShippingDetails>
-      <ShippingType>Flat</ShippingType>
-      <ShippingServiceOptions>
-        <ShippingServicePriority>1</ShippingServicePriority>
-        <ShippingService>${shippingService}</ShippingService>
-        <ShippingServiceCost>0.00</ShippingServiceCost>
-        <FreeShipping>true</FreeShipping>
-        <ExpeditedService>${expeditedService}</ExpeditedService>
-        <ShippingServiceAdditionalCost>0.00</ShippingServiceAdditionalCost>
-      </ShippingServiceOptions>
-    </ShippingDetails>
+    ${shippingDetailsXml}
     <ReturnPolicy>
       <ReturnsAcceptedOption>ReturnsAccepted</ReturnsAcceptedOption>
       <RefundOption>MoneyBack</RefundOption>
@@ -1148,6 +1157,15 @@ export async function POST(req: NextRequest) {
     return match?.[1]?.trim() || null
   }
 
+  const hasInvalidShippingDetails = (short: string, long: string) => {
+    const text = `${short} ${long}`.toLowerCase()
+    return (
+      text.includes('item.shippingdetails') ||
+      text.includes('shippingdetails') ||
+      text.includes('shipping service options')
+    )
+  }
+
   // Extract every "item specific X is missing" from eBay's error response and build XML for them
   const inferredBrandValue = inferBrandFromProduct(listingTitle, amazon.specs) || 'Generic'
   const inferredTypeValue = inferTypeFromProduct(listingTitle, niche, amazon.specs)
@@ -1246,24 +1264,35 @@ export async function POST(req: NextRequest) {
 
   const attemptListing = async (params: typeof xmlParams & { itemSpecificsXml: string; shippingService?: string }) => {
     let activeCategoryId = params.categoryId
-    let activeShippingService = params.shippingService || 'StandardShipping'
+    let activeShippingService = params.shippingService || 'USPSPriority'
     let responseText = ''
     let parsed = { short: '', long: '', codes: [] as string[], longs: [] as string[] }
     let errorKind: 'leaf' | 'specific' | 'other' = 'other'
     const attemptedCategoryIds: string[] = []
     const attemptedShippingServices: string[] = [activeShippingService]
     let transientRetryUsed = false
-    const shippingFallbacks = ['StandardShipping', 'USPSPriority', 'FedExHomeDelivery', 'UPSGround']
+    let simplifiedShipping = false
+    const shippingFallbacks = ['USPSPriority', 'StandardShipping', 'FedExHomeDelivery', 'UPSGround']
 
     for (let guard = 0; guard < 4; guard += 1) {
       attemptedCategoryIds.push(activeCategoryId)
-      responseText = await submitToEbay(buildXml({ ...params, categoryId: activeCategoryId, shippingService: activeShippingService }), appId, credentials.accessToken)
+      responseText = await submitToEbay(buildXml({
+        ...params,
+        categoryId: activeCategoryId,
+        shippingService: activeShippingService,
+        simplifiedShipping,
+      }), appId, credentials.accessToken)
       parsed = parse(responseText)
       errorKind = errType(parsed.short, parsed.long, parsed.codes)
 
       const replacementCategoryId = extractReplacementCategoryId(responseText)
       if (replacementCategoryId && replacementCategoryId !== activeCategoryId && !attemptedCategoryIds.includes(replacementCategoryId)) {
         activeCategoryId = replacementCategoryId
+        continue
+      }
+
+      if (!simplifiedShipping && hasInvalidShippingDetails(parsed.short, parsed.long)) {
+        simplifiedShipping = true
         continue
       }
 
