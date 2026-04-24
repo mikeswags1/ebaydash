@@ -2,10 +2,45 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { apiError, apiOk, getErrorText } from '@/lib/api-response'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
-import { queryRows } from '@/lib/db'
+import { queryRows, sql } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
+import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
 
 const DEFAULT_EBAY_FEE_RATE = 0.1325
+
+// Live-fetch Amazon price for a single ASIN and persist it to the DB.
+async function resolveAmazonPrice(asin: string, userId: string): Promise<number | null> {
+  try {
+    const rapidKey = process.env.RAPIDAPI_KEY || ''
+    // Try RapidAPI first
+    if (rapidKey) {
+      const res = await fetch(
+        `https://real-time-amazon-data.p.rapidapi.com/product-details?asin=${asin}&country=US`,
+        { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey }, signal: AbortSignal.timeout(6000) }
+      )
+      if (res.ok) {
+        const json = await res.json()
+        const data = json?.data ?? json
+        const msg = String(data?.message || '').toLowerCase()
+        if (!msg.match(/limit|quota|exceed/)) {
+          const raw = data.product_price || data.price
+          const price = typeof raw === 'number' ? raw : parseFloat(String(raw || '').replace(/[^0-9.]/g, ''))
+          if (price > 0) {
+            await sql`UPDATE listed_asins SET amazon_price = ${price} WHERE user_id = ${userId} AND asin = ${asin}`.catch(() => {})
+            return price
+          }
+        }
+      }
+    }
+    // Fallback: scrape Amazon product page
+    const scraped = await scrapeAmazonProduct(asin)
+    if (scraped && scraped.price > 0) {
+      await sql`UPDATE listed_asins SET amazon_price = ${scraped.price} WHERE user_id = ${userId} AND asin = ${asin}`.catch(() => {})
+      return scraped.price
+    }
+  } catch { /* ignore */ }
+  return null
+}
 
 type EbayOrder = {
   orderId: string
@@ -103,6 +138,28 @@ export async function GET() {
       WHERE user_id = ${session.user.id}
         AND ebay_listing_id IS NOT NULL
     `
+
+    // Live-lookup prices for rows missing amazon_price — run up to 5 in parallel
+    const missingPriceAsins = listingRows
+      .filter(r => (r.amazon_price === null || r.amazon_price === undefined) && r.asin)
+      .map(r => String(r.asin))
+      .filter((asin, i, arr) => arr.indexOf(asin) === i) // dedupe
+      .slice(0, 5)
+
+    if (missingPriceAsins.length > 0) {
+      const resolved = await Promise.all(
+        missingPriceAsins.map(asin => resolveAmazonPrice(asin, String(session.user.id)).then(price => ({ asin, price })))
+      )
+      // Patch the in-memory rows so this request uses the live price
+      for (const { asin, price } of resolved) {
+        if (price === null) continue
+        for (const row of listingRows) {
+          if (String(row.asin) === asin && (row.amazon_price === null || row.amazon_price === undefined)) {
+            row.amazon_price = price
+          }
+        }
+      }
+    }
 
     const listingById = new Map(
       listingRows
