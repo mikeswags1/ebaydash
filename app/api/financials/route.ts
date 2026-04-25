@@ -5,6 +5,7 @@ import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { queryRows, sql } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
+import { recoverAmazonProductByItemId } from '@/lib/amazon-mapping'
 
 const DEFAULT_EBAY_FEE_RATE = 0.1325
 
@@ -132,7 +133,7 @@ export async function GET() {
     const orderPayload = (await response.json()) as { orders?: EbayOrder[] }
     const orders = Array.isArray(orderPayload.orders) ? orderPayload.orders : []
 
-    const listingRows = await queryRows<ListedAsinRow>`
+    let listingRows = await queryRows<ListedAsinRow>`
       SELECT asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate
       FROM listed_asins
       WHERE user_id = ${session.user.id}
@@ -159,6 +160,48 @@ export async function GET() {
           }
         }
       }
+    }
+
+    const listingIdSet = new Set(listingRows.map((row) => String(row.ebay_listing_id || '')).filter(Boolean))
+    const itemIdsNeedingRecovery = Array.from(
+      new Set(
+        orders.flatMap((order) =>
+          (order.lineItems || [])
+            .map((lineItem) => String(lineItem.legacyItemId || '').trim())
+            .filter(Boolean)
+        )
+      )
+    ).filter((itemId) => {
+      const listing = listingRows.find((row) => String(row.ebay_listing_id || '') === itemId)
+      if (!listingIdSet.has(itemId)) return true
+      return !listing?.asin || listing.amazon_price === null || listing.amazon_price === undefined
+    })
+
+    if (itemIdsNeedingRecovery.length > 0) {
+      const rapidKey = process.env.RAPIDAPI_KEY
+      const appId = process.env.EBAY_APP_ID || ''
+
+      for (let index = 0; index < itemIdsNeedingRecovery.length; index += 5) {
+        const batch = itemIdsNeedingRecovery.slice(index, index + 5)
+        await Promise.all(
+          batch.map((itemId) =>
+            recoverAmazonProductByItemId({
+              userId: session.user.id,
+              itemId,
+              accessToken: credentials.accessToken,
+              appId,
+              rapidKey,
+            }).catch(() => null)
+          )
+        )
+      }
+
+      listingRows = await queryRows<ListedAsinRow>`
+        SELECT asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate
+        FROM listed_asins
+        WHERE user_id = ${session.user.id}
+          AND ebay_listing_id IS NOT NULL
+      `
     }
 
     const listingById = new Map(
