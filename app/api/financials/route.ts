@@ -48,10 +48,21 @@ type EbayOrder = {
   creationDate: string
   pricingSummary?: { total?: { value?: string } }
   lineItems?: Array<{
+    lineItemId?: string
     title?: string
     quantity?: number
     lineItemCost?: { value?: string }
     legacyItemId?: string
+  }>
+}
+
+type EbayTransaction = {
+  orderId?: string
+  totalFeeAmount?: { value?: string }
+  orderLineItems?: Array<{
+    lineItemId?: string
+    feeBasisAmount?: { value?: string }
+    marketplaceFees?: Array<{ amount?: { value?: string } }>
   }>
 }
 
@@ -77,6 +88,81 @@ function normalizeTitle(value: string) {
     .replace(/\b(pack|set|piece|pcs|count|for|with|and|the|a|an)\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function getDateRangeFilter(orders: EbayOrder[]) {
+  const timestamps = orders
+    .map((order) => new Date(order.creationDate).getTime())
+    .filter((value) => Number.isFinite(value))
+
+  if (timestamps.length === 0) return ''
+
+  const start = new Date(Math.min(...timestamps) - 24 * 60 * 60 * 1000).toISOString()
+  const end = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+  return `transactionType:{SALE},transactionDate:[${start}..${end}]`
+}
+
+async function getActualFeeMaps(base: string, accessToken: string, orders: EbayOrder[]) {
+  const orderIds = new Set(orders.map((order) => order.orderId).filter(Boolean))
+  const byOrder = new Map<string, number>()
+  const byLine = new Map<string, number>()
+  const filter = getDateRangeFilter(orders)
+
+  if (orderIds.size === 0 || !filter) return { byOrder, byLine }
+
+  try {
+    let offset = 0
+    const limit = 200
+
+    while (offset < 1000) {
+      const url = new URL(`${base}/sell/finances/v1/transaction`)
+      url.searchParams.set('limit', String(limit))
+      url.searchParams.set('offset', String(offset))
+      url.searchParams.set('filter', filter)
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Language': 'en-US',
+        },
+        signal: AbortSignal.timeout(10000),
+      })
+
+      if (!response.ok) break
+
+      const payload = (await response.json()) as { transactions?: EbayTransaction[]; total?: number }
+      const transactions = Array.isArray(payload.transactions) ? payload.transactions : []
+
+      for (const transaction of transactions) {
+        const orderId = String(transaction.orderId || '')
+        if (!orderIds.has(orderId)) continue
+
+        const orderFee = parseMoney(transaction.totalFeeAmount?.value)
+        if (orderFee > 0) byOrder.set(orderId, (byOrder.get(orderId) || 0) + orderFee)
+
+        for (const lineItem of transaction.orderLineItems || []) {
+          const lineItemId = String(lineItem.lineItemId || '')
+          if (!lineItemId) continue
+
+          const lineFee = (lineItem.marketplaceFees || []).reduce(
+            (sum, fee) => sum + parseMoney(fee.amount?.value),
+            0
+          )
+
+          if (lineFee > 0) {
+            byLine.set(`${orderId}:${lineItemId}`, (byLine.get(`${orderId}:${lineItemId}`) || 0) + lineFee)
+          }
+        }
+      }
+
+      if (transactions.length < limit || (payload.total && offset + limit >= payload.total)) break
+      offset += limit
+    }
+  } catch {
+    // Financials can still load with estimated fees when eBay Finances is unavailable.
+  }
+
+  return { byOrder, byLine }
 }
 
 export async function GET() {
@@ -132,6 +218,7 @@ export async function GET() {
 
     const orderPayload = (await response.json()) as { orders?: EbayOrder[] }
     const orders = Array.isArray(orderPayload.orders) ? orderPayload.orders : []
+    const actualFeeMaps = await getActualFeeMaps(base, credentials.accessToken, orders)
 
     let listingRows = await queryRows<ListedAsinRow>`
       SELECT asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate
@@ -230,7 +317,11 @@ export async function GET() {
         const amazonUnitCost = listing?.amazon_price === null || listing?.amazon_price === undefined ? null : parseMoney(listing.amazon_price)
         const amazonCost = amazonUnitCost === null ? null : amazonUnitCost * quantity
         const feeRate = listing?.ebay_fee_rate === null || listing?.ebay_fee_rate === undefined ? DEFAULT_EBAY_FEE_RATE : Number(listing.ebay_fee_rate)
-        const ebayFees = revenue * feeRate
+        const lineItemId = String(lineItem.lineItemId || '')
+        const actualLineFee = lineItemId ? actualFeeMaps.byLine.get(`${order.orderId}:${lineItemId}`) : undefined
+        const actualOrderFee = (order.lineItems?.length || 0) <= 1 ? actualFeeMaps.byOrder.get(order.orderId) : undefined
+        const ebayFees = actualLineFee ?? actualOrderFee ?? revenue * feeRate
+        const feeSource = actualLineFee !== undefined || actualOrderFee !== undefined ? 'actual' : 'estimated'
         const profit = amazonCost === null ? null : revenue - amazonCost - ebayFees
         const roi = amazonCost && amazonCost > 0 && profit !== null ? (profit / amazonCost) * 100 : null
         const margin = revenue > 0 && profit !== null ? (profit / revenue) * 100 : null
@@ -248,6 +339,7 @@ export async function GET() {
           amazonCost,
           ebayFeeRate: feeRate,
           ebayFees,
+          feeSource,
           profit,
           roi,
           margin,

@@ -78,6 +78,7 @@ export interface FinancialItem {
   amazonCost: number | null
   ebayFeeRate: number
   ebayFees: number
+  feeSource?: 'actual' | 'estimated'
   profit: number | null
   roi: number | null
   margin: number | null

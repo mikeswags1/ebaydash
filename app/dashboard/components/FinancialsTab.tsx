@@ -118,7 +118,12 @@ export function FinancialsTab({
                         </td>
                         <td style={cellStyle('var(--gld2)')}>${item.ebayRevenue.toFixed(2)}</td>
                         <td style={cellStyle(item.amazonCost === null ? 'var(--red)' : 'var(--txt)')}>{item.amazonCost === null ? 'Missing' : `$${item.amazonCost.toFixed(2)}`}</td>
-                        <td style={cellStyle('var(--dim)')}>${item.ebayFees.toFixed(2)}</td>
+                        <td style={cellStyle(item.feeSource === 'actual' ? 'var(--txt)' : 'var(--dim)')}>
+                          <div>${item.ebayFees.toFixed(2)}</div>
+                          <div style={{ fontFamily: 'inherit', fontSize: '8px', color: 'var(--dim)', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+                            {item.feeSource === 'actual' ? 'Actual' : 'Est.'}
+                          </div>
+                        </td>
                         <td style={cellStyle(item.profit !== null && item.profit >= 0 ? 'var(--grn)' : 'var(--red)')}>{item.profit === null ? 'Missing' : `$${item.profit.toFixed(2)}`}</td>
                         <td style={cellStyle(item.roi !== null && item.roi >= 0 ? 'var(--grn)' : 'var(--red)')}>{item.roi === null ? 'Missing' : `${item.roi.toFixed(1)}%`}</td>
                         <td style={cellStyle(item.margin !== null && item.margin >= 0 ? 'var(--gold)' : 'var(--red)')}>{item.margin === null ? 'Missing' : `${item.margin.toFixed(1)}%`}</td>
