@@ -18,8 +18,13 @@ export async function GET() {
   url.searchParams.set('client_id', clientId)
   url.searchParams.set('response_type', 'code')
   url.searchParams.set('redirect_uri', redirectUri)
-  url.searchParams.set('scope', EBAY_OAUTH_SCOPES.join(' '))
   url.searchParams.set('state', String(session.user.id))
+  url.searchParams.set('prompt', 'login')
+  url.searchParams.set('locale', 'en-US')
+
+  // eBay examples show scopes as a URL-encoded space-separated list (%20).
+  // URLSearchParams serializes spaces as "+", so set scope explicitly.
+  url.search = `${url.search}&scope=${encodeURIComponent(EBAY_OAUTH_SCOPES.join(' '))}`
 
   return NextResponse.redirect(url.toString())
 }
