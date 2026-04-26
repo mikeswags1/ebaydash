@@ -26,13 +26,66 @@ export function getTitleScore(ebayTitle: string, candidateTitle: string) {
   return overlap / Math.max(ebayWords.size, candidateWords.size)
 }
 
-export async function getEbayItemTitle(itemId: string, token: string, appId: string): Promise<string | null> {
+function decodeXml(value: string) {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim()
+}
+
+function getXmlValue(xml: string, tag: string) {
+  const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'i'))
+  return match?.[1] ? decodeXml(match[1]) : ''
+}
+
+function getXmlValues(xml: string, tag: string) {
+  return Array.from(xml.matchAll(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'gi')))
+    .map((match) => decodeXml(match[1] || ''))
+    .filter(Boolean)
+}
+
+function stripHtml(value: string) {
+  return decodeXml(value)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function extractAsinsFromText(...values: Array<string | null | undefined>) {
+  const found = new Set<string>()
+  for (const value of values) {
+    const text = String(value || '').toUpperCase()
+    for (const match of text.matchAll(/\bB[A-Z0-9]{9}\b/g)) {
+      found.add(match[0])
+    }
+  }
+  return Array.from(found)
+}
+
+type EbayItemDetails = {
+  title: string
+  sku: string
+  description: string
+  itemSpecifics: Array<{ name: string; values: string[] }>
+  possibleAsins: string[]
+}
+
+export async function getEbayItemDetails(itemId: string, token: string, appId: string): Promise<EbayItemDetails | null> {
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
   <ItemID>${itemId}</ItemID>
   <DetailLevel>ItemReturnDescription</DetailLevel>
-  <OutputSelector>Title,PictureDetails</OutputSelector>
+  <OutputSelector>Title</OutputSelector>
+  <OutputSelector>SKU</OutputSelector>
+  <OutputSelector>Description</OutputSelector>
+  <OutputSelector>ItemSpecifics</OutputSelector>
+  <OutputSelector>PictureDetails</OutputSelector>
 </GetItemRequest>`
 
   const res = await fetch('https://api.ebay.com/ws/api.dll', {
@@ -52,8 +105,35 @@ export async function getEbayItemTitle(itemId: string, token: string, appId: str
   if (!res.ok) return null
 
   const text = await res.text()
-  const titleMatch = text.match(/<Title>(.*?)<\/Title>/)
-  return titleMatch?.[1]?.trim() || null
+  const title = getXmlValue(text, 'Title')
+  const sku = getXmlValue(text, 'SKU')
+  const description = stripHtml(getXmlValue(text, 'Description'))
+  const itemSpecifics = Array.from(text.matchAll(/<NameValueList>([\s\S]*?)<\/NameValueList>/gi))
+    .map((match) => {
+      const block = match[1] || ''
+      return {
+        name: getXmlValue(block, 'Name'),
+        values: getXmlValues(block, 'Value'),
+      }
+    })
+    .filter((specific) => specific.name || specific.values.length > 0)
+
+  const specificText = itemSpecifics
+    .flatMap((specific) => [specific.name, ...specific.values])
+    .join(' ')
+
+  return {
+    title,
+    sku,
+    description,
+    itemSpecifics,
+    possibleAsins: extractAsinsFromText(sku, specificText, description, title),
+  }
+}
+
+export async function getEbayItemTitle(itemId: string, token: string, appId: string): Promise<string | null> {
+  const details = await getEbayItemDetails(itemId, token, appId)
+  return details?.title || null
 }
 
 export async function saveRecoveredMapping(args: {
@@ -210,8 +290,54 @@ export async function recoverAmazonProductByItemId(args: {
 
   if (!rapidKey) return null
 
-  const ebayTitle = await getEbayItemTitle(itemId, accessToken, appId)
+  const ebayDetails = await getEbayItemDetails(itemId, accessToken, appId)
+  const ebayTitle = ebayDetails?.title || ''
   if (!ebayTitle) return null
+
+  for (const asin of ebayDetails?.possibleAsins || []) {
+    const validated = await fetchAmazonProductByAsin({ asin, strictAsin: true })
+
+    if (validated) {
+      await saveRecoveredMapping({
+        userId,
+        itemId,
+        asin: validated.asin,
+        title: validated.title,
+        amazonPrice: validated.amazonPrice,
+        amazonImageUrl: validated.imageUrl,
+        amazonImages: validated.images,
+        amazonSnapshot: {
+          asin: validated.asin,
+          title: validated.title,
+          amazonPrice: validated.amazonPrice,
+          imageUrl: validated.imageUrl,
+          images: validated.images,
+          features: validated.features,
+          description: validated.description,
+          specs: validated.specs,
+          available: validated.available,
+          source: validated.source,
+          amazonUrl: `https://www.amazon.com/dp/${validated.asin}`,
+          recoveredFrom: 'ebay_listing_asin',
+        },
+      })
+
+      return {
+        asin: validated.asin,
+        title: validated.title,
+        amazonPrice: validated.amazonPrice,
+        imageUrl: validated.imageUrl,
+        images: validated.images,
+        features: validated.features,
+        description: validated.description,
+        specs: validated.specs,
+        amazonUrl: `https://www.amazon.com/dp/${validated.asin}`,
+        available: validated.available,
+        ebayTitle,
+        source: 'search',
+      }
+    }
+  }
 
   const searchRes = await fetch(
     `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(ebayTitle)}&country=US&category_id=aps&page=1`,
