@@ -8,6 +8,8 @@ export function SettingsTab({
   niche,
   nicheSaved,
   onSync,
+  onDisconnectEbay,
+  disconnectingEbay,
   onOpenProductTab,
 }: {
   connected: boolean
@@ -17,6 +19,8 @@ export function SettingsTab({
   niche: string | null
   nicheSaved: boolean
   onSync: () => void
+  onDisconnectEbay: () => void
+  disconnectingEbay: boolean
   onOpenProductTab: () => void
 }) {
   return (
@@ -37,6 +41,14 @@ export function SettingsTab({
                 <a href="/api/ebay/connect" className="btn btn-ghost" style={{ fontSize: '12px' }}>
                   Reconnect eBay
                 </a>
+                <button
+                  onClick={onDisconnectEbay}
+                  className="btn btn-ghost"
+                  style={{ fontSize: '12px', color: 'var(--red)', borderColor: 'rgba(248,81,101,0.28)' }}
+                  disabled={disconnectingEbay}
+                >
+                  {disconnectingEbay ? 'Disconnecting...' : 'Disconnect eBay'}
+                </button>
               </div>
             </>
           ) : (

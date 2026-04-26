@@ -16,6 +16,7 @@ import { SellOnEbayModal } from './components/SellOnEbayModal'
 import type { BannerState, EbayCredentialsSummary, FinancialItem, FinancialSummary, FinderProduct, ListProgress, OrderAsinMap, ScriptMessage, Tab } from './types'
 import type { AsinResult, EbayOrder, ListResult } from './types'
 import {
+  disconnectEbay,
   fetchFinancials,
   fetchAmazonCredentials,
   fetchEbayCredentials,
@@ -100,6 +101,7 @@ export default function Dashboard() {
     amazonSellerId: null,
     syncing: false,
   })
+  const [disconnectingEbay, setDisconnectingEbay] = useState(false)
   const [orderState, setOrderState] = useState<OrderState>({
     orders: [],
     awaiting: [],
@@ -338,6 +340,38 @@ export default function Dashboard() {
       setBanner((prev) => prev ?? { tone: 'error', text: 'Unable to load tracked listing mappings.' })
     }
   }, [getEbayConnectionState])
+
+  const handleDisconnectEbay = useCallback(async () => {
+    const confirmed = window.confirm('Disconnect eBay from this dashboard? You can reconnect it again from Settings.')
+    if (!confirmed) return
+
+    setDisconnectingEbay(true)
+    try {
+      await disconnectEbay()
+      setConnectionState((prev) => ({
+        ...prev,
+        ebayConnected: false,
+        ebayNeedsReconnect: false,
+      }))
+      setOrderState((prev) => ({
+        ...prev,
+        orders: [],
+        awaiting: [],
+        orderAsinMap: {},
+      }))
+      setFinancialState((prev) => ({
+        ...prev,
+        summary: null,
+        items: [],
+        error: null,
+      }))
+      setBanner({ tone: 'success', text: 'eBay disconnected. Connect it again to refresh your token.' })
+    } catch (error) {
+      setBanner({ tone: 'error', text: getErrorMessage(error, 'Unable to disconnect eBay.') })
+    } finally {
+      setDisconnectingEbay(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -701,6 +735,8 @@ export default function Dashboard() {
                 void loadOrders()
                 void loadFinancials()
               }}
+              onDisconnectEbay={() => void handleDisconnectEbay()}
+              disconnectingEbay={disconnectingEbay}
               onOpenProductTab={() => setTab('product')}
             />
           ) : null}

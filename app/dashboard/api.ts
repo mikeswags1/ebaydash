@@ -55,6 +55,12 @@ export async function fetchEbayCredentials() {
   return requestJson<{ ok: true; credentials: EbayCredentialsSummary | null }>('/api/ebay/credentials')
 }
 
+export async function disconnectEbay() {
+  return requestJson<{ ok: true; success: true }>('/api/ebay/credentials', {
+    method: 'DELETE',
+  })
+}
+
 export async function fetchUserNiche() {
   return requestJson<{ ok: true; niche: string | null }>('/api/user/niche')
 }

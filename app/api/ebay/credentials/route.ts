@@ -57,3 +57,18 @@ export async function POST(req: Request) {
     })
   }
 }
+
+export async function DELETE() {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
+
+  try {
+    await sql`DELETE FROM ebay_credentials WHERE user_id = ${session.user.id}`
+    return apiOk({ success: true })
+  } catch (error) {
+    return apiError(getErrorText(error, 'Unable to disconnect eBay.'), {
+      status: 500,
+      code: 'EBAY_DISCONNECT_FAILED',
+    })
+  }
+}
