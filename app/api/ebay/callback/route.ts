@@ -23,21 +23,27 @@ export async function GET(req: NextRequest) {
       `${process.env.EBAY_APP_ID}:${process.env.EBAY_CERT_ID}`
     ).toString('base64')
 
-    const res = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: process.env.EBAY_RUNAME!,
-        scope: EBAY_OAUTH_SCOPES.join(' '),
-      }),
-    })
+    let res: Response
+    try {
+      res = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: process.env.EBAY_RUNAME!,
+          scope: EBAY_OAUTH_SCOPES.join(' '),
+        }),
+      })
+    } catch (error) {
+      console.error('eBay token exchange network error:', error)
+      return NextResponse.redirect(new URL('/dashboard?ebay=error&msg=Unable%20to%20reach%20eBay%20during%20connection.%20Please%20try%20again.', req.url))
+    }
 
-    const data = await res.json()
+    const data = await res.json().catch(() => null)
 
     if (!data.access_token) {
       console.error('eBay token exchange failed:', JSON.stringify(data))
@@ -60,7 +66,11 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.redirect(new URL('/dashboard?ebay=connected', req.url))
   } catch (e) {
-    const msg = encodeURIComponent(String(e).slice(0, 120))
+    const raw = String(e)
+    const safeMessage = /fetch failed/i.test(raw)
+      ? 'Unable to reach eBay during connection. Please try again.'
+      : raw.slice(0, 120)
+    const msg = encodeURIComponent(safeMessage)
     console.error('eBay callback error:', e)
     return NextResponse.redirect(new URL(`/dashboard?ebay=error&msg=${msg}`, req.url))
   }

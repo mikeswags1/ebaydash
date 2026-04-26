@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { apiError, apiOk, getErrorText } from '@/lib/api-response'
-import { getValidEbayAccessToken } from '@/lib/ebay-auth'
+import { EbayNetworkError, EbayReconnectRequiredError, getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { queryRows, sql } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
@@ -374,12 +374,33 @@ export async function GET() {
       items,
     })
   } catch (error) {
+    if (error instanceof EbayReconnectRequiredError) {
+      return apiError(error.message, {
+        status: 401,
+        code: 'RECONNECT_REQUIRED',
+      })
+    }
+
+    if (error instanceof EbayNetworkError) {
+      return apiError(error.message, {
+        status: 503,
+        code: 'EBAY_NETWORK_ERROR',
+      })
+    }
+
     const message = getErrorText(error, 'Unable to load financial data.')
     if (/invalid refresh token|token refresh failed|expired|revoked|reconnect/i.test(message)) {
       return apiError('Your eBay session expired. Reconnect your account in Settings.', {
         status: 401,
         code: 'RECONNECT_REQUIRED',
         details: message,
+      })
+    }
+
+    if (/fetch failed/i.test(message)) {
+      return apiError('Unable to reach eBay right now. Please try again in a minute or reconnect eBay in Settings.', {
+        status: 503,
+        code: 'EBAY_NETWORK_ERROR',
       })
     }
 

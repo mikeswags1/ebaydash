@@ -8,7 +8,11 @@ export function parseDashboardSearchMessage(search: string): BannerState | null 
   const msg = params.get('msg')
 
   if (ebay === 'error') {
-    return { tone: 'error', text: msg ? decodeURIComponent(msg) : 'eBay connection failed.' }
+    const decoded = msg ? decodeURIComponent(msg) : ''
+    const friendly = /fetch failed/i.test(decoded)
+      ? 'Unable to reach eBay during connection. Please try again.'
+      : decoded
+    return { tone: 'error', text: friendly || 'eBay connection failed.' }
   }
 
   if (ebay === 'connected') {

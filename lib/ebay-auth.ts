@@ -17,6 +17,20 @@ type StoredEbayCredentials = {
   sandbox_mode?: boolean
 }
 
+export class EbayReconnectRequiredError extends Error {
+  constructor(message = 'Your eBay session expired. Reconnect your account in Settings.') {
+    super(message)
+    this.name = 'EbayReconnectRequiredError'
+  }
+}
+
+export class EbayNetworkError extends Error {
+  constructor(message = 'Unable to reach eBay right now. Please try again in a minute or reconnect eBay in Settings.') {
+    super(message)
+    this.name = 'EbayNetworkError'
+  }
+}
+
 export async function getStoredEbayCredentials(userId: string) {
   const rows = await queryRows<StoredEbayCredentials>`
     SELECT oauth_token, refresh_token, token_expires_at, sandbox_mode
@@ -41,22 +55,32 @@ export async function refreshEbayAccessToken(userId: string, refreshToken: strin
   }
 
   const credentials = Buffer.from(`${appId}:${certId}`).toString('base64')
-  const response = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      scope: EBAY_OAUTH_SCOPES.join(' '),
-    }),
-  })
+  let response: Response
+  try {
+    response = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        scope: EBAY_OAUTH_SCOPES.join(' '),
+      }),
+    })
+  } catch {
+    throw new EbayNetworkError()
+  }
 
-  const data = await response.json()
+  const data = await response.json().catch(() => null)
   if (!response.ok || !data.access_token) {
-    throw new Error(data?.error_description || data?.error || `eBay token refresh failed (${response.status})`)
+    const detail = String(data?.error_description || data?.error || '')
+    if (response.status === 400 || response.status === 401 || /invalid|expired|revoked/i.test(detail)) {
+      throw new EbayReconnectRequiredError()
+    }
+
+    throw new Error(detail || `eBay token refresh failed (${response.status})`)
   }
 
   const expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString()
