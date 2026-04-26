@@ -65,6 +65,11 @@ export function SettingsTab({
               <a href="/api/ebay/connect" className="btn btn-solid" style={{ padding: '14px 36px', fontSize: '14px', display: 'inline-flex' }}>
                 {needsReconnect ? 'Reconnect eBay Account' : 'Connect eBay Account'}
               </a>
+              <div style={{ marginTop: '14px' }}>
+                <a href="/api/ebay/connect?minimal=1" className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }}>
+                  Try Basic eBay Connect
+                </a>
+              </div>
             </>
           )}
         </div>

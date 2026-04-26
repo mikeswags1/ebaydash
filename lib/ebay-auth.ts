@@ -7,6 +7,10 @@ export const EBAY_OAUTH_SCOPES = [
   'https://api.ebay.com/oauth/api_scope/sell.account.readonly',
 ]
 
+export const EBAY_MINIMAL_OAUTH_SCOPES = [
+  'https://api.ebay.com/oauth/api_scope',
+]
+
 type StoredEbayCredentials = {
   oauth_token?: string
   refresh_token?: string
