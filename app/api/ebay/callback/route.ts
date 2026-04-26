@@ -19,8 +19,11 @@ export async function GET(req: NextRequest) {
 
   try {
     // Exchange code for access + refresh tokens
+    const appId = String(process.env.EBAY_APP_ID || '').trim()
+    const certId = String(process.env.EBAY_CERT_ID || '').trim()
+    const redirectUri = String(process.env.EBAY_RUNAME || '').trim()
     const credentials = Buffer.from(
-      `${process.env.EBAY_APP_ID}:${process.env.EBAY_CERT_ID}`
+      `${appId}:${certId}`
     ).toString('base64')
 
     let res: Response
@@ -34,7 +37,7 @@ export async function GET(req: NextRequest) {
         body: new URLSearchParams({
           grant_type: 'authorization_code',
           code,
-          redirect_uri: process.env.EBAY_RUNAME!,
+          redirect_uri: redirectUri,
           scope: EBAY_OAUTH_SCOPES.join(' '),
         }),
       })

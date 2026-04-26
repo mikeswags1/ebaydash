@@ -3,19 +3,23 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { EBAY_OAUTH_SCOPES } from '@/lib/ebay-auth'
 
-const SCOPES = encodeURIComponent(EBAY_OAUTH_SCOPES.join(' '))
-
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const url =
-    `https://auth.ebay.com/oauth2/authorize` +
-    `?client_id=${process.env.EBAY_APP_ID}` +
-    `&response_type=code` +
-    `&redirect_uri=${process.env.EBAY_RUNAME}` +
-    `&scope=${SCOPES}` +
-    `&state=${session.user.id}`
+  const clientId = String(process.env.EBAY_APP_ID || '').trim()
+  const redirectUri = String(process.env.EBAY_RUNAME || '').trim()
 
-  return NextResponse.redirect(url)
+  if (!clientId || !redirectUri) {
+    return NextResponse.redirect(new URL('/dashboard?ebay=error&msg=eBay%20OAuth%20is%20not%20configured.', process.env.NEXTAUTH_URL || 'https://ebaydash.vercel.app'))
+  }
+
+  const url = new URL('https://auth.ebay.com/oauth2/authorize')
+  url.searchParams.set('client_id', clientId)
+  url.searchParams.set('response_type', 'code')
+  url.searchParams.set('redirect_uri', redirectUri)
+  url.searchParams.set('scope', EBAY_OAUTH_SCOPES.join(' '))
+  url.searchParams.set('state', String(session.user.id))
+
+  return NextResponse.redirect(url.toString())
 }
