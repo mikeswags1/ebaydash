@@ -169,27 +169,27 @@ export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
-  const credentials = await getValidEbayAccessToken(session.user.id)
-  if (!credentials?.accessToken) {
-    return apiOk({
-      connected: false,
-      summary: {
-        grossRevenue: 0,
-        trackedRevenue: 0,
-        amazonCost: 0,
-        ebayFees: 0,
-        profit: 0,
-        roi: 0,
-        margin: 0,
-        soldItems: 0,
-        trackedItems: 0,
-        missingCostItems: 0,
-      },
-      items: [],
-    })
-  }
-
   try {
+    const credentials = await getValidEbayAccessToken(session.user.id)
+    if (!credentials?.accessToken) {
+      return apiOk({
+        connected: false,
+        summary: {
+          grossRevenue: 0,
+          trackedRevenue: 0,
+          amazonCost: 0,
+          ebayFees: 0,
+          profit: 0,
+          roi: 0,
+          margin: 0,
+          soldItems: 0,
+          trackedItems: 0,
+          missingCostItems: 0,
+        },
+        items: [],
+      })
+    }
+
     await ensureListedAsinsFinancialColumns()
 
     const base = credentials.sandboxMode ? 'https://api.sandbox.ebay.com' : 'https://api.ebay.com'
@@ -374,7 +374,16 @@ export async function GET() {
       items,
     })
   } catch (error) {
-    return apiError(getErrorText(error, 'Unable to load financial data.'), {
+    const message = getErrorText(error, 'Unable to load financial data.')
+    if (/invalid refresh token|token refresh failed|expired|revoked|reconnect/i.test(message)) {
+      return apiError('Your eBay session expired. Reconnect your account in Settings.', {
+        status: 401,
+        code: 'RECONNECT_REQUIRED',
+        details: message,
+      })
+    }
+
+    return apiError(message, {
       status: 500,
       code: 'FINANCIALS_LOAD_FAILED',
     })

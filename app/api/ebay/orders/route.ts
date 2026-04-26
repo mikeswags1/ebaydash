@@ -7,19 +7,25 @@ export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
-  const credentials = await getValidEbayAccessToken(session.user.id)
-  if (!credentials?.accessToken) {
-    return apiOk({ connected: false, awaiting: [], recent: [], total: 0 })
-  }
-
-  const base = credentials.sandboxMode ? 'https://api.sandbox.ebay.com' : 'https://api.ebay.com'
-
   try {
+    const credentials = await getValidEbayAccessToken(session.user.id)
+    if (!credentials?.accessToken) {
+      return apiOk({ connected: false, awaiting: [], recent: [], total: 0 })
+    }
+
+    const base = credentials.sandboxMode ? 'https://api.sandbox.ebay.com' : 'https://api.ebay.com'
+    const awaitingUrl = new URL(`${base}/sell/fulfillment/v1/order`)
+    awaitingUrl.searchParams.set('limit', '50')
+    awaitingUrl.searchParams.set('filter', 'orderfulfillmentstatus:{NOT_STARTED|IN_PROGRESS}')
+
+    const recentUrl = new URL(`${base}/sell/fulfillment/v1/order`)
+    recentUrl.searchParams.set('limit', '50')
+
     const [awaitingRes, recentRes] = await Promise.all([
-      fetch(`${base}/sell/fulfillment/v1/order?limit=50&ordersFulfillmentStatus=NOT_STARTED`, {
+      fetch(awaitingUrl, {
         headers: { Authorization: `Bearer ${credentials.accessToken}`, 'Content-Language': 'en-US' },
       }),
-      fetch(`${base}/sell/fulfillment/v1/order?limit=50`, {
+      fetch(recentUrl, {
         headers: { Authorization: `Bearer ${credentials.accessToken}`, 'Content-Language': 'en-US' },
       }),
     ])
@@ -50,6 +56,15 @@ export async function GET() {
       total: recent.total || 0,
     })
   } catch (error) {
+    const message = getErrorText(error, 'Unable to sync eBay orders.')
+    if (/invalid refresh token|token refresh failed|expired|revoked|reconnect/i.test(message)) {
+      return apiError('Your eBay session expired. Reconnect your account in Settings.', {
+        status: 401,
+        code: 'RECONNECT_REQUIRED',
+        details: message,
+      })
+    }
+
     return apiError(getErrorText(error, 'Unable to sync eBay orders.'), {
       status: 500,
       code: 'ORDER_SYNC_FAILED',
