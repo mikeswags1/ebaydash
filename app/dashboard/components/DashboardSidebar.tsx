@@ -20,6 +20,7 @@ export function DashboardSidebar({
 }) {
   return (
     <aside
+      className="dashboard-sidebar"
       style={{
         width: '260px',
         flexShrink: 0,
@@ -33,7 +34,7 @@ export function DashboardSidebar({
         boxShadow: '6px 0 90px rgba(0,0,0,0.97)',
       }}
     >
-      <div style={{ padding: '32px 24px 28px', borderBottom: '1px solid rgba(195,158,88,0.10)' }}>
+      <div className="dashboard-brand" style={{ padding: '32px 24px 28px', borderBottom: '1px solid rgba(195,158,88,0.10)' }}>
         <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1 }}>
           Ebay
           <span
@@ -61,7 +62,7 @@ export function DashboardSidebar({
         </div>
       </div>
 
-      <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(195,158,88,0.08)' }}>
+      <div className="dashboard-status" style={{ padding: '14px 20px', borderBottom: '1px solid rgba(195,158,88,0.08)' }}>
         <div
           style={{
             display: 'flex',
@@ -99,7 +100,7 @@ export function DashboardSidebar({
       </div>
 
       {niche ? (
-        <div style={{ padding: '10px 20px', borderBottom: '1px solid rgba(195,158,88,0.08)' }}>
+        <div className="dashboard-niche" style={{ padding: '10px 20px', borderBottom: '1px solid rgba(195,158,88,0.08)' }}>
           <div
             style={{
               display: 'flex',
@@ -131,7 +132,7 @@ export function DashboardSidebar({
         </div>
       ) : null}
 
-      <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: '2px', overflowY: 'auto' }}>
+      <nav className="dashboard-nav" style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: '2px', overflowY: 'auto' }}>
         {NAV_ITEMS.map((item) => (
           <button
             key={item.id}
@@ -157,6 +158,7 @@ export function DashboardSidebar({
           >
             {tab === item.id ? (
               <div
+                className="dashboard-nav-active-bar"
                 style={{
                   position: 'absolute',
                   left: '-1px',
@@ -207,7 +209,7 @@ export function DashboardSidebar({
         ))}
       </nav>
 
-      <div style={{ padding: '16px 20px', borderTop: '1px solid rgba(195,158,88,0.10)' }}>
+      <div className="dashboard-user" style={{ padding: '16px 20px', borderTop: '1px solid rgba(195,158,88,0.10)' }}>
         <div style={{ fontSize: '11px', color: 'var(--sil)', marginBottom: '10px', fontWeight: 500 }}>{userLabel}</div>
         <button onClick={onSignOut} className="btn btn-ghost btn-sm btn-full" style={{ fontSize: '11px' }}>
           Sign Out

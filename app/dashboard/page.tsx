@@ -643,7 +643,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', position: 'relative', zIndex: 1 }}>
+    <div className="dashboard-shell" style={{ display: 'flex', minHeight: '100vh', position: 'relative', zIndex: 1 }}>
       <DashboardSidebar
         tab={tab}
         onTabChange={setTab}
@@ -654,7 +654,7 @@ export default function Dashboard() {
         onSignOut={() => signOut({ callbackUrl: '/' })}
       />
 
-      <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <main className="dashboard-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <DashboardBanner banner={banner} onClose={() => setBanner(null)} />
         <DashboardTopbar
           tab={tab}
@@ -666,7 +666,7 @@ export default function Dashboard() {
           }}
         />
 
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div className="dashboard-content" style={{ flex: 1, overflowY: 'auto' }}>
           {tab === 'overview' ? (
             <OverviewTab connected={connectionState.ebayConnected} orders={orderState.orders} awaitingCount={orderState.awaiting.length} grossRevenue={grossRevenue} onOpenSettings={() => setTab('settings')} />
           ) : null}

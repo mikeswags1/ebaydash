@@ -14,6 +14,7 @@ export function DashboardBanner({
 
   return (
     <div
+      className="dashboard-banner"
       style={{
         padding: '10px 44px',
         fontSize: '12px',
@@ -47,6 +48,7 @@ export function DashboardTopbar({
 }) {
   return (
     <header
+      className="dashboard-topbar"
       style={{
         height: '56px',
         background: 'rgba(12,9,4,0.96)',

@@ -11,8 +11,9 @@ export function SectionIntro({
   subtitle?: string
 }) {
   return (
-    <div style={{ padding: '56px 52px 40px' }}>
+    <div className="dashboard-section" style={{ padding: '56px 52px 40px' }}>
       <div
+        className="dashboard-title"
         style={{
           fontSize: '8px',
           fontWeight: 700,
