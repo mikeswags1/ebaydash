@@ -11,6 +11,8 @@ export function AsinLookupTab({
   manualAsin,
   onManualAsinChange,
   onSaveManualMapping,
+  onConfirmCurrent,
+  onRejectCurrent,
   manualSaving,
   orders,
   orderAsinMap,
@@ -25,6 +27,8 @@ export function AsinLookupTab({
   manualAsin: string
   onManualAsinChange: (value: string) => void
   onSaveManualMapping: () => void
+  onConfirmCurrent: () => void
+  onRejectCurrent: () => void
   manualSaving: boolean
   orders: EbayOrder[]
   orderAsinMap: OrderAsinMap
@@ -192,6 +196,19 @@ export function AsinLookupTab({
               >
                 Buy on Amazon to Fulfill Order
               </a>
+              <div style={{ marginTop: '14px', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(195,158,88,0.10)' }}>
+                <div style={{ fontSize: '11px', color: 'var(--sil)', marginBottom: '12px', lineHeight: 1.5 }}>
+                  Is this the correct Amazon source item for the eBay listing?
+                </div>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <button onClick={onConfirmCurrent} className="btn btn-gold btn-sm" disabled={manualSaving}>
+                    Yes, Save It
+                  </button>
+                  <button onClick={onRejectCurrent} className="btn btn-ghost btn-sm" disabled={asinLoading}>
+                    {asinLoading ? 'Finding...' : 'No, Try Another'}
+                  </button>
+                </div>
+              </div>
             </div>
             <button onClick={onReset} className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }}>
               Look up another order

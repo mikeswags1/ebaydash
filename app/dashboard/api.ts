@@ -81,8 +81,10 @@ export async function fetchOrderAsinMap() {
   return requestJson<{ ok: true; map: OrderAsinMap }>('/api/amazon/order-asins')
 }
 
-export async function lookupAsinByItemId(itemId: string) {
-  return requestJson<AsinResult>(`/api/fulfillment/lookup?itemId=${itemId}`)
+export async function lookupAsinByItemId(itemId: string, excludeAsins: string[] = []) {
+  const params = new URLSearchParams({ itemId })
+  if (excludeAsins.length > 0) params.set('exclude', excludeAsins.join(','))
+  return requestJson<AsinResult>(`/api/fulfillment/lookup?${params.toString()}`)
 }
 
 export async function saveManualAsinMapping(itemId: string, asin: string) {

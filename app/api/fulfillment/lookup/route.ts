@@ -10,6 +10,10 @@ export async function GET(req: NextRequest) {
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
   const itemId = req.nextUrl.searchParams.get('itemId')?.trim()
+  const excludeAsins = (req.nextUrl.searchParams.get('exclude') || '')
+    .split(',')
+    .map((asin) => asin.trim().toUpperCase())
+    .filter((asin) => /^[A-Z0-9]{10}$/.test(asin))
   if (!itemId || !/^\d+$/.test(itemId)) {
     return apiError('Invalid eBay item ID.', { status: 400, code: 'INVALID_ITEM_ID' })
   }
@@ -37,6 +41,7 @@ export async function GET(req: NextRequest) {
     accessToken: credentials.accessToken,
     appId,
     rapidKey,
+    excludeAsins,
   })
 
   if (!recovered) {

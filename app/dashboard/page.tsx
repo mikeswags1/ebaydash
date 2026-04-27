@@ -67,6 +67,7 @@ type NicheState = {
 type LookupState = {
   input: string
   manualAsin: string
+  rejectedAsins: string[]
   result: AsinResult | null
   loading: boolean
   savingManual: boolean
@@ -125,6 +126,7 @@ export default function Dashboard() {
   const [lookupState, setLookupState] = useState<LookupState>({
     input: '',
     manualAsin: '',
+    rejectedAsins: [],
     result: null,
     loading: false,
     savingManual: false,
@@ -415,7 +417,7 @@ export default function Dashboard() {
 
     try {
       const result = await lookupAsinByItemId(raw)
-      setLookupState((prev) => ({ ...prev, result }))
+      setLookupState((prev) => ({ ...prev, result, manualAsin: result.asin }))
     } catch (error) {
       setLookupState((prev) => ({
         ...prev,
@@ -428,9 +430,30 @@ export default function Dashboard() {
     }
   }, [lookupState.input])
 
-  const handleSaveManualAsinMapping = useCallback(async () => {
+  const handleRejectCurrentAsin = useCallback(async () => {
     const itemId = lookupState.input.trim()
-    const asin = lookupState.manualAsin.trim().toUpperCase()
+    const currentAsin = lookupState.result?.asin
+    if (!itemId || !currentAsin) return
+
+    const rejectedAsins = Array.from(new Set([...lookupState.rejectedAsins, currentAsin]))
+    setLookupState((prev) => ({ ...prev, loading: true, error: null, rejectedAsins }))
+
+    try {
+      const result = await lookupAsinByItemId(itemId, rejectedAsins)
+      setLookupState((prev) => ({ ...prev, result, manualAsin: result.asin }))
+    } catch (error) {
+      setLookupState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, 'No alternate match found. Paste the correct ASIN and save it manually.'),
+      }))
+    } finally {
+      setLookupState((prev) => ({ ...prev, loading: false }))
+    }
+  }, [lookupState.input, lookupState.rejectedAsins, lookupState.result?.asin])
+
+  const handleSaveManualAsinMapping = useCallback(async (asinOverride?: string) => {
+    const itemId = lookupState.input.trim()
+    const asin = (asinOverride || lookupState.manualAsin).trim().toUpperCase()
     if (!/^\d+$/.test(itemId) || !/^[A-Z0-9]{10}$/.test(asin)) {
       setLookupState((prev) => ({ ...prev, error: 'Enter a numeric eBay item ID and a valid 10-character Amazon ASIN.' }))
       return
@@ -463,6 +486,13 @@ export default function Dashboard() {
       setLookupState((prev) => ({ ...prev, savingManual: false }))
     }
   }, [loadFinancials, lookupState.input, lookupState.manualAsin])
+
+  const handleConfirmCurrentAsin = useCallback(async () => {
+    const currentAsin = lookupState.result?.asin
+    if (!currentAsin) return
+    setLookupState((prev) => ({ ...prev, manualAsin: currentAsin }))
+    await handleSaveManualAsinMapping(currentAsin)
+  }, [handleSaveManualAsinMapping, lookupState.result?.asin])
 
   const handleFindProducts = useCallback(async () => {
     if (!nicheState.value) return
@@ -739,10 +769,12 @@ export default function Dashboard() {
               manualAsin={lookupState.manualAsin}
               onManualAsinChange={(value) => setLookupState((prev) => ({ ...prev, manualAsin: value }))}
               onSaveManualMapping={() => void handleSaveManualAsinMapping()}
+              onConfirmCurrent={() => void handleConfirmCurrentAsin()}
+              onRejectCurrent={() => void handleRejectCurrentAsin()}
               manualSaving={lookupState.savingManual}
               orders={orderState.orders}
               orderAsinMap={orderState.orderAsinMap}
-              onReset={() => setLookupState({ input: '', manualAsin: '', result: null, loading: false, savingManual: false, error: null })}
+              onReset={() => setLookupState({ input: '', manualAsin: '', rejectedAsins: [], result: null, loading: false, savingManual: false, error: null })}
             />
           ) : null}
           {tab === 'product' ? (

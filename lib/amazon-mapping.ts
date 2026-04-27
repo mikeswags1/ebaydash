@@ -192,10 +192,14 @@ export async function recoverAmazonProductByItemId(args: {
   accessToken: string
   appId: string
   rapidKey?: string
+  excludeAsins?: string[]
 }): Promise<RecoveredAmazonMapping | null> {
   const { userId, itemId, accessToken, appId, rapidKey } = args
+  const excludedAsins = new Set((args.excludeAsins || []).map((asin) => asin.toUpperCase().trim()).filter(Boolean))
+  const shouldSkipAsin = (asin: string) => excludedAsins.has(asin.toUpperCase().trim())
 
-  try {
+  if (excludedAsins.size === 0) {
+    try {
     const rows = await queryRows<StoredMappingRow>`
       SELECT asin, title, amazon_price, amazon_image_url, amazon_images, amazon_snapshot
       FROM listed_asins
@@ -287,8 +291,9 @@ export async function recoverAmazonProductByItemId(args: {
         }
       }
     }
-  } catch {
-    // Fall through to eBay title lookup.
+    } catch {
+      // Fall through to eBay title lookup.
+    }
   }
 
   if (!rapidKey) return null
@@ -298,6 +303,7 @@ export async function recoverAmazonProductByItemId(args: {
   if (!ebayTitle) return null
 
   for (const asin of ebayDetails?.possibleAsins || []) {
+    if (shouldSkipAsin(asin)) continue
     const validated = await fetchAmazonProductByAsin({ asin, strictAsin: true })
 
     if (validated) {
@@ -361,14 +367,16 @@ export async function recoverAmazonProductByItemId(args: {
   }
 
   if (products.length > 0) {
-    const bestCandidate = products
+    const candidates = products
       .map((product) => ({
         asin: String(product.asin || ''),
         title: String(product.product_title || ''),
         score: getTitleScore(ebayTitle, String(product.product_title || '')),
       }))
       .filter((product) => product.asin && product.title)
-      .sort((a, b) => b.score - a.score)[0]
+      .filter((product) => !shouldSkipAsin(product.asin))
+      .sort((a, b) => b.score - a.score)
+    const bestCandidate = candidates[0]
 
     if (bestCandidate?.asin && bestCandidate.score >= 0.45) {
       const validated = await fetchAmazonProductByAsin({ asin: bestCandidate.asin, strictAsin: true })
@@ -418,12 +426,14 @@ export async function recoverAmazonProductByItemId(args: {
 
   const scraped = await scrapeAmazonSearch(ebayTitle)
   if (scraped.length > 0) {
-    const bestScraped = scraped
+    const scrapedCandidates = scraped
       .map((product) => ({
         ...product,
         score: getTitleScore(ebayTitle, product.title),
       }))
-      .sort((a, b) => b.score - a.score)[0]
+      .filter((product) => !shouldSkipAsin(product.asin))
+      .sort((a, b) => b.score - a.score)
+    const bestScraped = scrapedCandidates[0]
 
     if (bestScraped?.asin && bestScraped.score >= 0.45) {
       const validated = await fetchAmazonProductByAsin({ asin: bestScraped.asin, fallbackImage: bestScraped.imageUrl, strictAsin: true })
