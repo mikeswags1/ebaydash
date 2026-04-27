@@ -1496,7 +1496,8 @@ export async function POST(req: NextRequest) {
         source: validatedAmazon.source,
         amazonUrl: `https://www.amazon.com/dp/${asin}`,
       })},
-      listed_at = NOW()
+      listed_at = NOW(),
+      ended_at = NULL
   `.catch(() => {})
 
   return apiOk({
