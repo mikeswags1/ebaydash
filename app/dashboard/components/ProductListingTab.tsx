@@ -1,15 +1,14 @@
 import type { FinderProduct, ListProgress } from '../types'
-import { SectionIntro } from './shared'
 
 const NICHE_GROUPS = [
-  { group: 'Electronics', items: ['Phone Accessories', 'Computer Parts', 'Audio & Headphones', 'Smart Home Devices', 'Gaming Gear'] },
-  { group: 'Home', items: ['Kitchen Gadgets', 'Home Decor', 'Furniture & Lighting', 'Cleaning Supplies', 'Storage & Organization'] },
-  { group: 'Outdoors', items: ['Camping & Hiking', 'Garden & Tools', 'Sporting Goods', 'Fishing & Hunting', 'Cycling'] },
-  { group: 'Health', items: ['Fitness Equipment', 'Personal Care', 'Supplements & Vitamins', 'Medical Supplies', 'Mental Wellness'] },
-  { group: 'Automotive', items: ['Car Parts', 'Car Accessories', 'Motorcycle Gear', 'Truck & Towing', 'Car Care'] },
-  { group: 'Lifestyle', items: ['Pet Supplies', 'Baby & Kids', 'Toys & Games', 'Clothing & Accessories', 'Jewelry & Watches'] },
-  { group: 'Business', items: ['Office Supplies', 'Industrial Equipment', 'Safety Gear', 'Janitorial & Cleaning', 'Packaging Materials'] },
-  { group: 'Collectibles', items: ['Trading Cards', 'Vintage & Antiques', 'Coins & Currency', 'Comics & Manga', 'Sports Memorabilia'] },
+  { group: 'Electronics', emoji: '⚡', items: ['Phone Accessories', 'Computer Parts', 'Audio & Headphones', 'Smart Home Devices', 'Gaming Gear'] },
+  { group: 'Home', emoji: '🏠', items: ['Kitchen Gadgets', 'Home Decor', 'Furniture & Lighting', 'Cleaning Supplies', 'Storage & Organization'] },
+  { group: 'Outdoors', emoji: '🌿', items: ['Camping & Hiking', 'Garden & Tools', 'Sporting Goods', 'Fishing & Hunting', 'Cycling'] },
+  { group: 'Health', emoji: '💪', items: ['Fitness Equipment', 'Personal Care', 'Supplements & Vitamins', 'Medical Supplies', 'Mental Wellness'] },
+  { group: 'Automotive', emoji: '🚗', items: ['Car Parts', 'Car Accessories', 'Motorcycle Gear', 'Truck & Towing', 'Car Care'] },
+  { group: 'Lifestyle', emoji: '✨', items: ['Pet Supplies', 'Baby & Kids', 'Toys & Games', 'Clothing & Accessories', 'Jewelry & Watches'] },
+  { group: 'Business', emoji: '📦', items: ['Office Supplies', 'Industrial Equipment', 'Safety Gear', 'Janitorial & Cleaning', 'Packaging Materials'] },
+  { group: 'Collectibles', emoji: '🏆', items: ['Trading Cards', 'Vintage & Antiques', 'Coins & Currency', 'Comics & Manga', 'Sports Memorabilia'] },
 ]
 
 export function ProductListingTab({
@@ -47,72 +46,83 @@ export function ProductListingTab({
   listAllProgress: ListProgress | null
   connected: boolean
 }) {
+  const isListing = !!listAllProgress && listAllProgress.done < listAllProgress.total
+  const listingDone = !!listAllProgress && listAllProgress.done === listAllProgress.total
+
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
-      <SectionIntro eyebrow="EbayDash / Strategy" title="Product Listing" />
+
+      {/* Header */}
+      <div style={{ padding: '40px 44px 28px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>
+          EbayDash / Strategy
+        </div>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: '36px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
+          Product Listing
+        </div>
+        <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.6, maxWidth: '540px' }}>
+          {niche
+            ? `Sourcing profitable products for ${niche}. Find items, review the numbers, and list directly to eBay in one click.`
+            : 'Pick a category below to start sourcing. We\'ll scan Amazon for profitable products you can list on eBay right now.'}
+        </div>
+      </div>
 
       <div style={{ padding: '0 44px 44px' }}>
+
+        {/* Active niche banner */}
         {niche ? (
-          <div
-            style={{
-              marginBottom: '24px',
-              padding: '16px 24px',
-              borderRadius: '14px',
-              background: 'linear-gradient(135deg,rgba(200,162,80,0.10),rgba(220,185,100,0.04))',
-              border: '1px solid rgba(200,162,80,0.22)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-              flexWrap: 'wrap',
-            }}
-          >
-            <div>
-              <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '4px' }}>
-                Active Niche
+          <div style={{ marginBottom: '24px', padding: '16px 22px', borderRadius: '14px', background: 'linear-gradient(135deg,rgba(200,162,80,0.12),rgba(220,185,100,0.04))', border: '1px solid rgba(200,162,80,0.24)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(200,162,80,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
+                {NICHE_GROUPS.find(g => g.items.includes(niche))?.emoji || '🛒'}
               </div>
-              <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 600, color: 'var(--gld2)' }}>{niche}</div>
+              <div>
+                <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '3px' }}>Active Niche</div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 600, color: 'var(--gld2)' }}>{niche}</div>
+              </div>
             </div>
-            <button onClick={onClearNiche} className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }}>
-              Change Niche
-            </button>
+            <button onClick={onClearNiche} className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }}>Change Niche</button>
           </div>
         ) : (
-          <div className="card" style={{ padding: '36px', marginBottom: '24px' }}>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px' }}>Choose Your Niche</div>
-            <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '28px', lineHeight: 1.6 }}>
-              Pick the category you want to sell in. This keeps sourcing and listing work focused and repeatable.
+          /* Niche selector */
+          <div className="card" style={{ padding: '32px', marginBottom: '28px' }}>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--txt)', marginBottom: '6px' }}>Choose Your Niche</div>
+            <div style={{ fontSize: '12px', color: 'var(--dim)', marginBottom: '24px', lineHeight: 1.6 }}>
+              Pick one category to focus on. A focused niche means better sourcing, better listings, and faster momentum.
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '10px' }}>
-              {NICHE_GROUPS.map((group) => (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: '20px' }}>
+              {NICHE_GROUPS.map(group => (
                 <div key={group.group}>
-                  <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '8px' }}>
-                    {group.group}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '14px' }}>{group.emoji}</span>
+                    <span style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)' }}>{group.group}</span>
                   </div>
-                  {group.items.map((item) => (
-                    <button
-                      key={item}
-                      onClick={() => onSelectNiche(item)}
-                      disabled={nicheSaving}
-                      style={{
-                        display: 'block',
-                        width: '100%',
-                        textAlign: 'left',
-                        padding: '8px 12px',
-                        marginBottom: '4px',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        fontFamily: 'inherit',
-                        cursor: 'pointer',
-                        border: '1px solid rgba(195,158,88,0.10)',
-                        background: 'rgba(255,255,255,0.02)',
-                        color: 'var(--sil)',
-                        transition: 'all 0.15s',
-                      }}
-                    >
-                      {item}
-                    </button>
-                  ))}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {group.items.map(item => (
+                      <button
+                        key={item}
+                        onClick={() => onSelectNiche(item)}
+                        disabled={nicheSaving}
+                        style={{
+                          textAlign: 'left',
+                          padding: '9px 12px',
+                          borderRadius: '9px',
+                          fontSize: '12px',
+                          fontFamily: 'inherit',
+                          cursor: 'pointer',
+                          border: '1px solid rgba(195,158,88,0.10)',
+                          background: 'rgba(255,255,255,0.02)',
+                          color: 'var(--sil)',
+                          transition: 'all 0.15s',
+                          fontWeight: 500,
+                        }}
+                        onMouseEnter={e => { (e.target as HTMLButtonElement).style.background = 'rgba(200,162,80,0.08)'; (e.target as HTMLButtonElement).style.borderColor = 'rgba(200,162,80,0.22)'; (e.target as HTMLButtonElement).style.color = 'var(--gld2)' }}
+                        onMouseLeave={e => { (e.target as HTMLButtonElement).style.background = 'rgba(255,255,255,0.02)'; (e.target as HTMLButtonElement).style.borderColor = 'rgba(195,158,88,0.10)'; (e.target as HTMLButtonElement).style.color = 'var(--sil)' }}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -121,65 +131,86 @@ export function ProductListingTab({
 
         {niche ? (
           <>
+            {/* Not connected warning */}
             {!connected ? (
-              <div
-                style={{
-                  marginBottom: '18px',
-                  padding: '12px 16px',
-                  borderRadius: '12px',
-                  background: 'rgba(232,63,80,0.08)',
-                  border: '1px solid rgba(232,63,80,0.18)',
-                  fontSize: '12px',
-                  color: 'var(--red)',
-                  lineHeight: 1.6,
-                }}
-              >
-                eBay is not connected yet. You can still source products, but publishing stays disabled until you reconnect your seller account in Settings.
+              <div style={{ marginBottom: '20px', padding: '14px 18px', borderRadius: '12px', background: 'rgba(232,63,80,0.07)', border: '1px solid rgba(232,63,80,0.18)', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--red)', marginTop: '4px', flexShrink: 0 }} />
+                <div style={{ fontSize: '12px', color: 'var(--sil)', lineHeight: 1.6 }}>
+                  eBay isn't connected yet — you can still browse products, but the <strong style={{ color: 'var(--txt)' }}>Publish to eBay</strong> button won't work until you connect your account in Settings.
+                </div>
               </div>
             ) : null}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '14px', marginBottom: '24px' }}>
-              <button className="btn btn-gold" disabled={finderLoading} onClick={onFindProducts} style={{ padding: '14px', fontSize: '13px' }}>
-                {finderLoading ? 'Scanning Amazon...' : 'Find Products'}
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-gold"
+                disabled={finderLoading}
+                onClick={onFindProducts}
+                style={{ padding: '13px 22px', fontSize: '13px', fontWeight: 700, flex: '1 1 160px' }}
+              >
+                {finderLoading ? '🔍 Scanning Amazon...' : '🔍 Find Products'}
               </button>
-              <button className="btn btn-ghost" onClick={onOpenAsinLookup} style={{ padding: '14px', fontSize: '13px' }}>
-                ASIN Lookup
-              </button>
-              <button className="btn btn-ghost" onClick={onOpenScripts} style={{ padding: '14px', fontSize: '13px' }}>
-                Run Scripts
-              </button>
-              {finderResults && finderResults.length > 0 ? (
+              {finderResults && finderResults.length > 0 && !isListing ? (
                 <button
                   className="btn btn-solid"
-                  style={{ padding: '14px', fontSize: '13px', fontWeight: 700 }}
-                  disabled={!!listAllProgress && listAllProgress.done < listAllProgress.total}
                   onClick={onListAll}
+                  disabled={!connected}
+                  style={{ padding: '13px 22px', fontSize: '13px', fontWeight: 700, flex: '1 1 140px' }}
                 >
-                  {listAllProgress && listAllProgress.done < listAllProgress.total ? `Listing ${listAllProgress.done + 1}/${listAllProgress.total}...` : `List All (${finderResults.length})`}
+                  List All ({finderResults.length})
                 </button>
               ) : null}
+              {isListing ? (
+                <div style={{ padding: '13px 18px', borderRadius: '10px', background: 'rgba(200,162,80,0.08)', border: '1px solid rgba(200,162,80,0.2)', fontSize: '12px', color: 'var(--gold)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 140px' }}>
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--gold)', animation: 'glow-pulse 1.2s ease infinite' }} />
+                  Listing {listAllProgress!.done + 1} of {listAllProgress!.total}...
+                </div>
+              ) : null}
+              {listingDone ? (
+                <div style={{ padding: '13px 18px', borderRadius: '10px', background: 'rgba(46,207,118,0.08)', border: '1px solid rgba(46,207,118,0.2)', fontSize: '12px', color: 'var(--grn)', fontWeight: 600, flex: '1 1 140px' }}>
+                  ✓ {listAllProgress!.total - listAllProgress!.errors} listed{listAllProgress!.errors > 0 ? ` · ${listAllProgress!.errors} failed` : ''}
+                </div>
+              ) : null}
+              <button className="btn btn-ghost" onClick={onOpenAsinLookup} style={{ padding: '13px 18px', fontSize: '12px' }}>
+                ASIN Lookup
+              </button>
+              <button className="btn btn-ghost" onClick={onOpenScripts} style={{ padding: '13px 18px', fontSize: '12px' }}>
+                Scripts
+              </button>
             </div>
 
+            {/* Error */}
             {finderError ? (
-              <div style={{ marginBottom: '20px', padding: '12px 16px', borderRadius: '10px', background: 'rgba(232,63,80,0.08)', border: '1px solid rgba(232,63,80,0.2)', fontSize: '13px', color: 'var(--red)' }}>
+              <div style={{ marginBottom: '20px', padding: '14px 16px', borderRadius: '10px', background: 'rgba(232,63,80,0.07)', border: '1px solid rgba(232,63,80,0.18)', fontSize: '12px', color: 'var(--red)', lineHeight: 1.6 }}>
                 {finderError}
               </div>
             ) : null}
 
+            {/* Loading */}
             {finderLoading ? (
               <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
-                <div style={{ fontSize: '13px', color: 'var(--dim)', marginBottom: '8px' }}>Scanning Amazon for profitable {niche} products...</div>
-                <div style={{ fontSize: '11px', color: 'var(--dim)', opacity: 0.6 }}>Checking price, margin, and availability signals. This usually takes around 15 seconds.</div>
+                <div style={{ fontSize: '28px', marginBottom: '16px' }}>🔍</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)', marginBottom: '6px' }}>Scanning Amazon for {niche} products...</div>
+                <div style={{ fontSize: '12px', color: 'var(--dim)', lineHeight: 1.6 }}>
+                  Checking prices, profit margins, and availability. Usually takes about 15 seconds.
+                </div>
               </div>
             ) : null}
 
-            {finderResults && finderResults.length === 0 ? (
-              <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
-                <div style={{ fontSize: '13px', color: 'var(--dim)' }}>No products met the current profit criteria for {niche}.</div>
+            {/* No results */}
+            {finderResults && finderResults.length === 0 && !finderLoading ? (
+              <div className="card" style={{ padding: '48px', textAlign: 'center' }}>
+                <div style={{ fontSize: '28px', marginBottom: '14px' }}>📭</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)', marginBottom: '6px' }}>No matching products found</div>
+                <div style={{ fontSize: '12px', color: 'var(--dim)', lineHeight: 1.6, maxWidth: '360px', margin: '0 auto' }}>
+                  No products met the profit criteria for {niche} right now. Try again later or switch to a different niche.
+                </div>
               </div>
             ) : null}
 
-            {finderResults && finderResults.length > 0 ? (
+            {/* Results */}
+            {finderResults && finderResults.length > 0 && !finderLoading ? (
               <FinderResults
                 connected={connected}
                 niche={niche}
@@ -217,89 +248,54 @@ export function FinderResults({
   onListAll: () => void
   listAllProgress: ListProgress | null
 }) {
+  const isListing = !!listAllProgress && listAllProgress.done < listAllProgress.total
+  const listingDone = !!listAllProgress && listAllProgress.done === listAllProgress.total
+
   return (
     <div>
+      {/* Results toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-        <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.24em', color: 'var(--dim)' }}>
-          {results.length} profitable products / {niche}
+        <div>
+          <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--dim)' }}>
+            {results.length} products found — {niche}
+          </div>
+          <div style={{ fontSize: '10px', color: 'var(--dim)', marginTop: '3px' }}>
+            Sorted by profit potential · Click any card to review before publishing
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {!listAllProgress ? (
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {!isListing && !listingDone ? (
             <button className="btn btn-gold btn-sm" style={{ fontSize: '10px' }} disabled={!connected} onClick={onListAll}>
               List All ({results.length})
             </button>
           ) : null}
-          {listAllProgress && listAllProgress.done < listAllProgress.total ? (
-            <div style={{ fontSize: '11px', color: 'var(--gold)', padding: '5px 12px', borderRadius: '8px', background: 'rgba(200,162,80,0.08)', border: '1px solid rgba(200,162,80,0.2)' }}>
-              Listing {listAllProgress.done + 1}/{listAllProgress.total}...
+          {isListing ? (
+            <div style={{ fontSize: '11px', color: 'var(--gold)', padding: '5px 12px', borderRadius: '8px', background: 'rgba(200,162,80,0.08)', border: '1px solid rgba(200,162,80,0.2)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--gold)', animation: 'glow-pulse 1.2s ease infinite' }} />
+              {listAllProgress!.done + 1}/{listAllProgress!.total}
             </div>
           ) : null}
-          {listAllProgress && listAllProgress.done === listAllProgress.total ? (
+          {listingDone ? (
             <div style={{ fontSize: '11px', color: 'var(--grn)', padding: '5px 12px', borderRadius: '8px', background: 'rgba(46,207,118,0.08)', border: '1px solid rgba(46,207,118,0.2)' }}>
-              {listAllProgress.total - listAllProgress.errors} listed{listAllProgress.errors > 0 ? `, ${listAllProgress.errors} failed` : ''}
+              ✓ {listAllProgress!.total - listAllProgress!.errors} listed
             </div>
           ) : null}
-          <div style={{ display: 'flex', gap: '4px' }}>
-            {(['cards', 'list'] as const).map((option) => (
-              <button
-                key={option}
-                onClick={() => onViewChange(option)}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: '8px',
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  fontFamily: 'inherit',
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  border: view === option ? '1px solid rgba(200,162,80,0.35)' : '1px solid rgba(195,158,88,0.12)',
-                  background: view === option ? 'rgba(200,162,80,0.12)' : 'transparent',
-                  color: view === option ? 'var(--gld2)' : 'var(--dim)',
-                }}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
+          {(['cards', 'list'] as const).map(opt => (
+            <button
+              key={opt}
+              onClick={() => onViewChange(opt)}
+              style={{ padding: '5px 12px', borderRadius: '8px', fontSize: '10px', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.08em', border: view === opt ? '1px solid rgba(200,162,80,0.35)' : '1px solid rgba(195,158,88,0.12)', background: view === opt ? 'rgba(200,162,80,0.12)' : 'transparent', color: view === opt ? 'var(--gld2)' : 'var(--dim)' }}
+            >
+              {opt === 'cards' ? '⊞' : '☰'} {opt}
+            </button>
+          ))}
         </div>
       </div>
 
       {view === 'cards' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: '14px' }}>
-          {results.map((product) => (
-            <div key={product.asin} className="card" style={{ padding: '20px' }}>
-              <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', marginBottom: '14px' }}>
-                {product.imageUrl ? <img src={product.imageUrl} alt={product.title} style={{ width: '56px', height: '56px', objectFit: 'contain', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', flexShrink: 0 }} /> : null}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--txt)', marginBottom: '4px', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.title}</div>
-                  <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)' }}>{product.asin}</div>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
-                {[
-                  { label: 'Amazon', val: `$${product.amazonPrice.toFixed(2)}`, color: 'var(--txt)' },
-                  { label: 'List at', val: `$${product.ebayPrice.toFixed(2)}`, color: 'var(--gld2)' },
-                  { label: 'Profit', val: `$${product.profit.toFixed(2)}`, color: 'var(--grn)' },
-                  { label: 'ROI', val: `${product.roi}%`, color: 'var(--grn)' },
-                ].map((stat) => (
-                  <div key={stat.label} style={{ padding: '8px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)' }}>
-                    <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '3px' }}>{stat.label}</div>
-                    <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '15px', fontWeight: 800, color: stat.color }}>{stat.val}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <RiskBadge risk={product.risk} />
-                  {product.salesVolume ? <span style={{ fontSize: '9px', color: 'var(--dim)' }}>Sales: {product.salesVolume}</span> : null}
-                  {product.sourceNiche ? <span style={{ fontSize: '9px', color: 'var(--dim)' }}>{product.sourceNiche}</span> : null}
-                </div>
-                <button onClick={() => onOpenListModal(product)} className="btn btn-gold btn-sm" style={{ fontSize: '10px' }}>
-                  Review Listing
-                </button>
-              </div>
-            </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: '14px' }}>
+          {results.map(product => (
+            <ProductCard key={product.asin} product={product} onOpenListModal={onOpenListModal} />
           ))}
         </div>
       ) : (
@@ -307,33 +303,28 @@ export function FinderResults({
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'rgba(20,14,6,0.95)', borderBottom: '1px solid rgba(195,158,88,0.11)' }}>
-                {['Product', 'Amazon', 'List At', 'Profit', 'ROI', 'Sales', 'Risk', ''].map((heading) => (
-                  <th key={heading} style={{ color: 'rgba(100,86,58,0.95)', fontSize: '7.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', padding: '12px 14px', textAlign: heading === 'Product' ? 'left' : 'center', whiteSpace: 'nowrap' }}>
-                    {heading}
+                {['Product', 'Buy on Amazon', 'Sell on eBay', 'Profit', 'ROI', 'Risk', ''].map(h => (
+                  <th key={h} style={{ color: 'rgba(100,86,58,0.95)', fontSize: '7.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', padding: '12px 14px', textAlign: h === 'Product' ? 'left' : 'center', whiteSpace: 'nowrap' }}>
+                    {h}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {results.map((product, index) => (
-                <tr key={product.asin} style={{ background: index % 2 === 0 ? 'rgba(17,12,7,0.80)' : 'rgba(12,9,4,0.70)', borderBottom: '1px solid rgba(195,158,88,0.06)' }}>
+              {results.map((product, i) => (
+                <tr key={product.asin} style={{ background: i % 2 === 0 ? 'rgba(17,12,7,0.80)' : 'rgba(12,9,4,0.70)', borderBottom: '1px solid rgba(195,158,88,0.06)' }}>
                   <td style={{ padding: '12px 14px', maxWidth: '280px' }}>
                     <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.title}</div>
-                    <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '2px' }}>
-                      {product.asin}{product.sourceNiche ? ` / ${product.sourceNiche}` : ''}
-                    </div>
+                    <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '2px' }}>{product.asin}</div>
                   </td>
                   <td style={{ padding: '12px 14px', textAlign: 'center', fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, fontSize: '12px', color: 'var(--txt)' }}>${product.amazonPrice.toFixed(2)}</td>
                   <td style={{ padding: '12px 14px', textAlign: 'center', fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, fontSize: '12px', color: 'var(--gld2)' }}>${product.ebayPrice.toFixed(2)}</td>
                   <td style={{ padding: '12px 14px', textAlign: 'center', fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, fontSize: '12px', color: 'var(--grn)' }}>${product.profit.toFixed(2)}</td>
-                  <td style={{ padding: '12px 14px', textAlign: 'center', fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, fontSize: '12px', color: 'var(--grn)' }}>{product.roi}%</td>
-                  <td style={{ padding: '12px 14px', textAlign: 'center', fontSize: '10px', color: 'var(--dim)', whiteSpace: 'nowrap' }}>{product.salesVolume || '-'}</td>
+                  <td style={{ padding: '12px 14px', textAlign: 'center', fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, fontSize: '12px', color: product.roi >= 50 ? 'var(--grn)' : 'var(--gold)' }}>{product.roi}%</td>
+                  <td style={{ padding: '12px 14px', textAlign: 'center' }}><RiskBadge risk={product.risk} /></td>
                   <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                    <RiskBadge risk={product.risk} />
-                  </td>
-                  <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                    <button onClick={() => onOpenListModal(product)} className="btn btn-gold btn-sm" style={{ fontSize: '10px', padding: '4px 10px' }}>
-                      Review Listing
+                    <button onClick={() => onOpenListModal(product)} className="btn btn-gold btn-sm" style={{ fontSize: '10px', padding: '5px 12px' }}>
+                      Review
                     </button>
                   </td>
                 </tr>
@@ -346,14 +337,74 @@ export function FinderResults({
   )
 }
 
-function RiskBadge({ risk }: { risk: string }) {
-  const tone = risk === 'LOW' ? 'var(--grn)' : risk === 'MEDIUM' ? 'var(--gold)' : 'var(--red)'
-  const background = risk === 'LOW' ? 'rgba(46,207,118,0.10)' : risk === 'MEDIUM' ? 'rgba(200,162,80,0.10)' : 'rgba(232,63,80,0.10)'
-  const border = risk === 'LOW' ? 'rgba(46,207,118,0.25)' : risk === 'MEDIUM' ? 'rgba(200,162,80,0.25)' : 'rgba(232,63,80,0.25)'
+function ProductCard({ product, onOpenListModal }: { product: FinderProduct; onOpenListModal: (p: FinderProduct) => void }) {
+  const accentColor = product.risk === 'LOW' ? 'rgba(46,207,118,0.6)' : product.risk === 'MEDIUM' ? 'rgba(200,162,80,0.6)' : 'rgba(232,63,80,0.5)'
 
   return (
-    <span style={{ fontSize: '8px', padding: '2px 8px', borderRadius: '20px', fontWeight: 700, background, color: tone, border: `1px solid ${border}` }}>
-      {risk}
+    <div className="card" style={{ padding: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      {/* Accent top bar */}
+      <div style={{ height: '3px', background: `linear-gradient(90deg, ${accentColor}, transparent)` }} />
+
+      <div style={{ padding: '18px 18px 16px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {/* Image + title */}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '14px' }}>
+          {product.imageUrl ? (
+            <img src={product.imageUrl} alt={product.title} style={{ width: '54px', height: '54px', objectFit: 'contain', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', flexShrink: 0 }} />
+          ) : (
+            <div style={{ width: '54px', height: '54px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>📦</div>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4, marginBottom: '4px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.title}</div>
+            <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)' }}>{product.asin}</div>
+          </div>
+        </div>
+
+        {/* Key numbers */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
+          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(0,0,0,0.22)' }}>
+            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '4px' }}>Buy on Amazon</div>
+            <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '16px', fontWeight: 800, color: 'var(--txt)' }}>${product.amazonPrice.toFixed(2)}</div>
+          </div>
+          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(0,0,0,0.22)' }}>
+            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '4px' }}>Sell on eBay</div>
+            <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '16px', fontWeight: 800, color: 'var(--gld2)' }}>${product.ebayPrice.toFixed(2)}</div>
+          </div>
+          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(46,207,118,0.07)', border: '1px solid rgba(46,207,118,0.14)' }}>
+            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '4px' }}>Your Profit</div>
+            <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '18px', fontWeight: 800, color: 'var(--grn)' }}>${product.profit.toFixed(2)}</div>
+          </div>
+          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(46,207,118,0.07)', border: '1px solid rgba(46,207,118,0.14)' }}>
+            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '4px' }}>ROI</div>
+            <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '18px', fontWeight: 800, color: product.roi >= 50 ? 'var(--grn)' : 'var(--gold)' }}>{product.roi}%</div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: 'auto' }}>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <RiskBadge risk={product.risk} />
+            {product.salesVolume ? <span style={{ fontSize: '9px', color: 'var(--dim)' }}>{product.salesVolume} sold</span> : null}
+          </div>
+          <button onClick={() => onOpenListModal(product)} className="btn btn-gold btn-sm" style={{ fontSize: '11px', padding: '7px 14px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+            Review & List →
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RiskBadge({ risk }: { risk: string }) {
+  const isLow = risk === 'LOW'
+  const isMed = risk === 'MEDIUM'
+  const tone = isLow ? 'var(--grn)' : isMed ? 'var(--gold)' : 'var(--red)'
+  const bg = isLow ? 'rgba(46,207,118,0.10)' : isMed ? 'rgba(200,162,80,0.10)' : 'rgba(232,63,80,0.10)'
+  const border = isLow ? 'rgba(46,207,118,0.25)' : isMed ? 'rgba(200,162,80,0.25)' : 'rgba(232,63,80,0.25)'
+  const label = isLow ? '✓ Low Risk' : isMed ? '~ Medium' : '⚠ High Risk'
+
+  return (
+    <span style={{ fontSize: '8px', padding: '2px 8px', borderRadius: '20px', fontWeight: 700, background: bg, color: tone, border: `1px solid ${border}`, whiteSpace: 'nowrap' }}>
+      {label}
     </span>
   )
 }
