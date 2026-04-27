@@ -181,16 +181,13 @@ export function FinancialsTab({
           </div>
 
           {/* Alerts */}
-          {(summary.missingCostItems > 0 || summary.estimatedFeeItems || summary.refundedItems) ? (
+          {(summary.missingCostItems > 0 || summary.refundedItems) ? (
             <div style={{ padding: '0 44px 24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {summary.missingCostItems > 0 ? (
                 <InfoBanner tone="gold" text={`${summary.missingCostItems} item${summary.missingCostItems > 1 ? 's are' : ' is'} missing Amazon cost — profit totals only count items where we have your cost saved. New listings save this automatically.`} />
               ) : null}
               {summary.refundedItems ? (
                 <InfoBanner tone="blue" text={`${summary.refundedItems} item${summary.refundedItems > 1 ? 's' : ''} had refunds totalling $${(summary.refundedRevenue || 0).toFixed(2)}. Revenue shown is net after refunds.`} />
-              ) : null}
-              {summary.estimatedFeeItems && !summary.financeApiAvailable ? (
-                <InfoBanner tone="dim" text="eBay fee data isn't fully available — some fees are estimated at 13.25%. Reconnect eBay in Settings for exact numbers." />
               ) : null}
             </div>
           ) : null}
