@@ -60,9 +60,68 @@ type ActiveListingMetric = {
   categoryName?: string
 }
 
+const NICHE_INFERENCE_RULES: Array<{ niche: string; terms: string[] }> = [
+  { niche: 'Phone Accessories', terms: ['phone case', 'screen protector', 'wireless charger', 'phone mount', 'iphone', 'samsung galaxy'] },
+  { niche: 'Computer Parts', terms: ['usb hub', 'laptop stand', 'keyboard', 'mouse', 'computer', 'poster tube', 'document tube'] },
+  { niche: 'Audio & Headphones', terms: ['headphone', 'earphone', 'earbud', 'speaker', 'audio', 'microphone'] },
+  { niche: 'Smart Home Devices', terms: ['smart plug', 'security camera', 'smart bulb', 'motion sensor', 'alexa'] },
+  { niche: 'Gaming Gear', terms: ['gaming', 'controller', 'playstation', 'xbox', 'nintendo'] },
+  { niche: 'Kitchen Gadgets', terms: ['kitchen', 'utensil', 'air fryer', 'slicer', 'can opener', 'tablecloth'] },
+  { niche: 'Home Decor', terms: ['decor', 'cushion', 'pillow', 'vase', 'wall art', 'plant riser', 'pot feet', 'tablecloth'] },
+  { niche: 'Furniture & Lighting', terms: ['lamp', 'bench cushion', 'chair', 'desk', 'furniture', 'lighting'] },
+  { niche: 'Cleaning Supplies', terms: ['cleaning', 'mop', 'squeegee', 'microfiber', 'paper towel', 'towel roll'] },
+  { niche: 'Storage & Organization', terms: ['storage', 'organizer', 'divider', 'bin', 'vacuum bag'] },
+  { niche: 'Camping & Hiking', terms: ['camping', 'hiking', 'lantern', 'flashlight', 'fire starter'] },
+  { niche: 'Garden & Tools', terms: ['garden', 'pruning', 'plant', 'kneeling pad', 'glove', 'tool'] },
+  { niche: 'Sporting Goods', terms: ['sport', 'nba', 't shirt', 'knee brace', 'pontoon', 'boat', 'dock', 'fender', 'workout'] },
+  { niche: 'Fishing & Hunting', terms: ['fishing', 'hunting', 'lure', 'tackle', 'trail camera'] },
+  { niche: 'Cycling', terms: ['bike', 'bicycle', 'cycling'] },
+  { niche: 'Fitness Equipment', terms: ['fitness', 'resistance band', 'ab roller', 'yoga', 'foam roller', 'knee brace'] },
+  { niche: 'Personal Care', terms: ['personal care', 'facial', 'hair', 'nail', 'cuticle'] },
+  { niche: 'Supplements & Vitamins', terms: ['vitamin', 'supplement', 'magnesium', 'collagen', 'gummy'] },
+  { niche: 'Medical Supplies', terms: ['medical', 'thermometer', 'blood pressure', 'pill organizer', 'brace'] },
+  { niche: 'Car Accessories', terms: ['car', 'auto', 'vehicle', 'seat cover', 'dash cam'] },
+  { niche: 'Pet Supplies', terms: ['dog', 'cat', 'pet', 'leash', 'harness', 'chew', 'deshedding'] },
+  { niche: 'Baby & Kids', terms: ['baby', 'toddler', 'diaper', 'kids'] },
+  { niche: 'Toys & Games', terms: ['toy', 'game', 'magnetic tiles', 'fidget'] },
+  { niche: 'Clothing & Accessories', terms: ['shirt', 't shirt', 'hat', 'socks', 'wallet', 'patch', 'applique', 'clothing'] },
+  { niche: 'Jewelry & Watches', terms: ['jewelry', 'bracelet', 'necklace', 'earring', 'watch band'] },
+  { niche: 'Office Supplies', terms: ['office', 'label maker', 'wrist rest', 'desk organizer', 'poster tube', 'mailing tube'] },
+  { niche: 'Industrial Equipment', terms: ['industrial', 'safety glasses', 'work gloves', 'respirator'] },
+  { niche: 'Safety Gear', terms: ['safety', 'first aid', 'hard hat', 'fire extinguisher', 'reflective'] },
+  { niche: 'Janitorial & Cleaning', terms: ['janitorial', 'trash bags', 'paper towels', 'hand soap', 'commercial cleaning'] },
+  { niche: 'Packaging Materials', terms: ['shipping', 'mailer', 'bubble mailer', 'box', 'packing tape', 'poly mailer'] },
+  { niche: 'Trading Cards', terms: ['card sleeve', 'card storage', 'trading card', 'binder'] },
+  { niche: 'Comics & Manga', terms: ['comic', 'manga', 'anime'] },
+  { niche: 'Sports Memorabilia', terms: ['memorabilia', 'jersey', 'autograph', 'display case'] },
+]
+
 function parseMoney(value: unknown) {
   const amount = parseFloat(String(value || '0').replace(/[^0-9.-]/g, ''))
   return Number.isFinite(amount) ? amount : 0
+}
+
+function inferNicheFromText(...values: Array<string | null | undefined>) {
+  const text = normalizeTitle(values.filter(Boolean).join(' '))
+  if (!text) return null
+
+  let best: { niche: string; score: number } | null = null
+  for (const rule of NICHE_INFERENCE_RULES) {
+    let score = 0
+    for (const term of rule.terms) {
+      const normalizedTerm = normalizeTitle(term)
+      if (!normalizedTerm) continue
+      if (text.includes(normalizedTerm)) {
+        score += normalizedTerm.includes(' ') ? 2 : 1
+      }
+    }
+
+    if (score > 0 && (!best || score > best.score)) {
+      best = { niche: rule.niche, score }
+    }
+  }
+
+  return best?.niche || null
 }
 
 function normalizeTitle(value: string) {
@@ -240,7 +299,7 @@ async function fetchTrafficMetrics(base: string, accessToken: string, listingIds
         available: metrics.size > 0,
         error: missingScope
           ? 'Reconnect eBay to grant analytics access for views, impressions, and conversion data.'
-          : `Traffic metrics unavailable from eBay (${response.status}).`,
+          : 'eBay traffic metrics are temporarily unavailable, so Performance is using sales, profit, and watcher signals for now.',
       }
     }
 
@@ -369,19 +428,22 @@ export async function GET() {
       action: string
     }>()
 
-    const getProductRecord = (listingId: string, row?: ListingRow, active?: ActiveListingMetric) => {
+    const getProductRecord = (listingId: string, row?: ListingRow, active?: ActiveListingMetric, fallbackTitle?: string) => {
       const id = listingId || row?.asin || active?.listingId || `title:${row?.title || active?.title || 'unknown'}`
       const existing = productMap.get(id)
       if (existing) return existing
 
       const traffic = listingId ? trafficResult.metrics.get(listingId) : undefined
-      const niche = row?.niche || active?.categoryName || row?.category_name || 'Unassigned'
+      const title = row?.title || active?.title || fallbackTitle || listingId || 'Unknown listing'
+      const categoryName = row?.category_name || active?.categoryName || null
+      const inferredNiche = inferNicheFromText(title, categoryName, row?.asin)
+      const niche = row?.niche || inferredNiche || categoryName || 'Other'
       const record = {
         listingId,
         asin: row?.asin ? String(row.asin) : null,
-        title: row?.title || active?.title || listingId || 'Unknown listing',
+        title,
         niche,
-        categoryName: row?.category_name || active?.categoryName || null,
+        categoryName,
         revenue: 0,
         profit: 0,
         roi: 0,
@@ -404,9 +466,10 @@ export async function GET() {
       const row = listingById.get(listingId)
       getProductRecord(listingId, row, active)
       if (row && (!row.category_name || row.category_name !== active.categoryName || !row.category_id || row.category_id !== active.categoryId)) {
+        const inferredNiche = row.niche || inferNicheFromText(row.title, active.title, active.categoryName)
         await sql`
           UPDATE listed_asins
-          SET category_name = ${active.categoryName || null}, category_id = ${active.categoryId || row.category_id || null}
+          SET category_name = ${active.categoryName || null}, category_id = ${active.categoryId || row.category_id || null}, niche = ${inferredNiche || null}
           WHERE user_id = ${session.user.id} AND ebay_listing_id = ${listingId}
         `.catch(() => {})
       }
@@ -419,8 +482,8 @@ export async function GET() {
         const titleMatches = normalizedTitle ? listingsByTitle.get(normalizedTitle) || [] : []
         const row = listingId ? listingById.get(listingId) : titleMatches.length === 1 ? titleMatches[0] : undefined
         const active = listingId ? activeListingResult.listings.get(listingId) : undefined
-        const record = getProductRecord(listingId || `${order.orderId}:${index}`, row, active)
-        if (!record.title && lineItem.title) record.title = lineItem.title
+        const record = getProductRecord(listingId || `${order.orderId}:${index}`, row, active, lineItem.title)
+        if (lineItem.title && (!record.title || record.title === listingId || record.title === `${order.orderId}:${index}`)) record.title = lineItem.title
 
         const quantity = Math.max(1, Number(lineItem.quantity || 1))
         const fallbackRevenue = (order.lineItems?.length || 0) <= 1 ? parseMoney(order.pricingSummary?.total?.value) : 0
