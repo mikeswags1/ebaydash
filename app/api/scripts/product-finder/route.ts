@@ -9,10 +9,11 @@ import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice, isHe
 
 const MAX_COST   = 300
 const CACHE_TTL  = 23 * 60 * 60 * 1000 // 23 hours — refresh once per day
-const CACHE_VERSION = 3
+const CACHE_VERSION = 4
 const TARGET_STOCK = 30
-const MAX_POOL_SIZE = 90
+const MAX_POOL_SIZE = 120
 const CONTINUOUS_CACHE_KEY = '__continuous_listing__'
+const CONTINUOUS_QUERY_LIMIT = 52
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -297,11 +298,14 @@ export async function GET(req: NextRequest) {
   }
 
   const queryEntries = continuousMode
-    ? shuffle(Object.entries(NICHE_QUERIES).flatMap(([sourceNiche, queries]) => queries.map((query) => ({ sourceNiche, query })))).slice(0, 14)
-    : (NICHE_QUERIES[niche] || [`${niche} bestseller`]).map((query) => ({ sourceNiche: niche, query }))
+    ? shuffle(Object.entries(NICHE_QUERIES).flatMap(([sourceNiche, queries]) => queries.map((query) => ({ sourceNiche, query })))).slice(0, CONTINUOUS_QUERY_LIMIT)
+    : [...(NICHE_QUERIES[niche] || [`${niche} bestseller`]), `${niche} bestseller`, `${niche} high demand`, `${niche} trending`]
+        .map((query) => ({ sourceNiche: niche, query }))
   const results: Product[] = []
   const seenAsins = new Set<string>()
   let apiQuotaExceeded = false
+  const apiPoolTarget = continuousMode ? MAX_POOL_SIZE : Math.min(MAX_POOL_SIZE, Math.max(targetCount * 3, targetCount + 24))
+  const apiPages = continuousMode ? [1, 2, 3] : [1, 2]
 
   const processProducts = (products: Record<string, unknown>[]) => {
     for (const p of products) {
@@ -330,10 +334,53 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const addScrapedProducts = async (entries: Array<{ query: string; sourceNiche: string }>, queryLimit: number) => {
+    for (const { query, sourceNiche } of entries.slice(0, queryLimit)) {
+      if (getAvailableProducts(results).length >= targetCount || results.length >= MAX_POOL_SIZE) break
+      try {
+        const scraped = await scrapeAmazonSearch(query)
+        for (const p of scraped) {
+          if (getAvailableProducts(results).length >= targetCount || results.length >= MAX_POOL_SIZE) break
+          if (!p.asin || seenAsins.has(p.asin) || shouldBlockProduct({ asin: p.asin, title: p.title })) continue
+          seenAsins.add(p.asin)
+          if (!p.price || p.price <= 0 || p.price > MAX_COST) continue
+          if (!p.title || isRejected(p.title)) continue
+          const { ebayPrice, profit, roi } = calcMetrics(p.price)
+          if (!isHealthyListing(p.price, ebayPrice, EBAY_DEFAULT_FEE_RATE)) continue
+          const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
+          results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
+            imageUrl: p.imageUrl, risk, salesVolume: undefined, sourceNiche, _rating: p.rating, _numRatings: p.reviewCount })
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  const mergeCachedProducts = () => {
+    if (!cacheRow) return
+    const seen = new Set(results.map((product) => product.asin.toUpperCase()))
+    const cached = (cacheRow.results as Product[]).filter((product) => {
+      const asin = product.asin.toUpperCase()
+      if (seen.has(asin)) return false
+      seen.add(asin)
+      return true
+    })
+    results.splice(0, results.length, ...rankProducts([...results, ...cached], continuousMode))
+  }
+
+  const saveResultsToCache = async () => {
+    if (results.length === 0) return
+    try {
+      await sql`
+        INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(rankProducts(results, continuousMode))}, ${CACHE_VERSION})
+        ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()
+      `
+    } catch { /* non-fatal */ }
+  }
+
   for (const { query, sourceNiche } of queryEntries) {
-    if (results.length >= targetCount * 2 || apiQuotaExceeded) break
-    for (const page of [1, 2]) {
-      if (results.length >= targetCount * 2) break
+    if (results.length >= apiPoolTarget || apiQuotaExceeded) break
+    for (const page of apiPages) {
+      if (results.length >= apiPoolTarget) break
       try {
         const res = await fetch(
           `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(query)}&country=US&category_id=aps&page=${page}`,
@@ -344,7 +391,7 @@ export async function GET(req: NextRequest) {
         if (String(data?.message || '').toLowerCase().match(/limit|quota|exceed/)) { apiQuotaExceeded = true; break }
         const products: Record<string, unknown>[] = (data?.data?.products || []).map((product: Record<string, unknown>) => ({ ...product, _sourceNiche: sourceNiche }))
         processProducts(products)
-        if (products.length < 5) break
+        if (products.length === 0) break
       } catch { continue }
     }
   }
@@ -397,47 +444,19 @@ export async function GET(req: NextRequest) {
     const remainder = results.slice(targetCount).filter((product) => !droppedSourceAsins.has(product.asin))
     results.splice(0, results.length, ...rankProducts([...filteredEnriched, ...remainder], continuousMode))
 
-    try {
-      await sql`
-        INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results)}, ${CACHE_VERSION})
-        ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()
-      `
-    } catch { /* non-fatal */ }
+    await saveResultsToCache()
   }
 
   // ── API failed — try direct Amazon scrape, then fall back to cache ──────────
   if (apiQuotaExceeded && results.length === 0) {
-    if (cacheRow) {
-      return respondWithProducts(cacheRow.results as Product[], 'stale_cache')
-    }
+    mergeCachedProducts()
 
     // No cache at all — scrape Amazon search directly (free, no quota)
-    const scrapeQueries = continuousMode ? queryEntries.slice(0, 5) : queryEntries.slice(0, 2)
-    for (const { query, sourceNiche } of scrapeQueries) {
-      if (results.length >= targetCount) break
-      try {
-        const scraped = await scrapeAmazonSearch(query)
-        for (const p of scraped) {
-          if (results.length >= targetCount) break
-          if (!p.asin || seenAsins.has(p.asin) || shouldBlockProduct({ asin: p.asin, title: p.title })) continue
-          seenAsins.add(p.asin)
-          if (!p.price || p.price <= 0 || p.price > MAX_COST) continue
-          if (!p.title || isRejected(p.title)) continue
-          const { ebayPrice, profit, roi } = calcMetrics(p.price)
-          if (!isHealthyListing(p.price, ebayPrice, EBAY_DEFAULT_FEE_RATE)) continue
-          const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
-          results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
-            imageUrl: p.imageUrl, risk, salesVolume: undefined, sourceNiche, _rating: p.rating, _numRatings: p.reviewCount })
-        }
-      } catch { /* ignore */ }
-    }
+    await addScrapedProducts(queryEntries, continuousMode ? 24 : 6)
 
     if (results.length > 0) {
       results.splice(0, results.length, ...rankProducts(results, continuousMode))
-      try {
-        await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results)}, ${CACHE_VERSION})
-          ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()`
-      } catch { /* non-fatal */ }
+      await saveResultsToCache()
       return respondWithProducts(results, 'scrape')
     }
 
@@ -446,6 +465,16 @@ export async function GET(req: NextRequest) {
       code: 'PRODUCT_SEARCH_UNAVAILABLE',
       details: { niche, results: [], count: 0 },
     })
+  }
+
+  if (getAvailableProducts(results).length < targetCount) {
+    mergeCachedProducts()
+  }
+
+  if (getAvailableProducts(results).length < targetCount) {
+    await addScrapedProducts(queryEntries, continuousMode ? 24 : 6)
+    results.splice(0, results.length, ...rankProducts(results, continuousMode))
+    await saveResultsToCache()
   }
 
   return respondWithProducts(results, 'live')
