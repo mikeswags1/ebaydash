@@ -1461,7 +1461,7 @@ export async function POST(req: NextRequest) {
 
   await ensureListedAsinsFinancialColumns()
   await sql`
-    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate, amazon_image_url, amazon_images, amazon_snapshot)
+    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate, amazon_image_url, amazon_images, amazon_snapshot, niche, category_id)
     VALUES (${session.user.id}, ${asin}, ${listingTitle.slice(0, 200)}, ${listingId}, ${listingAmazonPrice.toFixed(2)}, ${price}, ${0.1325}, ${primarySourceImage}, ${JSON.stringify(filteredImages)}, ${JSON.stringify({
       asin,
       title: listingTitle,
@@ -1474,7 +1474,7 @@ export async function POST(req: NextRequest) {
       available: validatedAmazon.available,
       source: validatedAmazon.source,
       amazonUrl: `https://www.amazon.com/dp/${asin}`,
-    })})
+    })}, ${niche}, ${finalCategoryId})
     ON CONFLICT (user_id, asin) DO UPDATE SET
       ebay_listing_id = ${listingId},
       title = ${listingTitle.slice(0, 200)},
@@ -1496,6 +1496,8 @@ export async function POST(req: NextRequest) {
         source: validatedAmazon.source,
         amazonUrl: `https://www.amazon.com/dp/${asin}`,
       })},
+      niche = ${niche},
+      category_id = ${finalCategoryId},
       listed_at = NOW(),
       ended_at = NULL
   `.catch(() => {})

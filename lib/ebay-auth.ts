@@ -5,8 +5,11 @@ export const EBAY_OAUTH_SCOPES = [
   'https://api.ebay.com/oauth/api_scope/sell.fulfillment',
   'https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly',
   'https://api.ebay.com/oauth/api_scope/sell.finances',
+  'https://api.ebay.com/oauth/api_scope/sell.analytics.readonly',
   'https://api.ebay.com/oauth/api_scope/sell.account.readonly',
 ]
+
+const EBAY_REFRESH_FALLBACK_SCOPES = EBAY_OAUTH_SCOPES.filter((scope) => !scope.includes('/sell.analytics.readonly'))
 
 export const EBAY_MINIMAL_OAUTH_SCOPES = [
   'https://api.ebay.com/oauth/api_scope',
@@ -57,9 +60,8 @@ export async function refreshEbayAccessToken(userId: string, refreshToken: strin
   }
 
   const credentials = Buffer.from(`${appId}:${certId}`).toString('base64')
-  let response: Response
-  try {
-    response = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+  const requestRefresh = (scopes: string[]) =>
+    fetch('https://api.ebay.com/identity/v1/oauth2/token', {
       method: 'POST',
       headers: {
         Authorization: `Basic ${credentials}`,
@@ -68,14 +70,26 @@ export async function refreshEbayAccessToken(userId: string, refreshToken: strin
       body: new URLSearchParams({
         grant_type: 'refresh_token',
         refresh_token: refreshToken,
-      scope: EBAY_OAUTH_SCOPES.join(' '),
+        scope: scopes.join(' '),
       }),
     })
+
+  let response: Response
+  try {
+    response = await requestRefresh(EBAY_OAUTH_SCOPES)
   } catch {
     throw new EbayNetworkError()
   }
 
-  const data = await response.json().catch(() => null)
+  let data = await response.json().catch(() => null)
+  if (!response.ok && /scope/i.test(String(data?.error_description || data?.error || ''))) {
+    try {
+      response = await requestRefresh(EBAY_REFRESH_FALLBACK_SCOPES)
+      data = await response.json().catch(() => null)
+    } catch {
+      throw new EbayNetworkError()
+    }
+  }
   if (!response.ok || !data.access_token) {
     const detail = String(data?.error_description || data?.error || '')
     if (response.status === 400 || response.status === 401 || /invalid|expired|revoked/i.test(detail)) {

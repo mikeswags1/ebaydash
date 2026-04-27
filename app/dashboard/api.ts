@@ -1,4 +1,4 @@
-import type { AsinResult, EbayCredentialsSummary, EbayOrder, FinancialItem, FinancialSummary, FinderProduct, ListResult, OrderAsinMap } from './types'
+import type { AsinResult, EbayCredentialsSummary, EbayOrder, FinancialItem, FinancialSummary, FinderProduct, ListResult, OrderAsinMap, PerformanceData } from './types'
 
 export class DashboardApiError extends Error {
   code?: string
@@ -49,6 +49,10 @@ export async function fetchOrders() {
 
 export async function fetchFinancials() {
   return requestJson<{ ok: true; connected: boolean; summary: FinancialSummary; items: FinancialItem[] }>('/api/financials')
+}
+
+export async function fetchPerformance() {
+  return requestJson<PerformanceData & { ok: true }>('/api/performance')
 }
 
 export async function fetchEbayCredentials() {

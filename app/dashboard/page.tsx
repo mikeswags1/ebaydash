@@ -8,17 +8,19 @@ import { DashboardBanner, DashboardTopbar } from './components/DashboardTopbar'
 import { OverviewTab } from './components/OverviewTab'
 import { OrdersTab } from './components/OrdersTab'
 import { FinancialsTab } from './components/FinancialsTab'
+import { PerformanceTab } from './components/PerformanceTab'
 import { ScriptsTab } from './components/ScriptsTab'
 import { AsinLookupTab } from './components/AsinLookupTab'
 import { ProductListingTab } from './components/ProductListingTab'
 import { ContinuousListingTab } from './components/ContinuousListingTab'
 import { SettingsTab } from './components/SettingsTab'
 import { SellOnEbayModal } from './components/SellOnEbayModal'
-import type { BannerState, EbayCredentialsSummary, FinancialItem, FinancialSummary, FinderProduct, ListProgress, OrderAsinMap, ScriptMessage, Tab } from './types'
+import type { BannerState, EbayCredentialsSummary, FinancialItem, FinancialSummary, FinderProduct, ListProgress, OrderAsinMap, PerformanceData, ScriptMessage, Tab } from './types'
 import type { AsinResult, EbayOrder, ListResult } from './types'
 import {
   disconnectEbay,
   fetchFinancials,
+  fetchPerformance,
   fetchAmazonCredentials,
   fetchEbayCredentials,
   fetchFinderProducts,
@@ -57,6 +59,12 @@ type FinancialState = {
   loading: boolean
   summary: FinancialSummary | null
   items: FinancialItem[]
+  error: string | null
+}
+
+type PerformanceState = {
+  loading: boolean
+  data: PerformanceData | null
   error: string | null
 }
 
@@ -138,6 +146,11 @@ export default function Dashboard() {
     loading: false,
     summary: null,
     items: [],
+    error: null,
+  })
+  const [performanceState, setPerformanceState] = useState<PerformanceState>({
+    loading: false,
+    data: null,
     error: null,
   })
   const [nicheState, setNicheState] = useState<NicheState>({
@@ -339,6 +352,25 @@ export default function Dashboard() {
     }
   }, [])
 
+  const loadPerformance = useCallback(async () => {
+    setPerformanceState((prev) => ({ ...prev, loading: true, error: null }))
+
+    try {
+      const data = await fetchPerformance()
+      setPerformanceState({
+        loading: false,
+        data,
+        error: null,
+      })
+    } catch (error) {
+      setPerformanceState((prev) => ({
+        ...prev,
+        loading: false,
+        error: getErrorMessage(error, 'Unable to load performance data.'),
+      }))
+    }
+  }, [])
+
   const loadDashboardBootstrap = useCallback(async () => {
     const results = await Promise.allSettled([
       fetchEbayCredentials(),
@@ -407,6 +439,11 @@ export default function Dashboard() {
         items: [],
         error: null,
       }))
+      setPerformanceState((prev) => ({
+        ...prev,
+        data: null,
+        error: null,
+      }))
       setBanner({ tone: 'success', text: 'eBay disconnected. Connect it again to refresh your token.' })
     } catch (error) {
       setBanner({ tone: 'error', text: getErrorMessage(error, 'Unable to disconnect eBay.') })
@@ -422,6 +459,12 @@ export default function Dashboard() {
       void loadFinancials()
     }
   }, [loadDashboardBootstrap, loadFinancials, loadOrders, status])
+
+  useEffect(() => {
+    if (status === 'authenticated' && tab === 'performance' && !performanceState.data && !performanceState.loading && !performanceState.error) {
+      void loadPerformance()
+    }
+  }, [loadPerformance, performanceState.data, performanceState.error, performanceState.loading, status, tab])
 
   const handleSaveNiche = useCallback(async (value: string) => {
     setNicheState((prev) => ({ ...prev, value, saving: true }))
@@ -865,6 +908,7 @@ export default function Dashboard() {
           onSync={() => {
             void loadOrders()
             void loadFinancials()
+            if (tab === 'performance') void loadPerformance()
           }}
         />
 
@@ -884,6 +928,17 @@ export default function Dashboard() {
               items={financialState.items}
               onRefresh={() => void loadFinancials()}
               onOpenSettings={() => setTab('settings')}
+            />
+          ) : null}
+          {tab === 'performance' ? (
+            <PerformanceTab
+              connected={connectionState.ebayConnected}
+              loading={performanceState.loading}
+              error={performanceState.error}
+              data={performanceState.data}
+              onRefresh={() => void loadPerformance()}
+              onOpenSettings={() => setTab('settings')}
+              onOpenProductFinder={() => setTab('product')}
             />
           ) : null}
           {tab === 'scripts' ? (
@@ -956,6 +1011,7 @@ export default function Dashboard() {
               onSync={() => {
                 void loadOrders()
                 void loadFinancials()
+                void loadPerformance()
               }}
               onDisconnectEbay={() => void handleDisconnectEbay()}
               disconnectingEbay={disconnectingEbay}

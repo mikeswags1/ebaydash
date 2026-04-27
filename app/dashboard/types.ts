@@ -1,4 +1,4 @@
-export type Tab = 'overview' | 'orders' | 'financials' | 'scripts' | 'asin' | 'product' | 'continuous' | 'settings'
+export type Tab = 'overview' | 'orders' | 'financials' | 'performance' | 'scripts' | 'asin' | 'product' | 'continuous' | 'settings'
 
 export interface AsinResult {
   asin: string
@@ -105,6 +105,73 @@ export interface FinancialItem {
   roi: number | null
   margin: number | null
   hasTrackedCost: boolean
+}
+
+export interface PerformanceNiche {
+  name: string
+  revenue: number
+  profit: number
+  soldUnits: number
+  listings: number
+  activeListings: number
+  views: number
+  watchers: number
+  impressions: number
+  conversionRate: number | null
+  roi: number
+  margin: number
+  sellThrough: number
+  avgProfitPerSale: number
+  score: number
+  action: string
+  tone: string
+  summary: string
+  reasons: string[]
+}
+
+export interface PerformanceProduct {
+  listingId: string
+  asin: string | null
+  title: string
+  niche: string
+  categoryName: string | null
+  revenue: number
+  profit: number
+  roi: number
+  margin: number
+  soldUnits: number
+  views: number
+  watchers: number
+  impressions: number
+  conversionRate: number | null
+  listedAt: string | null
+  active: boolean
+  score: number
+  action: string
+}
+
+export interface PerformanceData {
+  connected: boolean
+  generatedAt?: string
+  windowDays?: number
+  traffic: {
+    available: boolean
+    error: string | null
+    watcherSignalsAvailable?: boolean
+    watcherError?: string | null
+  }
+  summary: {
+    bestNiche: string | null
+    avoidNiche: string | null
+    totalRevenue: number
+    totalProfit: number
+    soldUnits: number
+    activeListings: number
+    views: number
+    watchers: number
+  } | null
+  niches: PerformanceNiche[]
+  products: PerformanceProduct[]
 }
 
 export interface ListProgress {
