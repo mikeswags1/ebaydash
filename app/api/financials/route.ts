@@ -160,8 +160,10 @@ async function getActualFeeMaps(base: string, accessToken: string, orders: EbayO
   const byOrder = new Map<string, number>()
   const byLine = new Map<string, number>()
   const filter = getDateRangeFilter(orders)
+  let available = false
+  let status: number | null = null
 
-  if (orderIds.size === 0 || !filter) return { byOrder, byLine }
+  if (orderIds.size === 0 || !filter) return { byOrder, byLine, available, status }
 
   try {
     let offset = 0
@@ -181,7 +183,9 @@ async function getActualFeeMaps(base: string, accessToken: string, orders: EbayO
         signal: AbortSignal.timeout(10000),
       })
 
+      status = response.status
       if (!response.ok) break
+      available = true
 
       const payload = (await response.json()) as { transactions?: EbayTransaction[]; total?: number }
       const transactions = Array.isArray(payload.transactions) ? payload.transactions : []
@@ -215,7 +219,7 @@ async function getActualFeeMaps(base: string, accessToken: string, orders: EbayO
     // Financials can still load with estimated fees when eBay Finances is unavailable.
   }
 
-  return { byOrder, byLine }
+  return { byOrder, byLine, available, status }
 }
 
 export async function GET() {
@@ -400,6 +404,7 @@ export async function GET() {
     const trackedItems = items.filter((item) => item.hasTrackedCost)
     const actualFeeItems = items.filter((item) => item.feeSource === 'actual').length
     const estimatedFeeItems = items.length - actualFeeItems
+    const financeApiAvailable = actualFeeMaps.available
     const trackedRevenue = trackedItems.reduce((sum, item) => sum + item.ebayRevenue, 0)
     const amazonCost = trackedItems.reduce((sum, item) => sum + (item.amazonCost || 0), 0)
     const ebayFees = trackedItems.reduce((sum, item) => sum + item.ebayFees, 0)
@@ -422,6 +427,8 @@ export async function GET() {
         missingCostItems: items.length - trackedItems.length,
         actualFeeItems,
         estimatedFeeItems,
+        financeApiAvailable,
+        financeApiStatus: actualFeeMaps.status,
       },
       items,
     })

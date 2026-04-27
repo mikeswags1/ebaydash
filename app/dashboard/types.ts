@@ -65,6 +65,8 @@ export interface FinancialSummary {
   missingCostItems: number
   actualFeeItems?: number
   estimatedFeeItems?: number
+  financeApiAvailable?: boolean
+  financeApiStatus?: number | null
 }
 
 export interface FinancialItem {

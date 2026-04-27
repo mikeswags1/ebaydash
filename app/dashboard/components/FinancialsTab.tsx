@@ -57,7 +57,9 @@ export function FinancialsTab({
           {summary.estimatedFeeItems ? (
             <div style={{ margin: '0 44px 24px', padding: '14px 16px', borderRadius: '12px', background: 'rgba(90,80,55,0.10)', border: '1px solid rgba(90,80,55,0.20)', color: 'var(--sil)', fontSize: '12px', lineHeight: 1.7 }}>
               eBay fees are actual for {summary.actualFeeItems || 0} item{summary.actualFeeItems === 1 ? '' : 's'} and estimated for {summary.estimatedFeeItems} item{summary.estimatedFeeItems === 1 ? '' : 's'}.
-              Estimated fees use the saved fee rate until eBay Finances access is available.
+              {summary.financeApiAvailable
+                ? ' Some matching fee records were not returned for these orders, so saved fee rates filled the gaps.'
+                : ' Reconnect eBay in Settings to grant Finances access, then refresh this tab for actual fee data.'}
             </div>
           ) : null}
 
@@ -78,6 +80,7 @@ export function FinancialsTab({
                 { label: 'Tracked Items', value: summary.trackedItems.toString() },
                 { label: 'Missing Cost Items', value: summary.missingCostItems.toString() },
                 { label: 'Actual Fee Items', value: String(summary.actualFeeItems || 0) },
+                { label: 'Finance API', value: summary.financeApiAvailable ? 'Available' : 'Reconnect' },
               ]}
             />
             <SummaryCard
