@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { EbayOrder } from '../types'
+import { getOrderBadgeColors, getOrderDisplayStatus } from '../order-status'
 
 export function SectionIntro({
   eyebrow,
@@ -71,62 +72,60 @@ export function OrderTable({ orders }: { orders: EbayOrder[] }) {
           </tr>
         </thead>
         <tbody>
-          {orders.map((order, index) => (
-            <tr
-              key={order.orderId}
-              style={{
-                background: index % 2 === 0 ? 'rgba(17,12,7,0.80)' : 'rgba(12,9,4,0.70)',
-                borderBottom: '1px solid rgba(195,158,88,0.06)',
-                transition: 'background 0.15s',
-              }}
-            >
-              <td style={{ padding: '14px 16px', color: 'var(--txt)', fontSize: '13px', maxWidth: '300px' }}>
-                {order.lineItems?.[0]?.title?.slice(0, 55) || order.orderId}
-                {(order.lineItems?.[0]?.title?.length || 0) > 55 ? '...' : ''}
-              </td>
-              <td style={{ padding: '14px 16px', color: 'var(--sil)', fontSize: '12px', textAlign: 'center' }}>
-                {order.buyer?.username}
-              </td>
-              <td
+          {orders.map((order, index) => {
+            const status = getOrderDisplayStatus(order)
+            const badge = getOrderBadgeColors(status.tone)
+
+            return (
+              <tr
+                key={order.orderId}
                 style={{
-                  padding: '14px 16px',
-                  fontFamily: 'Space Grotesk,sans-serif',
-                  fontWeight: 700,
-                  color: 'var(--gld2)',
-                  fontSize: '13px',
-                  textAlign: 'center',
+                  background: index % 2 === 0 ? 'rgba(17,12,7,0.80)' : 'rgba(12,9,4,0.70)',
+                  borderBottom: '1px solid rgba(195,158,88,0.06)',
+                  transition: 'background 0.15s',
                 }}
               >
-                ${parseFloat(order.pricingSummary?.total?.value || '0').toFixed(2)}
-              </td>
-              <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                <span
+                <td style={{ padding: '14px 16px', color: 'var(--txt)', fontSize: '13px', maxWidth: '300px' }}>
+                  {order.lineItems?.[0]?.title?.slice(0, 55) || order.orderId}
+                  {(order.lineItems?.[0]?.title?.length || 0) > 55 ? '...' : ''}
+                </td>
+                <td style={{ padding: '14px 16px', color: 'var(--sil)', fontSize: '12px', textAlign: 'center' }}>
+                  {order.buyer?.username}
+                </td>
+                <td
                   style={{
-                    padding: '3px 10px',
-                    borderRadius: '20px',
-                    fontSize: '8px',
+                    padding: '14px 16px',
+                    fontFamily: 'Space Grotesk,sans-serif',
                     fontWeight: 700,
-                    letterSpacing: '0.05em',
-                    background:
-                      order.orderFulfillmentStatus === 'NOT_STARTED'
-                        ? 'rgba(232,63,80,0.12)'
-                        : 'rgba(46,207,118,0.10)',
-                    color: order.orderFulfillmentStatus === 'NOT_STARTED' ? 'var(--red)' : 'var(--grn)',
-                    border: `1px solid ${
-                      order.orderFulfillmentStatus === 'NOT_STARTED'
-                        ? 'rgba(232,63,80,0.25)'
-                        : 'rgba(46,207,118,0.22)'
-                    }`,
+                    color: 'var(--gld2)',
+                    fontSize: '13px',
+                    textAlign: 'center',
                   }}
                 >
-                  {order.orderFulfillmentStatus === 'NOT_STARTED' ? 'Ship Now' : 'Fulfilled'}
-                </span>
-              </td>
-              <td style={{ padding: '14px 16px', color: 'var(--dim)', fontSize: '11px', textAlign: 'center' }}>
-                {new Date(order.creationDate).toLocaleDateString()}
-              </td>
-            </tr>
-          ))}
+                  ${parseFloat(order.pricingSummary?.total?.value || '0').toFixed(2)}
+                </td>
+                <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                  <span
+                    style={{
+                      padding: '3px 10px',
+                      borderRadius: '20px',
+                      fontSize: '8px',
+                      fontWeight: 700,
+                      letterSpacing: '0.05em',
+                      background: badge.background,
+                      color: badge.color,
+                      border: `1px solid ${badge.border}`,
+                    }}
+                  >
+                    {status.label}
+                  </span>
+                </td>
+                <td style={{ padding: '14px 16px', color: 'var(--dim)', fontSize: '11px', textAlign: 'center' }}>
+                  {new Date(order.creationDate).toLocaleDateString()}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

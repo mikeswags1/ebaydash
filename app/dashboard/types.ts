@@ -20,6 +20,15 @@ export interface EbayOrder {
   orderId: string
   buyer: { username: string }
   pricingSummary: { total: { value: string; currency: string } }
+  paymentSummary?: {
+    refunds?: Array<{
+      refundStatus?: string
+      amount?: { value?: string; currency?: string }
+    }>
+  }
+  cancelStatus?: {
+    cancelState?: string
+  }
   fulfillmentStartInstructions?: Array<{ shippingStep?: { shipTo?: { fullName?: string } } }>
   lineItems?: Array<{
     title: string
@@ -27,8 +36,13 @@ export interface EbayOrder {
     lineItemCost: { value: string }
     sku?: string
     legacyItemId?: string
+    refunds?: Array<{
+      refundStatus?: string
+      amount?: { value?: string; currency?: string }
+    }>
   }>
   orderFulfillmentStatus: string
+  orderPaymentStatus?: string
   creationDate: string
 }
 

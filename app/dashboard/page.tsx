@@ -36,6 +36,7 @@ import {
 } from './api'
 import { EBAY_FEE_RATE } from './constants'
 import { getGrossRevenue, getListingPreview, getRecommendedEbayPrice, listProductsInBatches, parseDashboardSearchMessage } from './utils'
+import { isRefundedOrder } from './order-status'
 
 type ConnectionState = {
   ebayConnected: boolean
@@ -297,7 +298,7 @@ export default function Dashboard() {
       setOrderState((prev) => ({
         ...prev,
         orders: data.recent || [],
-        awaiting: data.awaiting || [],
+        awaiting: (data.awaiting || []).filter((order) => !isRefundedOrder(order)),
         syncTime: new Date().toLocaleTimeString(),
       }))
     } catch (error) {
