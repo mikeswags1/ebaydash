@@ -1,16 +1,16 @@
 import type { EbayOrder } from '../types'
+import { getOrderDisplayStatus } from '../order-status'
 
 export function OverviewTab({
   connected,
   orders,
   awaitingCount,
-  grossRevenue,
   onOpenSettings,
 }: {
   connected: boolean
   orders: EbayOrder[]
   awaitingCount: number
-  grossRevenue: number
+  grossRevenue: number // kept in type for prop compatibility
   onOpenSettings: () => void
 }) {
   const recentOrders = orders.slice(0, 5)
@@ -85,12 +85,6 @@ export function OverviewTab({
           tone="var(--gold)"
         />
         <MetricCard
-          label="Gross Revenue"
-          value={`$${grossRevenue.toFixed(0)}`}
-          hint="Total sales from loaded orders"
-          tone="var(--gld2)"
-        />
-        <MetricCard
           label="eBay Connection"
           value={connected ? 'Live' : 'Offline'}
           hint={connected ? 'Syncing normally' : 'Go to Settings to connect'}
@@ -116,7 +110,9 @@ export function OverviewTab({
               const title = order.lineItems?.[0]?.title?.slice(0, 58) || order.orderId
               const total = parseFloat(order.pricingSummary?.total?.value || '0')
               const date = new Date(order.creationDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-              const needsShip = order.orderFulfillmentStatus === 'NOT_STARTED'
+              const status = getOrderDisplayStatus(order)
+              const dotColor = status.tone === 'red' ? 'var(--red)' : status.tone === 'blue' ? '#74a9ff' : status.tone === 'gold' ? 'var(--gold)' : 'rgba(46,207,118,0.7)'
+              const labelColor = status.tone === 'red' ? 'var(--red)' : status.tone === 'blue' ? '#74a9ff' : status.tone === 'gold' ? 'var(--gold)' : 'var(--grn)'
 
               return (
                 <div
@@ -132,16 +128,12 @@ export function OverviewTab({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-                    {needsShip ? (
-                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--red)', flexShrink: 0 }} />
-                    ) : (
-                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'rgba(46,207,118,0.5)', flexShrink: 0 }} />
-                    )}
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
                       <div style={{ fontSize: '10px', color: 'var(--dim)', marginTop: '2px' }}>
                         {order.buyer?.username} · {date}
-                        {needsShip ? <span style={{ color: 'var(--red)', marginLeft: '8px', fontWeight: 600 }}>Needs Ship</span> : ''}
+                        <span style={{ color: labelColor, marginLeft: '8px', fontWeight: 600 }}>{status.label}</span>
                       </div>
                     </div>
                   </div>
