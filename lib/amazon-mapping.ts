@@ -183,6 +183,7 @@ export type RecoveredAmazonMapping = {
   available: boolean
   source: 'db' | 'search'
   ebayTitle?: string
+  confidence?: 'exact' | 'manual' | 'recovered' | 'search'
 }
 
 export async function recoverAmazonProductByItemId(args: {
@@ -241,6 +242,7 @@ export async function recoverAmazonProductByItemId(args: {
             ),
             available: true,
             source: 'db',
+            confidence: 'recovered',
           }
         }
       } else {
@@ -281,6 +283,7 @@ export async function recoverAmazonProductByItemId(args: {
           amazonUrl: `https://www.amazon.com/dp/${asin}`,
           available: validated.available,
           source: 'db',
+          confidence: 'recovered',
         }
       }
     }
@@ -335,6 +338,7 @@ export async function recoverAmazonProductByItemId(args: {
         available: validated.available,
         ebayTitle,
         source: 'search',
+        confidence: 'exact',
       }
     }
   }
@@ -406,6 +410,7 @@ export async function recoverAmazonProductByItemId(args: {
           available: validated.available,
           ebayTitle,
           source: 'search',
+          confidence: 'search',
         }
       }
     }
@@ -457,10 +462,11 @@ export async function recoverAmazonProductByItemId(args: {
           description: validated.description,
           specs: validated.specs,
           amazonUrl: `https://www.amazon.com/dp/${validated.asin}`,
-          available: validated.available,
-          ebayTitle,
-          source: 'search',
-        }
+         available: validated.available,
+         ebayTitle,
+         source: 'search',
+          confidence: 'search',
+       }
       }
     }
 
@@ -488,6 +494,7 @@ export async function recoverAmazonProductByItemId(args: {
         available: true,
         ebayTitle,
         source: 'search',
+        confidence: 'search',
       }
     }
   }

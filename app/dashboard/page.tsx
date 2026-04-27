@@ -29,6 +29,7 @@ import {
   lookupAsinByItemId,
   publishProduct,
   runDashboardScript,
+  saveManualAsinMapping,
   saveUserNiche,
   validateAmazonAsin,
 } from './api'
@@ -65,8 +66,10 @@ type NicheState = {
 
 type LookupState = {
   input: string
+  manualAsin: string
   result: AsinResult | null
   loading: boolean
+  savingManual: boolean
   error: string | null
 }
 
@@ -121,8 +124,10 @@ export default function Dashboard() {
   })
   const [lookupState, setLookupState] = useState<LookupState>({
     input: '',
+    manualAsin: '',
     result: null,
     loading: false,
+    savingManual: false,
     error: null,
   })
   const [finderState, setFinderState] = useState<FinderState>({
@@ -423,6 +428,42 @@ export default function Dashboard() {
     }
   }, [lookupState.input])
 
+  const handleSaveManualAsinMapping = useCallback(async () => {
+    const itemId = lookupState.input.trim()
+    const asin = lookupState.manualAsin.trim().toUpperCase()
+    if (!/^\d+$/.test(itemId) || !/^[A-Z0-9]{10}$/.test(asin)) {
+      setLookupState((prev) => ({ ...prev, error: 'Enter a numeric eBay item ID and a valid 10-character Amazon ASIN.' }))
+      return
+    }
+
+    setLookupState((prev) => ({ ...prev, savingManual: true, error: null }))
+    try {
+      const result = await saveManualAsinMapping(itemId, asin)
+      setLookupState((prev) => ({ ...prev, result, manualAsin: result.asin }))
+      setOrderState((prev) => ({
+        ...prev,
+        orderAsinMap: {
+          ...prev.orderAsinMap,
+          [itemId]: {
+            asin: result.asin,
+            title: result.title,
+            amazonUrl: result.amazonUrl,
+            imageUrl: result.imageUrl,
+          },
+        },
+      }))
+      setBanner({ tone: 'success', text: `Saved ASIN ${result.asin} for eBay item #${itemId}.` })
+      void loadFinancials()
+    } catch (error) {
+      setLookupState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, 'Unable to save ASIN mapping.'),
+      }))
+    } finally {
+      setLookupState((prev) => ({ ...prev, savingManual: false }))
+    }
+  }, [loadFinancials, lookupState.input, lookupState.manualAsin])
+
   const handleFindProducts = useCallback(async () => {
     if (!nicheState.value) return
 
@@ -695,9 +736,13 @@ export default function Dashboard() {
               asinLoading={lookupState.loading}
               asinError={lookupState.error}
               asinResult={lookupState.result}
+              manualAsin={lookupState.manualAsin}
+              onManualAsinChange={(value) => setLookupState((prev) => ({ ...prev, manualAsin: value }))}
+              onSaveManualMapping={() => void handleSaveManualAsinMapping()}
+              manualSaving={lookupState.savingManual}
               orders={orderState.orders}
               orderAsinMap={orderState.orderAsinMap}
-              onReset={() => setLookupState({ input: '', result: null, loading: false, error: null })}
+              onReset={() => setLookupState({ input: '', manualAsin: '', result: null, loading: false, savingManual: false, error: null })}
             />
           ) : null}
           {tab === 'product' ? (

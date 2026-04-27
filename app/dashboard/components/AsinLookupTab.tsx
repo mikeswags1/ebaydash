@@ -8,6 +8,10 @@ export function AsinLookupTab({
   asinLoading,
   asinError,
   asinResult,
+  manualAsin,
+  onManualAsinChange,
+  onSaveManualMapping,
+  manualSaving,
   orders,
   orderAsinMap,
   onReset,
@@ -18,6 +22,10 @@ export function AsinLookupTab({
   asinLoading: boolean
   asinError: string | null
   asinResult: AsinResult | null
+  manualAsin: string
+  onManualAsinChange: (value: string) => void
+  onSaveManualMapping: () => void
+  manualSaving: boolean
   orders: EbayOrder[]
   orderAsinMap: OrderAsinMap
   onReset: () => void
@@ -52,6 +60,28 @@ export function AsinLookupTab({
           </div>
           {asinError ? <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--red)', lineHeight: 1.6 }}>{asinError}</div> : null}
         </div>
+
+        {asinInput.trim() ? (
+          <div className="card" style={{ padding: '22px 24px', marginBottom: '20px' }}>
+            <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '8px' }}>
+              Confirm Exact ASIN
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--sil)', lineHeight: 1.6, marginBottom: '14px' }}>
+              If auto-match misses an older listing, paste the correct Amazon ASIN here. The dashboard will validate it and save it for financials and fulfillment.
+            </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <input
+                value={manualAsin}
+                onChange={(event) => onManualAsinChange(event.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10))}
+                placeholder="Amazon ASIN"
+                style={{ flex: '1 1 180px', fontFamily: 'monospace', fontSize: '15px', letterSpacing: '0.08em' }}
+              />
+              <button onClick={onSaveManualMapping} className="btn btn-gold" disabled={manualSaving || !asinInput.trim() || manualAsin.length !== 10}>
+                {manualSaving ? 'Saving...' : 'Save Mapping'}
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {orders.length > 0 && !asinResult ? (
           <div className="card" style={{ padding: '20px 24px', marginBottom: '20px' }}>
@@ -128,7 +158,7 @@ export function AsinLookupTab({
                 ) : null}
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--gold)', marginBottom: '6px' }}>
-                    Amazon Source Product Found
+                    Amazon Source Product Found {asinResult.source === 'manual' ? '/ Confirmed' : ''}
                   </div>
                   <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4, marginBottom: '10px' }}>{asinResult.title}</div>
                   {asinResult.ebayTitle && asinResult.ebayTitle !== asinResult.title ? (

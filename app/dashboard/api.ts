@@ -85,6 +85,14 @@ export async function lookupAsinByItemId(itemId: string) {
   return requestJson<AsinResult>(`/api/fulfillment/lookup?itemId=${itemId}`)
 }
 
+export async function saveManualAsinMapping(itemId: string, asin: string) {
+  return requestJson<AsinResult>('/api/fulfillment/manual-map', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ itemId, asin }),
+  })
+}
+
 export async function validateAmazonAsin(asin: string) {
   return requestJson<AsinResult>(`/api/amazon/lookup?asin=${encodeURIComponent(asin)}`)
 }

@@ -12,6 +12,7 @@ export interface AsinResult {
   available: boolean
   amazonUrl?: string
   ebayTitle?: string
+  confidence?: 'exact' | 'manual' | 'recovered' | 'search'
   source: 'api' | 'manual' | 'db' | 'search' | 'scrape' | 'cache' | 'fallback'
 }
 
@@ -113,4 +114,4 @@ export interface ScriptMessage {
   text: string
 }
 
-export type OrderAsinMap = Record<string, { asin: string; title: string; amazonUrl?: string; imageUrl?: string }>
+export type OrderAsinMap = Record<string, { asin: string; title: string; amazonUrl?: string; imageUrl?: string; confidence?: 'manual' | 'exact' | 'recovered' | 'search' }>

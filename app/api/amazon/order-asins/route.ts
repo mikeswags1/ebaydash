@@ -15,7 +15,7 @@ export async function GET() {
         AND ebay_listing_id IS NOT NULL
     `
 
-    const map: Record<string, { asin: string; title: string; amazonUrl?: string; imageUrl?: string }> = {}
+    const map: Record<string, { asin: string; title: string; amazonUrl?: string; imageUrl?: string; confidence?: 'manual' }> = {}
     for (const row of rows) {
       if (row.ebay_listing_id) {
         const snapshot =
@@ -30,6 +30,7 @@ export async function GET() {
             typeof snapshot?.imageUrl === 'string'
               ? snapshot.imageUrl
               : row.amazon_image_url || undefined,
+          confidence: typeof snapshot?.recoveredFrom === 'string' && snapshot.recoveredFrom === 'manual_confirmed' ? 'manual' : undefined,
         }
       }
     }
