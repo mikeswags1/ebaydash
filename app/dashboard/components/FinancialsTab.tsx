@@ -1,12 +1,22 @@
 import type { FinancialItem, FinancialSummary } from '../types'
 import { EmptyState, SectionIntro } from './shared'
 
+const PERIODS = [
+  { value: '30d', label: 'Last 30 Days' },
+  { value: '90d', label: 'Last 90 Days' },
+  { value: '6m',  label: 'Last 6 Months' },
+  { value: '1y',  label: 'Last Year' },
+  { value: 'all', label: 'All Time' },
+]
+
 export function FinancialsTab({
   connected,
   loading,
   error,
   summary,
   items,
+  period,
+  onPeriodChange,
   onRefresh,
   onOpenSettings,
 }: {
@@ -15,6 +25,8 @@ export function FinancialsTab({
   error: string | null
   summary: FinancialSummary | null
   items: FinancialItem[]
+  period: string
+  onPeriodChange: (p: string) => void
   onRefresh: () => void
   onOpenSettings: () => void
 }) {
@@ -25,6 +37,29 @@ export function FinancialsTab({
         title="Financials"
         subtitle="Profitability is calculated from net order revenue after refunds, stored Amazon source cost, and eBay fees. Amazon shipping is treated as $0."
       />
+
+      {connected ? (
+        <div style={{ padding: '0 44px 24px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {PERIODS.map((p) => (
+            <button
+              key={p.value}
+              onClick={() => onPeriodChange(p.value)}
+              className="btn btn-ghost btn-sm"
+              style={{
+                fontSize: '11px',
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: period === p.value ? '1px solid rgba(200,162,80,0.5)' : '1px solid rgba(195,158,88,0.15)',
+                background: period === p.value ? 'rgba(200,162,80,0.12)' : 'transparent',
+                color: period === p.value ? 'var(--gld2)' : 'var(--dim)',
+                fontWeight: period === p.value ? 700 : 400,
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {!connected ? (
         <EmptyState connected={false} onConnect={onOpenSettings} msg="Connect eBay to load real profitability data." style={{ margin: '0 44px 44px' }} />

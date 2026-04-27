@@ -153,6 +153,7 @@ export default function Dashboard() {
     data: null,
     error: null,
   })
+  const [financialPeriod, setFinancialPeriod] = useState('30d')
   const [nicheState, setNicheState] = useState<NicheState>({
     value: null,
     saving: false,
@@ -332,25 +333,15 @@ export default function Dashboard() {
     }
   }, [])
 
-  const loadFinancials = useCallback(async () => {
+  const loadFinancials = useCallback(async (period?: string) => {
     setFinancialState((prev) => ({ ...prev, loading: true, error: null }))
-
     try {
-      const data = await fetchFinancials()
-      setFinancialState({
-        loading: false,
-        summary: data.summary,
-        items: data.items || [],
-        error: null,
-      })
+      const data = await fetchFinancials(period ?? financialPeriod)
+      setFinancialState({ loading: false, summary: data.summary, items: data.items || [], error: null })
     } catch (error) {
-      setFinancialState((prev) => ({
-        ...prev,
-        loading: false,
-        error: getErrorMessage(error, 'Unable to load financial data.'),
-      }))
+      setFinancialState((prev) => ({ ...prev, loading: false, error: getErrorMessage(error, 'Unable to load financial data.') }))
     }
-  }, [])
+  }, [financialPeriod])
 
   const loadPerformance = useCallback(async () => {
     setPerformanceState((prev) => ({ ...prev, loading: true, error: null }))
@@ -926,6 +917,8 @@ export default function Dashboard() {
               error={financialState.error}
               summary={financialState.summary}
               items={financialState.items}
+              period={financialPeriod}
+              onPeriodChange={(p) => { setFinancialPeriod(p); void loadFinancials(p) }}
               onRefresh={() => void loadFinancials()}
               onOpenSettings={() => setTab('settings')}
             />

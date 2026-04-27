@@ -275,7 +275,19 @@ async function getActualFeeMaps(base: string, accessToken: string, orders: EbayO
   return { byOrder, byLine, available, status }
 }
 
-export async function GET() {
+const PERIOD_DAYS: Record<string, number | null> = {
+  '30d': 30,
+  '90d': 90,
+  '6m': 183,
+  '1y': 365,
+  'all': null,
+}
+
+export async function GET(req: Request) {
+  const period = new URL(req.url).searchParams.get('period') || '30d'
+  const periodDays = Object.hasOwn(PERIOD_DAYS, period) ? PERIOD_DAYS[period] : 30
+  const cutoff = periodDays ? new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000) : null
+
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
@@ -322,7 +334,9 @@ export async function GET() {
       })
     }
 
-    const orders = orderResult.orders
+    const orders = cutoff
+      ? orderResult.orders.filter(o => o.creationDate && new Date(o.creationDate) >= cutoff)
+      : orderResult.orders
     const actualFeeMaps = await getActualFeeMaps(base, credentials.accessToken, orders)
 
     let listingRows = await queryRows<ListedAsinRow>`

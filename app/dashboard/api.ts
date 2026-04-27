@@ -47,8 +47,8 @@ export async function fetchOrders() {
   return requestJson<{ ok: true; connected: boolean; recent?: EbayOrder[]; awaiting?: EbayOrder[] }>('/api/ebay/orders')
 }
 
-export async function fetchFinancials() {
-  return requestJson<{ ok: true; connected: boolean; summary: FinancialSummary; items: FinancialItem[] }>('/api/financials')
+export async function fetchFinancials(period = '30d') {
+  return requestJson<{ ok: true; connected: boolean; summary: FinancialSummary; items: FinancialItem[] }>(`/api/financials?period=${period}`)
 }
 
 export async function fetchPerformance() {
