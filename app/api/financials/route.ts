@@ -66,6 +66,11 @@ type EbayTransaction = {
   }>
 }
 
+type EbayOrdersPayload = {
+  orders?: EbayOrder[]
+  total?: number
+}
+
 type ListedAsinRow = {
   asin?: string
   title?: string
@@ -100,6 +105,54 @@ function getDateRangeFilter(orders: EbayOrder[]) {
   const start = new Date(Math.min(...timestamps) - 24 * 60 * 60 * 1000).toISOString()
   const end = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
   return `transactionType:{SALE},transactionDate:[${start}..${end}]`
+}
+
+async function fetchFinancialOrders(base: string, accessToken: string) {
+  const orders: EbayOrder[] = []
+  const limit = 100
+  let offset = 0
+  let total: number | undefined
+
+  while (offset < 1000) {
+    const url = new URL(`${base}/sell/fulfillment/v1/order`)
+    url.searchParams.set('limit', String(limit))
+    url.searchParams.set('offset', String(offset))
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Language': 'en-US',
+      },
+      signal: AbortSignal.timeout(12000),
+    })
+
+    if (response.status === 401) {
+      return {
+        response,
+        orders,
+      }
+    }
+
+    if (!response.ok) {
+      return {
+        response,
+        orders,
+      }
+    }
+
+    const payload = (await response.json()) as EbayOrdersPayload
+    const pageOrders = Array.isArray(payload.orders) ? payload.orders : []
+    orders.push(...pageOrders)
+    total = typeof payload.total === 'number' ? payload.total : total
+
+    if (pageOrders.length < limit || (typeof total === 'number' && orders.length >= total)) break
+    offset += limit
+  }
+
+  return {
+    response: null,
+    orders,
+  }
 }
 
 async function getActualFeeMaps(base: string, accessToken: string, orders: EbayOrder[]) {
@@ -193,21 +246,17 @@ export async function GET() {
     await ensureListedAsinsFinancialColumns()
 
     const base = credentials.sandboxMode ? 'https://api.sandbox.ebay.com' : 'https://api.ebay.com'
-    const response = await fetch(`${base}/sell/fulfillment/v1/order?limit=100`, {
-      headers: {
-        Authorization: `Bearer ${credentials.accessToken}`,
-        'Content-Language': 'en-US',
-      },
-    })
+    const orderResult = await fetchFinancialOrders(base, credentials.accessToken)
+    const response = orderResult.response
 
-    if (response.status === 401) {
+    if (response?.status === 401) {
       return apiError('Your eBay session expired. Reconnect your account in Settings.', {
         status: 401,
         code: 'RECONNECT_REQUIRED',
       })
     }
 
-    if (!response.ok) {
+    if (response && !response.ok) {
       const detail = await response.text()
       return apiError(`Unable to load financial order data from eBay (${response.status}).`, {
         status: 502,
@@ -216,8 +265,7 @@ export async function GET() {
       })
     }
 
-    const orderPayload = (await response.json()) as { orders?: EbayOrder[] }
-    const orders = Array.isArray(orderPayload.orders) ? orderPayload.orders : []
+    const orders = orderResult.orders
     const actualFeeMaps = await getActualFeeMaps(base, credentials.accessToken, orders)
 
     let listingRows = await queryRows<ListedAsinRow>`
@@ -350,6 +398,8 @@ export async function GET() {
 
     const grossRevenue = items.reduce((sum, item) => sum + item.ebayRevenue, 0)
     const trackedItems = items.filter((item) => item.hasTrackedCost)
+    const actualFeeItems = items.filter((item) => item.feeSource === 'actual').length
+    const estimatedFeeItems = items.length - actualFeeItems
     const trackedRevenue = trackedItems.reduce((sum, item) => sum + item.ebayRevenue, 0)
     const amazonCost = trackedItems.reduce((sum, item) => sum + (item.amazonCost || 0), 0)
     const ebayFees = trackedItems.reduce((sum, item) => sum + item.ebayFees, 0)
@@ -370,6 +420,8 @@ export async function GET() {
         soldItems: items.length,
         trackedItems: trackedItems.length,
         missingCostItems: items.length - trackedItems.length,
+        actualFeeItems,
+        estimatedFeeItems,
       },
       items,
     })

@@ -63,6 +63,8 @@ export interface FinancialSummary {
   soldItems: number
   trackedItems: number
   missingCostItems: number
+  actualFeeItems?: number
+  estimatedFeeItems?: number
 }
 
 export interface FinancialItem {

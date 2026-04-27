@@ -54,6 +54,13 @@ export function FinancialsTab({
             </div>
           ) : null}
 
+          {summary.estimatedFeeItems ? (
+            <div style={{ margin: '0 44px 24px', padding: '14px 16px', borderRadius: '12px', background: 'rgba(90,80,55,0.10)', border: '1px solid rgba(90,80,55,0.20)', color: 'var(--sil)', fontSize: '12px', lineHeight: 1.7 }}>
+              eBay fees are actual for {summary.actualFeeItems || 0} item{summary.actualFeeItems === 1 ? '' : 's'} and estimated for {summary.estimatedFeeItems} item{summary.estimatedFeeItems === 1 ? '' : 's'}.
+              Estimated fees use the saved fee rate until eBay Finances access is available.
+            </div>
+          ) : null}
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '16px', padding: '0 44px 24px' }}>
             <MetricCard label="Gross Revenue" value={`$${summary.grossRevenue.toFixed(2)}`} tone="var(--gld2)" />
             <MetricCard label="Amazon Cost" value={`$${summary.amazonCost.toFixed(2)}`} tone="var(--txt)" />
@@ -70,6 +77,7 @@ export function FinancialsTab({
                 { label: 'Sold Items', value: summary.soldItems.toString() },
                 { label: 'Tracked Items', value: summary.trackedItems.toString() },
                 { label: 'Missing Cost Items', value: summary.missingCostItems.toString() },
+                { label: 'Actual Fee Items', value: String(summary.actualFeeItems || 0) },
               ]}
             />
             <SummaryCard
