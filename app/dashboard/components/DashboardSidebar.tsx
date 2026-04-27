@@ -186,9 +186,9 @@ export function DashboardSidebar({
                 letterSpacing: '0.08em',
               }}
             >
-              {item.label.slice(0, 2).toUpperCase()}
+              {item.label.match(/^\p{Emoji}/u)?.[0] ?? item.label.slice(0, 2).toUpperCase()}
             </span>
-            {item.label}
+            {item.label.replace(/^\p{Emoji}\s*/u, '')}
             {item.badge === 'orders' && awaitingCount > 0 ? (
               <span
                 style={{
