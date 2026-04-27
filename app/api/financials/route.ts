@@ -46,6 +46,11 @@ async function resolveAmazonPrice(asin: string, userId: string): Promise<number 
 type EbayOrder = {
   orderId: string
   creationDate: string
+  orderPaymentStatus?: string
+  cancelStatus?: { cancelState?: string }
+  paymentSummary?: {
+    refunds?: Array<{ refundStatus?: string; amount?: { value?: string } }>
+  }
   pricingSummary?: { total?: { value?: string } }
   lineItems?: Array<{
     lineItemId?: string
@@ -53,6 +58,7 @@ type EbayOrder = {
     quantity?: number
     lineItemCost?: { value?: string }
     legacyItemId?: string
+    refunds?: Array<{ refundStatus?: string; amount?: { value?: string } }>
   }>
 }
 
@@ -83,6 +89,53 @@ type ListedAsinRow = {
 function parseMoney(value: unknown) {
   const amount = parseFloat(String(value || '0').replace(/[^0-9.-]/g, ''))
   return Number.isFinite(amount) ? amount : 0
+}
+
+function getRefundStatus(statuses: string[], refundedAmount: number, grossRevenue: number): 'none' | 'partial' | 'full' | 'pending' {
+  const normalized = statuses.map((status) => status.toUpperCase()).filter(Boolean)
+  if (normalized.includes('FULLY_REFUNDED')) return 'full'
+  if (grossRevenue > 0 && refundedAmount >= grossRevenue * 0.95) return 'full'
+  if (normalized.includes('PARTIALLY_REFUNDED') || refundedAmount > 0) return 'partial'
+  if (normalized.includes('PENDING')) return 'pending'
+  return 'none'
+}
+
+function getRefundAdjustment(args: {
+  order: EbayOrder
+  lineItem: NonNullable<EbayOrder['lineItems']>[number]
+  grossRevenue: number
+  orderLineGrossTotal: number
+}) {
+  const { order, lineItem, grossRevenue, orderLineGrossTotal } = args
+  const lineRefunds = lineItem.refunds || []
+  const orderRefunds = order.paymentSummary?.refunds || []
+  const lineRefundAmount = lineRefunds.reduce((sum, refund) => sum + parseMoney(refund.amount?.value), 0)
+  const orderRefundAmount = orderRefunds.reduce((sum, refund) => sum + parseMoney(refund.amount?.value), 0)
+  const orderStatuses = [
+    order.orderPaymentStatus,
+    order.cancelStatus?.cancelState,
+    ...orderRefunds.map((refund) => refund.refundStatus),
+  ].map((status) => String(status || '').toUpperCase())
+  const lineStatuses = lineRefunds.map((refund) => String(refund.refundStatus || '').toUpperCase())
+  const fullOrderRefund = orderStatuses.includes('FULLY_REFUNDED')
+  const fullLineRefund = lineStatuses.includes('FULLY_REFUNDED')
+
+  const allocatedOrderRefund = lineRefunds.length > 0
+    ? 0
+    : fullOrderRefund && orderRefundAmount <= 0
+      ? grossRevenue
+      : orderLineGrossTotal > 0
+        ? orderRefundAmount * (grossRevenue / orderLineGrossTotal)
+        : orderRefundAmount
+
+  const explicitRefund = fullLineRefund && lineRefundAmount <= 0 ? grossRevenue : lineRefundAmount
+  const refundedAmount = Math.min(grossRevenue, Math.max(0, explicitRefund + allocatedOrderRefund))
+  const refundStatus = getRefundStatus([...orderStatuses, ...lineStatuses], refundedAmount, grossRevenue)
+
+  return {
+    refundedAmount: refundStatus === 'full' && refundedAmount <= 0 ? grossRevenue : refundedAmount,
+    refundStatus,
+  }
 }
 
 function normalizeTitle(value: string) {
@@ -357,22 +410,32 @@ export async function GET() {
       listingsByTitle.set(normalized, current)
     }
 
-    const items = orders.flatMap((order) =>
-      (order.lineItems || []).map((lineItem, index) => {
+    const items = orders.flatMap((order) => {
+      const orderLineGrossTotal = (order.lineItems || []).reduce((sum, lineItem) => {
+        const fallbackRevenue = (order.lineItems?.length || 0) <= 1 ? parseMoney(order.pricingSummary?.total?.value) : 0
+        return sum + (parseMoney(lineItem.lineItemCost?.value) || fallbackRevenue)
+      }, 0)
+
+      return (order.lineItems || []).map((lineItem, index) => {
         const listingId = lineItem.legacyItemId ? String(lineItem.legacyItemId) : ''
         const normalizedTitle = normalizeTitle(String(lineItem.title || ''))
         const titleMatches = normalizedTitle ? listingsByTitle.get(normalizedTitle) || [] : []
         const listing = listingId ? listingById.get(listingId) : titleMatches.length === 1 ? titleMatches[0] : undefined
         const quantity = Math.max(1, Number(lineItem.quantity || 1))
         const fallbackRevenue = (order.lineItems?.length || 0) <= 1 ? parseMoney(order.pricingSummary?.total?.value) : 0
-        const revenue = parseMoney(lineItem.lineItemCost?.value) || fallbackRevenue
+        const grossLineRevenue = parseMoney(lineItem.lineItemCost?.value) || fallbackRevenue
+        const refund = getRefundAdjustment({ order, lineItem, grossRevenue: grossLineRevenue, orderLineGrossTotal })
+        const revenue = Math.max(0, grossLineRevenue - refund.refundedAmount)
+        const isFullRefund = refund.refundStatus === 'full'
         const amazonUnitCost = listing?.amazon_price === null || listing?.amazon_price === undefined ? null : parseMoney(listing.amazon_price)
-        const amazonCost = amazonUnitCost === null ? null : amazonUnitCost * quantity
+        const amazonCost = isFullRefund ? 0 : amazonUnitCost === null ? null : amazonUnitCost * quantity
         const feeRate = listing?.ebay_fee_rate === null || listing?.ebay_fee_rate === undefined ? DEFAULT_EBAY_FEE_RATE : Number(listing.ebay_fee_rate)
         const lineItemId = String(lineItem.lineItemId || '')
         const actualLineFee = lineItemId ? actualFeeMaps.byLine.get(`${order.orderId}:${lineItemId}`) : undefined
         const actualOrderFee = (order.lineItems?.length || 0) <= 1 ? actualFeeMaps.byOrder.get(order.orderId) : undefined
-        const ebayFees = actualLineFee ?? actualOrderFee ?? revenue * feeRate
+        const grossFees = actualLineFee ?? actualOrderFee ?? grossLineRevenue * feeRate
+        const feeMultiplier = grossLineRevenue > 0 ? revenue / grossLineRevenue : 1
+        const ebayFees = Math.max(0, grossFees * feeMultiplier)
         const feeSource = actualLineFee !== undefined || actualOrderFee !== undefined ? 'actual' : 'estimated'
         const profit = amazonCost === null ? null : revenue - amazonCost - ebayFees
         const roi = amazonCost && amazonCost > 0 && profit !== null ? (profit / amazonCost) * 100 : null
@@ -386,7 +449,10 @@ export async function GET() {
           title: lineItem.title || listing?.title || order.orderId,
           soldAt: order.creationDate,
           quantity,
+          grossRevenue: grossLineRevenue,
           ebayRevenue: revenue,
+          refundedAmount: refund.refundedAmount,
+          refundStatus: refund.refundStatus,
           amazonUnitCost,
           amazonCost,
           ebayFeeRate: feeRate,
@@ -398,9 +464,12 @@ export async function GET() {
           hasTrackedCost: amazonCost !== null,
         }
       })
-    )
+    })
 
     const grossRevenue = items.reduce((sum, item) => sum + item.ebayRevenue, 0)
+    const grossSalesRevenue = items.reduce((sum, item) => sum + item.grossRevenue, 0)
+    const refundedRevenue = items.reduce((sum, item) => sum + item.refundedAmount, 0)
+    const refundedItems = items.filter((item) => item.refundStatus !== 'none').length
     const trackedItems = items.filter((item) => item.hasTrackedCost)
     const actualFeeItems = items.filter((item) => item.feeSource === 'actual').length
     const estimatedFeeItems = items.length - actualFeeItems
@@ -416,6 +485,8 @@ export async function GET() {
       connected: true,
       summary: {
         grossRevenue,
+        grossSalesRevenue,
+        refundedRevenue,
         trackedRevenue,
         amazonCost,
         ebayFees,
@@ -423,6 +494,7 @@ export async function GET() {
         roi,
         margin,
         soldItems: items.length,
+        refundedItems,
         trackedItems: trackedItems.length,
         missingCostItems: items.length - trackedItems.length,
         actualFeeItems,

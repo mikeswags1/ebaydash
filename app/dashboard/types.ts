@@ -72,6 +72,8 @@ export interface ListResult {
 
 export interface FinancialSummary {
   grossRevenue: number
+  grossSalesRevenue?: number
+  refundedRevenue?: number
   trackedRevenue: number
   amazonCost: number
   ebayFees: number
@@ -79,6 +81,7 @@ export interface FinancialSummary {
   roi: number
   margin: number
   soldItems: number
+  refundedItems?: number
   trackedItems: number
   missingCostItems: number
   actualFeeItems?: number
@@ -95,7 +98,10 @@ export interface FinancialItem {
   title: string
   soldAt: string
   quantity: number
+  grossRevenue?: number
   ebayRevenue: number
+  refundedAmount?: number
+  refundStatus?: 'none' | 'partial' | 'full' | 'pending'
   amazonUnitCost: number | null
   amazonCost: number | null
   ebayFeeRate: number

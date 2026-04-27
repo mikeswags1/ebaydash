@@ -23,7 +23,7 @@ export function FinancialsTab({
       <SectionIntro
         eyebrow="EbayDash / Analytics"
         title="Financials"
-        subtitle="Profitability is calculated from sold order revenue, stored Amazon source cost, and eBay fees. Amazon shipping is treated as $0."
+        subtitle="Profitability is calculated from net order revenue after refunds, stored Amazon source cost, and eBay fees. Amazon shipping is treated as $0."
       />
 
       {!connected ? (
@@ -54,6 +54,13 @@ export function FinancialsTab({
             </div>
           ) : null}
 
+          {summary.refundedItems ? (
+            <div style={{ margin: '0 44px 24px', padding: '14px 16px', borderRadius: '12px', background: 'rgba(82,151,255,0.08)', border: '1px solid rgba(82,151,255,0.20)', color: 'var(--sil)', fontSize: '12px', lineHeight: 1.7 }}>
+              {summary.refundedItems} item{summary.refundedItems === 1 ? '' : 's'} include refund activity.
+              Financial totals use net revenue after ${summary.refundedRevenue?.toFixed(2) || '0.00'} in refunds.
+            </div>
+          ) : null}
+
           {summary.estimatedFeeItems ? (
             <div style={{ margin: '0 44px 24px', padding: '14px 16px', borderRadius: '12px', background: 'rgba(90,80,55,0.10)', border: '1px solid rgba(90,80,55,0.20)', color: 'var(--sil)', fontSize: '12px', lineHeight: 1.7 }}>
               eBay fees are actual for {summary.actualFeeItems || 0} item{summary.actualFeeItems === 1 ? '' : 's'} and estimated for {summary.estimatedFeeItems} item{summary.estimatedFeeItems === 1 ? '' : 's'}.
@@ -64,7 +71,8 @@ export function FinancialsTab({
           ) : null}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '16px', padding: '0 44px 24px' }}>
-            <MetricCard label="Gross Revenue" value={`$${summary.grossRevenue.toFixed(2)}`} tone="var(--gld2)" />
+            <MetricCard label="Net Revenue" value={`$${summary.grossRevenue.toFixed(2)}`} tone="var(--gld2)" />
+            <MetricCard label="Refunds" value={`$${(summary.refundedRevenue || 0).toFixed(2)}`} tone={summary.refundedRevenue ? '#74a9ff' : 'var(--dim)'} />
             <MetricCard label="Amazon Cost" value={`$${summary.amazonCost.toFixed(2)}`} tone="var(--txt)" />
             <MetricCard label="eBay Fees" value={`$${summary.ebayFees.toFixed(2)}`} tone="var(--dim)" />
             <MetricCard label="Net Profit" value={`$${summary.profit.toFixed(2)}`} tone={summary.profit >= 0 ? 'var(--grn)' : 'var(--red)'} />
@@ -77,6 +85,7 @@ export function FinancialsTab({
               title="Coverage"
               rows={[
                 { label: 'Sold Items', value: summary.soldItems.toString() },
+                { label: 'Refunded Items', value: String(summary.refundedItems || 0) },
                 { label: 'Tracked Items', value: summary.trackedItems.toString() },
                 { label: 'Missing Cost Items', value: summary.missingCostItems.toString() },
                 { label: 'Actual Fee Items', value: String(summary.actualFeeItems || 0) },
@@ -86,9 +95,11 @@ export function FinancialsTab({
             <SummaryCard
               title="Tracked Totals"
               rows={[
+                { label: 'Gross Sales', value: `$${(summary.grossSalesRevenue || summary.grossRevenue).toFixed(2)}` },
+                { label: 'Refunds', value: `$${(summary.refundedRevenue || 0).toFixed(2)}` },
                 { label: 'Tracked Revenue', value: `$${summary.trackedRevenue.toFixed(2)}` },
                 { label: 'Amazon Shipping', value: '$0.00' },
-                { label: 'Formula', value: 'Revenue - Cost - Fees' },
+                { label: 'Formula', value: 'Net Revenue - Cost - Fees' },
               ]}
             />
           </div>
@@ -111,7 +122,7 @@ export function FinancialsTab({
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'rgba(20,14,6,0.95)', borderBottom: '1px solid rgba(195,158,88,0.11)' }}>
-                      {['Item', 'Revenue', 'Amazon Cost', 'Fees', 'Profit', 'ROI', 'Margin', 'Sold'].map((heading) => (
+                      {['Item', 'Revenue', 'Refund', 'Amazon Cost', 'Fees', 'Profit', 'ROI', 'Margin', 'Sold'].map((heading) => (
                         <th key={heading} style={{ color: 'rgba(100,86,58,0.95)', fontSize: '7.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', padding: '12px 14px', textAlign: heading === 'Item' ? 'left' : 'center', whiteSpace: 'nowrap' }}>
                           {heading}
                         </th>
@@ -128,6 +139,9 @@ export function FinancialsTab({
                           </div>
                         </td>
                         <td style={cellStyle('var(--gld2)')}>${item.ebayRevenue.toFixed(2)}</td>
+                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                          <RefundBadge status={item.refundStatus || 'none'} amount={item.refundedAmount || 0} />
+                        </td>
                         <td style={cellStyle(item.amazonCost === null ? 'var(--red)' : 'var(--txt)')}>{item.amazonCost === null ? 'Missing' : `$${item.amazonCost.toFixed(2)}`}</td>
                         <td style={cellStyle(item.feeSource === 'actual' ? 'var(--txt)' : 'var(--dim)')}>
                           <div>${item.ebayFees.toFixed(2)}</div>
@@ -171,6 +185,28 @@ function SummaryCard({ title, rows }: { title: string; rows: Array<{ label: stri
           <span style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, color: 'var(--gld2)', fontSize: '14px' }}>{row.value}</span>
         </div>
       ))}
+    </div>
+  )
+}
+
+function RefundBadge({ status, amount }: { status: 'none' | 'partial' | 'full' | 'pending'; amount: number }) {
+  if (status === 'none' && amount <= 0) {
+    return <span style={{ fontSize: '10px', color: 'var(--dim)' }}>-</span>
+  }
+
+  const label = status === 'full' ? 'Refunded' : status === 'partial' ? 'Partial' : 'Pending'
+  const tone = status === 'full' ? '#74a9ff' : 'var(--gold)'
+  const background = status === 'full' ? 'rgba(82,151,255,0.12)' : 'rgba(200,162,80,0.10)'
+  const border = status === 'full' ? 'rgba(82,151,255,0.28)' : 'rgba(200,162,80,0.25)'
+
+  return (
+    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+      <span style={{ fontSize: '8px', padding: '2px 8px', borderRadius: '20px', fontWeight: 800, background, color: tone, border: `1px solid ${border}`, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
+        {label}
+      </span>
+      <span style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '10px', fontWeight: 700, color: tone }}>
+        -${amount.toFixed(2)}
+      </span>
     </div>
   )
 }
