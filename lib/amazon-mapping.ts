@@ -148,6 +148,13 @@ export async function saveRecoveredMapping(args: {
 }) {
   await ensureListedAsinsFinancialColumns()
   await sql`
+    UPDATE listed_asins
+    SET ebay_listing_id = NULL
+    WHERE user_id = ${args.userId}
+      AND ebay_listing_id = ${args.itemId}
+      AND asin <> ${args.asin}
+  `.catch(() => {})
+  await sql`
     INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, amazon_image_url, amazon_images, amazon_snapshot)
     VALUES (${args.userId}, ${args.asin}, ${args.title.slice(0, 200)}, ${args.itemId}, ${args.amazonPrice.toFixed(2)}, ${args.amazonImageUrl || null}, ${JSON.stringify(args.amazonImages || [])}, ${JSON.stringify(args.amazonSnapshot || null)})
     ON CONFLICT (user_id, asin) DO UPDATE SET

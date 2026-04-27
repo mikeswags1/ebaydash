@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const credentials = await getValidEbayAccessToken(session.user.id)
+    const credentials = await getValidEbayAccessToken(session.user.id).catch(() => null)
     const details = credentials?.accessToken
       ? await getEbayItemDetails(itemId, credentials.accessToken, process.env.EBAY_APP_ID || '').catch(() => null)
       : null
@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
       amazonUrl: `https://www.amazon.com/dp/${product.asin}`,
       ebayTitle: details?.title || undefined,
       source: 'manual',
+      confidence: 'manual',
     })
   } catch (error) {
     return apiError(getErrorText(error, 'Unable to save the ASIN mapping.'), {
