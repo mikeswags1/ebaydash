@@ -103,10 +103,18 @@ export async function runDashboardScript(file: string) {
   return requestJson<{ ok: true; message?: string }>(`/api/scripts/run?script=${file}`)
 }
 
-export async function fetchFinderProducts(niche: string, refresh = false) {
-  const params = new URLSearchParams({ niche })
+export async function fetchFinderProducts(
+  niche: string,
+  refresh = false,
+  options: { mode?: 'continuous'; limit?: number; excludeAsins?: string[] } = {}
+) {
+  const params = new URLSearchParams()
+  if (niche) params.set('niche', niche)
+  if (options.mode) params.set('mode', options.mode)
+  if (options.limit) params.set('limit', String(options.limit))
+  if (options.excludeAsins?.length) params.set('exclude', options.excludeAsins.join(','))
   if (refresh) params.set('refresh', '1')
-  return requestJson<{ ok: true; results: FinderProduct[] }>(`/api/scripts/product-finder?${params.toString()}`)
+  return requestJson<{ ok: true; results: FinderProduct[]; available?: number; source?: string; mode?: 'niche' | 'continuous' }>(`/api/scripts/product-finder?${params.toString()}`)
 }
 
 export async function publishProduct(input: {

@@ -11,6 +11,7 @@ import { FinancialsTab } from './components/FinancialsTab'
 import { ScriptsTab } from './components/ScriptsTab'
 import { AsinLookupTab } from './components/AsinLookupTab'
 import { ProductListingTab } from './components/ProductListingTab'
+import { ContinuousListingTab } from './components/ContinuousListingTab'
 import { SettingsTab } from './components/SettingsTab'
 import { SellOnEbayModal } from './components/SellOnEbayModal'
 import type { BannerState, EbayCredentialsSummary, FinancialItem, FinancialSummary, FinderProduct, ListProgress, OrderAsinMap, ScriptMessage, Tab } from './types'
@@ -92,6 +93,26 @@ type ListingState = {
   error: string | null
 }
 
+const FINDER_STOCK_TARGET = 30
+
+function tagFinderProducts(products: FinderProduct[], sourceMode: 'niche' | 'continuous') {
+  return products.map((product) => ({ ...product, sourceMode }))
+}
+
+function mergeRefilledProducts(current: FinderProduct[] | null, incoming: FinderProduct[], listedAsins: string[], sourceMode: 'niche' | 'continuous') {
+  const listed = new Set(listedAsins.map((asin) => asin.toUpperCase()))
+  const kept = (current || []).filter((product) => !listed.has(product.asin.toUpperCase()))
+  const seen = new Set(kept.map((product) => product.asin.toUpperCase()))
+  const additions = incoming.filter((product) => {
+    const asin = product.asin.toUpperCase()
+    if (listed.has(asin) || seen.has(asin)) return false
+    seen.add(asin)
+    return true
+  })
+
+  return tagFinderProducts([...kept, ...additions].slice(0, FINDER_STOCK_TARGET), sourceMode)
+}
+
 export default function Dashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -133,6 +154,13 @@ export default function Dashboard() {
     error: null,
   })
   const [finderState, setFinderState] = useState<FinderState>({
+    loading: false,
+    results: null,
+    error: null,
+    view: 'cards',
+    listAllProgress: null,
+  })
+  const [continuousFinderState, setContinuousFinderState] = useState<FinderState>({
     loading: false,
     results: null,
     error: null,
@@ -186,6 +214,12 @@ export default function Dashboard() {
         }
 
         setFinderState((prev) => ({
+          ...prev,
+          results: prev.results
+            ? prev.results.map((entry) => (entry.asin === product.asin ? nextProduct : entry))
+            : prev.results,
+        }))
+        setContinuousFinderState((prev) => ({
           ...prev,
           results: prev.results
             ? prev.results.map((entry) => (entry.asin === product.asin ? nextProduct : entry))
@@ -501,8 +535,8 @@ export default function Dashboard() {
     setBanner((prev) => (prev?.tone === 'error' ? null : prev))
 
     try {
-      const data = await fetchFinderProducts(nicheState.value)
-      setFinderState((prev) => ({ ...prev, results: data.results || [] }))
+      const data = await fetchFinderProducts(nicheState.value, false, { limit: FINDER_STOCK_TARGET })
+      setFinderState((prev) => ({ ...prev, results: tagFinderProducts(data.results || [], 'niche') }))
     } catch (error) {
       setFinderState((prev) => ({ ...prev, error: getErrorMessage(error, 'Product search failed.') }))
     } finally {
@@ -510,8 +544,30 @@ export default function Dashboard() {
     }
   }, [nicheState.value])
 
+  const handleFindContinuousProducts = useCallback(async () => {
+    setContinuousFinderState((prev) => ({ ...prev, loading: true, error: null, results: null, listAllProgress: null }))
+    setBanner((prev) => (prev?.tone === 'error' ? null : prev))
+
+    try {
+      const data = await fetchFinderProducts('', true, { mode: 'continuous', limit: FINDER_STOCK_TARGET })
+      setContinuousFinderState((prev) => ({ ...prev, results: tagFinderProducts(data.results || [], 'continuous') }))
+    } catch (error) {
+      setContinuousFinderState((prev) => ({ ...prev, results: [], error: getErrorMessage(error, 'Continuous product search failed.') }))
+    } finally {
+      setContinuousFinderState((prev) => ({ ...prev, loading: false }))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tab === 'continuous' && !continuousFinderState.results && !continuousFinderState.loading && !continuousFinderState.error) {
+      void handleFindContinuousProducts()
+    }
+  }, [continuousFinderState.error, continuousFinderState.loading, continuousFinderState.results, handleFindContinuousProducts, tab])
+
   const publishFinderProduct = useCallback(
     async (product: FinderProduct) => {
+      const productNiche = product.sourceMode === 'continuous' ? product.sourceNiche || null : nicheState.value
+
       try {
         const data = await publishProduct({
           asin: product.asin,
@@ -523,7 +579,7 @@ export default function Dashboard() {
           features: product.features,
           description: product.description,
           specs: product.specs,
-          niche: nicheState.value,
+          niche: productNiche,
         })
 
         return { asin: data.listingId ? product.asin : undefined }
@@ -533,6 +589,63 @@ export default function Dashboard() {
       }
     },
     [nicheState.value]
+  )
+
+  const refillNicheFinderProducts = useCallback(
+    async (listedAsins: string[]) => {
+      if (!nicheState.value || listedAsins.length === 0) return
+
+      const listed = new Set(listedAsins.map((asin) => asin.toUpperCase()))
+      const remainingAsins = (finderState.results || [])
+        .filter((product) => !listed.has(product.asin.toUpperCase()))
+        .map((product) => product.asin)
+
+      try {
+        const refreshed = await fetchFinderProducts(nicheState.value, true, {
+          limit: FINDER_STOCK_TARGET,
+          excludeAsins: remainingAsins,
+        })
+        setFinderState((prev) => ({
+          ...prev,
+          results: mergeRefilledProducts(prev.results || finderState.results, refreshed.results || [], listedAsins, 'niche'),
+        }))
+      } catch {
+        setFinderState((prev) => ({
+          ...prev,
+          results: prev.results ? prev.results.filter((product) => !listed.has(product.asin.toUpperCase())) : prev.results,
+        }))
+      }
+    },
+    [finderState.results, nicheState.value]
+  )
+
+  const refillContinuousProducts = useCallback(
+    async (listedAsins: string[]) => {
+      if (listedAsins.length === 0) return
+
+      const listed = new Set(listedAsins.map((asin) => asin.toUpperCase()))
+      const remainingAsins = (continuousFinderState.results || [])
+        .filter((product) => !listed.has(product.asin.toUpperCase()))
+        .map((product) => product.asin)
+
+      try {
+        const refreshed = await fetchFinderProducts('', true, {
+          mode: 'continuous',
+          limit: FINDER_STOCK_TARGET,
+          excludeAsins: remainingAsins,
+        })
+        setContinuousFinderState((prev) => ({
+          ...prev,
+          results: mergeRefilledProducts(prev.results || continuousFinderState.results, refreshed.results || [], listedAsins, 'continuous'),
+        }))
+      } catch {
+        setContinuousFinderState((prev) => ({
+          ...prev,
+          results: prev.results ? prev.results.filter((product) => !listed.has(product.asin.toUpperCase())) : prev.results,
+        }))
+      }
+    },
+    [continuousFinderState.results]
   )
 
   const handleListAll = useCallback(async () => {
@@ -560,17 +673,7 @@ export default function Dashboard() {
     }
 
     if (result.errors > 0) {
-      if (result.listedAsins.length > 0 && nicheState.value) {
-        try {
-          const refreshed = await fetchFinderProducts(nicheState.value, true)
-          setFinderState((prev) => ({ ...prev, results: refreshed.results || [] }))
-        } catch {
-          setFinderState((prev) => ({
-            ...prev,
-            results: prev.results ? prev.results.filter((product) => !result.listedAsins.includes(product.asin)) : prev.results,
-          }))
-        }
-      }
+      await refillNicheFinderProducts(result.listedAsins)
       setBanner({
         tone: 'error',
         text: `${result.listedAsins.length} product${result.listedAsins.length === 1 ? '' : 's'} listed, ${result.errors} failed. Review the remaining items and try again.`,
@@ -578,23 +681,53 @@ export default function Dashboard() {
       return
     }
 
-    if (nicheState.value) {
-      try {
-        const refreshed = await fetchFinderProducts(nicheState.value, true)
-        setFinderState((prev) => ({ ...prev, results: refreshed.results || [] }))
-      } catch {
-        setFinderState((prev) => ({
-          ...prev,
-          results: prev.results ? prev.results.filter((product) => !result.listedAsins.includes(product.asin)) : prev.results,
-        }))
-      }
-    }
+    await refillNicheFinderProducts(result.listedAsins)
 
     setBanner({
       tone: 'success',
       text: `${result.listedAsins.length} product${result.listedAsins.length === 1 ? '' : 's'} listed successfully.`,
     })
-  }, [connectionState.ebayConnected, finderState.results, nicheState.value, publishFinderProduct])
+  }, [connectionState.ebayConnected, finderState.results, publishFinderProduct, refillNicheFinderProducts])
+
+  const handleContinuousListAll = useCallback(async () => {
+    if (!connectionState.ebayConnected) {
+      setBanner({ tone: 'error', text: 'Connect eBay first in Settings.' })
+      return
+    }
+
+    const products = tagFinderProducts(continuousFinderState.results || [], 'continuous')
+    if (products.length === 0) return
+
+    const result = await listProductsInBatches({
+      products,
+      publish: publishFinderProduct,
+      onProgress: (progress) => {
+        setContinuousFinderState((prev) => ({ ...prev, listAllProgress: progress }))
+      },
+    })
+
+    if (result.reconnectRequired) {
+      setListingState((prev) => ({ ...prev, error: 'RECONNECT_REQUIRED' }))
+      setConnectionState((prev) => ({ ...prev, ebayConnected: false, ebayNeedsReconnect: true }))
+      setBanner({ tone: 'error', text: 'Your eBay session expired while listing. Reconnect in Settings and try again.' })
+      return
+    }
+
+    if (result.errors > 0) {
+      await refillContinuousProducts(result.listedAsins)
+      setBanner({
+        tone: 'error',
+        text: `${result.listedAsins.length} product${result.listedAsins.length === 1 ? '' : 's'} listed, ${result.errors} failed. Review the remaining items and try again.`,
+      })
+      return
+    }
+
+    await refillContinuousProducts(result.listedAsins)
+    setBanner({
+      tone: 'success',
+      text: `${result.listedAsins.length} product${result.listedAsins.length === 1 ? '' : 's'} listed successfully.`,
+    })
+  }, [connectionState.ebayConnected, continuousFinderState.results, publishFinderProduct, refillContinuousProducts])
 
   const handleRunScript = useCallback(async (file: string) => {
     setScriptRunning(file)
@@ -664,6 +797,9 @@ export default function Dashboard() {
     setListingState((prev) => ({ ...prev, loading: true, error: null }))
 
     try {
+      const sourceMode = productToPublish.sourceMode === 'continuous' ? 'continuous' : 'niche'
+      const productNiche = sourceMode === 'continuous' ? productToPublish.sourceNiche || null : nicheState.value
+
       const data = await publishProduct({
         asin: productToPublish.asin,
         title: productToPublish.title,
@@ -674,20 +810,14 @@ export default function Dashboard() {
         features: productToPublish.features,
         description: productToPublish.description,
         specs: productToPublish.specs,
-        niche: nicheState.value,
+        niche: productNiche,
       })
 
       setListingState((prev) => ({ ...prev, result: data }))
-      if (nicheState.value) {
-        try {
-          const refreshed = await fetchFinderProducts(nicheState.value, true)
-          setFinderState((prev) => ({ ...prev, results: refreshed.results || [] }))
-        } catch {
-          setFinderState((prev) => ({
-            ...prev,
-            results: prev.results ? prev.results.filter((product) => product.asin !== productToPublish.asin) : prev.results,
-          }))
-        }
+      if (sourceMode === 'continuous') {
+        await refillContinuousProducts([productToPublish.asin])
+      } else {
+        await refillNicheFinderProducts([productToPublish.asin])
       }
       setBanner({ tone: 'success', text: `Listing ${data.listingId} is now live on eBay.` })
     } catch (error) {
@@ -701,7 +831,7 @@ export default function Dashboard() {
     } finally {
       setListingState((prev) => ({ ...prev, loading: false }))
     }
-  }, [listingState.modal, listingState.price, listingState.validated, nicheState.value, validateListingProduct])
+  }, [listingState.modal, listingState.price, listingState.validated, nicheState.value, refillContinuousProducts, refillNicheFinderProducts, validateListingProduct])
 
   const grossRevenue = useMemo(() => getGrossRevenue(orderState.orders), [orderState.orders])
 
@@ -794,9 +924,23 @@ export default function Dashboard() {
               onFindProducts={() => void handleFindProducts()}
               onOpenAsinLookup={() => setTab('asin')}
               onOpenScripts={() => setTab('scripts')}
-              onOpenListModal={openListModal}
+              onOpenListModal={(product) => openListModal({ ...product, sourceMode: 'niche' })}
               onListAll={() => void handleListAll()}
               listAllProgress={finderState.listAllProgress}
+              connected={connectionState.ebayConnected}
+            />
+          ) : null}
+          {tab === 'continuous' ? (
+            <ContinuousListingTab
+              finderLoading={continuousFinderState.loading}
+              finderResults={continuousFinderState.results}
+              finderError={continuousFinderState.error}
+              finderView={continuousFinderState.view}
+              onFinderViewChange={(view) => setContinuousFinderState((prev) => ({ ...prev, view }))}
+              onFindProducts={() => void handleFindContinuousProducts()}
+              onOpenListModal={(product) => openListModal({ ...product, sourceMode: 'continuous' })}
+              onListAll={() => void handleContinuousListAll()}
+              listAllProgress={continuousFinderState.listAllProgress}
               connected={connectionState.ebayConnected}
             />
           ) : null}

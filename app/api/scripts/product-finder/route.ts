@@ -9,7 +9,10 @@ import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice, isHe
 
 const MAX_COST   = 300
 const CACHE_TTL  = 23 * 60 * 60 * 1000 // 23 hours — refresh once per day
-const CACHE_VERSION = 2
+const CACHE_VERSION = 3
+const TARGET_STOCK = 30
+const MAX_POOL_SIZE = 90
+const CONTINUOUS_CACHE_KEY = '__continuous_listing__'
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -26,6 +29,7 @@ type Product = {
   asin: string; title: string; amazonPrice: number; ebayPrice: number
   profit: number; roi: number; imageUrl?: string; risk: string; salesVolume?: string
   images?: string[]; features?: string[]; description?: string; specs?: Array<[string, string]>
+  sourceNiche?: string; qualityScore?: number
   _rating?: number; _numRatings?: number
 }
 
@@ -76,12 +80,8 @@ function dedupeProducts(products: Product[]) {
       continue
     }
 
-    const duplicateScore =
-      duplicate.profit * Math.log10(parseSales(duplicate.salesVolume) + 1) *
-      (duplicate._rating ? duplicate._rating / 5 : 0.6) * Math.log10((duplicate._numRatings ?? 0) + 10)
-    const productScore =
-      product.profit * Math.log10(parseSales(product.salesVolume) + 1) *
-      (product._rating ? product._rating / 5 : 0.6) * Math.log10((product._numRatings ?? 0) + 10)
+    const duplicateScore = getProductScore(duplicate)
+    const productScore = getProductScore(product)
 
     if (productScore > duplicateScore) {
       const index = kept.indexOf(duplicate)
@@ -114,6 +114,45 @@ const parseSales = (v?: string) => {
   if (!v) return 1
   const n = parseInt(v.replace(/[^0-9]/g, ''), 10)
   return isNaN(n) ? 1 : Math.max(1, n)
+}
+
+function shuffle<T>(values: T[]) {
+  const arr = [...values]
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+}
+
+function getProductScore(product: Product) {
+  const sales = parseSales(product.salesVolume)
+  const rating = product._rating && product._rating > 0 ? product._rating : 3.8
+  const reviews = product._numRatings ?? 0
+  const margin = product.ebayPrice > 0 ? product.profit / product.ebayPrice : 0
+  const roi = product.roi / 100
+  const demandWeight = Math.log10(sales + 10)
+  const ratingWeight = Math.max(0.55, Math.min(1.08, rating / 4.6))
+  const reviewWeight = Math.log10(reviews + 25)
+  const marginWeight = Math.max(0.35, Math.min(1.5, margin * 3.5))
+  const roiWeight = Math.max(0.35, Math.min(1.45, roi * 1.4))
+  const priceSweetSpot = product.amazonPrice >= 12 && product.amazonPrice <= 120 ? 1.08 : product.amazonPrice > 180 ? 0.78 : 0.95
+  const riskPenalty = product.risk === 'HIGH' ? 0.68 : product.risk === 'MEDIUM' ? 0.88 : 1
+  const imageWeight = product.imageUrl ? 1 : 0.72
+  const score = product.profit * demandWeight * ratingWeight * reviewWeight * marginWeight * roiWeight * priceSweetSpot * riskPenalty * imageWeight
+  return Number.isFinite(score) ? parseFloat(score.toFixed(2)) : 0
+}
+
+function rankProducts(products: Product[], randomize = false) {
+  const ranked = dedupeProducts(products)
+    .map((product) => ({ ...product, qualityScore: getProductScore(product) }))
+    .sort((a, b) => (b.qualityScore || 0) - (a.qualityScore || 0))
+
+  if (!randomize) return ranked
+
+  const top = ranked.slice(0, Math.min(60, ranked.length))
+  const rest = ranked.slice(top.length)
+  return [...shuffle(top), ...rest]
 }
 
 const NICHE_QUERIES: Record<string, string[]> = {
@@ -175,7 +214,17 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
-  const niche = req.nextUrl.searchParams.get('niche')
+  const mode = req.nextUrl.searchParams.get('mode')
+  const continuousMode = mode === 'continuous'
+  const requestedNiche = req.nextUrl.searchParams.get('niche')
+  const niche = continuousMode ? CONTINUOUS_CACHE_KEY : requestedNiche
+  const targetCount = Math.max(1, Math.min(60, Number(req.nextUrl.searchParams.get('limit') || TARGET_STOCK) || TARGET_STOCK))
+  const excludeAsins = new Set(
+    (req.nextUrl.searchParams.get('exclude') || '')
+      .split(',')
+      .map((asin) => asin.trim().toUpperCase())
+      .filter(Boolean)
+  )
   if (!niche) return apiError('Niche is required.', { status: 400, code: 'NICHE_REQUIRED' })
 
   const forceRefresh = req.nextUrl.searchParams.get('refresh') === '1'
@@ -190,7 +239,7 @@ export async function GET(req: NextRequest) {
   try {
     await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ`.catch(() => {})
     const listedRows = await queryRows<{ asin: string; title: string | null }>`SELECT asin, title FROM listed_asins WHERE user_id = ${session.user.id} AND ended_at IS NULL`
-    listedAsins = new Set(listedRows.map((r) => String(r.asin)))
+    listedAsins = new Set(listedRows.map((r) => String(r.asin).toUpperCase()))
     listedTitles = listedRows.map((r) => String(r.title || '')).filter(Boolean)
   } catch { /* table may not exist yet */ }
 
@@ -198,7 +247,22 @@ export async function GET(req: NextRequest) {
     listedTitles.some((listedTitle) => getTitleScore(listedTitle, title) >= 0.82)
 
   const shouldBlockProduct = (product: Pick<Product, 'asin' | 'title'>) =>
-    listedAsins.has(product.asin) || matchesActiveListing(product.title)
+    listedAsins.has(product.asin.toUpperCase()) || excludeAsins.has(product.asin.toUpperCase()) || matchesActiveListing(product.title)
+
+  const getAvailableProducts = (products: Product[]) =>
+    rankProducts(products.filter((product) => !shouldBlockProduct(product)), continuousMode)
+
+  const respondWithProducts = (products: Product[], source: string) => {
+    const ranked = getAvailableProducts(products)
+    return apiOk({
+      niche: continuousMode ? 'Continuous Listing' : niche,
+      mode: continuousMode ? 'continuous' : 'niche',
+      results: ranked.slice(0, targetCount),
+      count: Math.min(ranked.length, targetCount),
+      available: ranked.length,
+      source,
+    })
+  }
 
   // ── Check cache ──────────────────────────────────────────────────────────────
   let cacheRow: { results: Product[]; cached_at: Date; version?: number } | null = null
@@ -212,8 +276,10 @@ export async function GET(req: NextRequest) {
 
   if (cacheIsFresh && !forceRefresh) {
     // Serve from cache — filter out already-listed ASINs for this user
-    const filtered = (cacheRow!.results as Product[]).filter(p => !shouldBlockProduct(p))
-    return apiOk({ niche, results: filtered, count: filtered.length, source: 'cache' })
+    const cachedAvailable = getAvailableProducts(cacheRow!.results as Product[])
+    if (cachedAvailable.length >= targetCount) {
+      return respondWithProducts(cachedAvailable, 'cache')
+    }
   }
 
   // ── Fetch fresh data from API ────────────────────────────────────────────────
@@ -221,8 +287,7 @@ export async function GET(req: NextRequest) {
   if (!rapidKey) {
     // No API key — fall back to cache if available
     if (cacheRow) {
-      const filtered = (cacheRow.results as Product[]).filter(p => !shouldBlockProduct(p))
-      return apiOk({ niche, results: filtered, count: filtered.length, source: 'cache' })
+      return respondWithProducts(cacheRow.results as Product[], 'cache')
     }
     return apiError('Product sourcing is not configured right now.', {
       status: 503,
@@ -231,14 +296,16 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const queries   = NICHE_QUERIES[niche] || [`${niche} bestseller`]
+  const queryEntries = continuousMode
+    ? shuffle(Object.entries(NICHE_QUERIES).flatMap(([sourceNiche, queries]) => queries.map((query) => ({ sourceNiche, query })))).slice(0, 14)
+    : (NICHE_QUERIES[niche] || [`${niche} bestseller`]).map((query) => ({ sourceNiche: niche, query }))
   const results: Product[] = []
   const seenAsins = new Set<string>()
   let apiQuotaExceeded = false
 
   const processProducts = (products: Record<string, unknown>[]) => {
     for (const p of products) {
-      if (results.length >= 40) break
+      if (results.length >= MAX_POOL_SIZE) break
       const asin = String(p.asin || '')
       const title       = String(p.product_title || '')
       if (!asin || seenAsins.has(asin) || shouldBlockProduct({ asin, title })) continue
@@ -250,18 +317,23 @@ export async function GET(req: NextRequest) {
       if (!title || isRejected(title)) continue
       const { ebayPrice, profit, roi } = calcMetrics(price)
       if (!isHealthyListing(price, ebayPrice, EBAY_DEFAULT_FEE_RATE)) continue
+      const rating = parseFloat(String(p.product_star_rating || '0')) || 0
+      const reviewCount = parseInt(String(p.product_num_ratings || '0').replace(/[^0-9]/g, ''), 10) || 0
+      if (rating > 0 && rating < 3.8) continue
+      if (reviewCount > 0 && reviewCount < 12 && parseSales(salesVolume) < 20) continue
       const risk = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
       results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk, salesVolume,
-        _rating: parseFloat(String(p.product_star_rating || '0')) || 0,
-        _numRatings: parseInt(String(p.product_num_ratings || '0').replace(/[^0-9]/g, ''), 10) || 0,
+        sourceNiche: (p as Record<string, unknown>)._sourceNiche ? String((p as Record<string, unknown>)._sourceNiche) : undefined,
+        _rating: rating,
+        _numRatings: reviewCount,
       })
     }
   }
 
-  for (const query of queries) {
-    if (results.length >= 20 || apiQuotaExceeded) break
+  for (const { query, sourceNiche } of queryEntries) {
+    if (results.length >= targetCount * 2 || apiQuotaExceeded) break
     for (const page of [1, 2]) {
-      if (results.length >= 20) break
+      if (results.length >= targetCount * 2) break
       try {
         const res = await fetch(
           `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(query)}&country=US&category_id=aps&page=${page}`,
@@ -270,7 +342,7 @@ export async function GET(req: NextRequest) {
         if (res.status === 429 || res.status === 403) { apiQuotaExceeded = true; break }
         const data = await res.json()
         if (String(data?.message || '').toLowerCase().match(/limit|quota|exceed/)) { apiQuotaExceeded = true; break }
-        const products: Record<string, unknown>[] = data?.data?.products || []
+        const products: Record<string, unknown>[] = (data?.data?.products || []).map((product: Record<string, unknown>) => ({ ...product, _sourceNiche: sourceNiche }))
         processProducts(products)
         if (products.length < 5) break
       } catch { continue }
@@ -279,19 +351,10 @@ export async function GET(req: NextRequest) {
 
   // ── Save fresh results to cache ──────────────────────────────────────────────
   if (results.length > 0) {
-    results.sort((a, b) => {
-      const score = (p: Product) => {
-        const profitWeight  = p.profit
-        const salesWeight   = Math.log10(parseSales(p.salesVolume) + 1)
-        const ratingWeight  = p._rating  ? p._rating / 5  : 0.6
-        const reviewWeight  = Math.log10((p._numRatings ?? 0) + 10)
-        return profitWeight * salesWeight * ratingWeight * reviewWeight
-      }
-      return score(b) - score(a)
-    })
+    results.splice(0, results.length, ...rankProducts(results, continuousMode))
 
     const enriched = await Promise.all(
-      results.slice(0, 20).map(async (product) => {
+      results.slice(0, targetCount).map(async (product) => {
         const validated = await fetchAmazonProductByAsin({
           asin: product.asin,
           fallbackImage: product.imageUrl,
@@ -327,12 +390,12 @@ export async function GET(req: NextRequest) {
     const filteredEnriched = dedupeProducts(enriched.filter((product): product is Product => Boolean(product)))
     const droppedSourceAsins = new Set(
       results
-        .slice(0, 20)
+        .slice(0, targetCount)
         .map((product) => product.asin)
         .filter((asin) => !filteredEnriched.some((product) => product.asin === asin))
     )
-    const remainder = results.slice(20).filter((product) => !droppedSourceAsins.has(product.asin))
-    results.splice(0, results.length, ...filteredEnriched, ...remainder)
+    const remainder = results.slice(targetCount).filter((product) => !droppedSourceAsins.has(product.asin))
+    results.splice(0, results.length, ...rankProducts([...filteredEnriched, ...remainder], continuousMode))
 
     try {
       await sql`
@@ -345,18 +408,17 @@ export async function GET(req: NextRequest) {
   // ── API failed — try direct Amazon scrape, then fall back to cache ──────────
   if (apiQuotaExceeded && results.length === 0) {
     if (cacheRow) {
-      const filtered = (cacheRow.results as Product[]).filter(p => !shouldBlockProduct(p))
-      return apiOk({ niche, results: filtered, count: filtered.length, source: 'stale_cache' })
+      return respondWithProducts(cacheRow.results as Product[], 'stale_cache')
     }
 
     // No cache at all — scrape Amazon search directly (free, no quota)
-    const scrapeQueries = (NICHE_QUERIES[niche] || [`${niche} bestseller`]).slice(0, 2)
-    for (const query of scrapeQueries) {
-      if (results.length >= 20) break
+    const scrapeQueries = continuousMode ? queryEntries.slice(0, 5) : queryEntries.slice(0, 2)
+    for (const { query, sourceNiche } of scrapeQueries) {
+      if (results.length >= targetCount) break
       try {
         const scraped = await scrapeAmazonSearch(query)
         for (const p of scraped) {
-          if (results.length >= 20) break
+          if (results.length >= targetCount) break
           if (!p.asin || seenAsins.has(p.asin) || shouldBlockProduct({ asin: p.asin, title: p.title })) continue
           seenAsins.add(p.asin)
           if (!p.price || p.price <= 0 || p.price > MAX_COST) continue
@@ -365,25 +427,18 @@ export async function GET(req: NextRequest) {
           if (!isHealthyListing(p.price, ebayPrice, EBAY_DEFAULT_FEE_RATE)) continue
           const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
           results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
-            imageUrl: p.imageUrl, risk, salesVolume: undefined, _rating: p.rating, _numRatings: p.reviewCount })
+            imageUrl: p.imageUrl, risk, salesVolume: undefined, sourceNiche, _rating: p.rating, _numRatings: p.reviewCount })
         }
       } catch { /* ignore */ }
     }
 
     if (results.length > 0) {
-      results.sort((a, b) => {
-        const score = (p: Product) =>
-          p.profit * Math.log10(parseSales(p.salesVolume) + 1) *
-          (p._rating ? p._rating / 5 : 0.6) * Math.log10((p._numRatings ?? 0) + 10)
-        return score(b) - score(a)
-      })
-      results.splice(0, results.length, ...dedupeProducts(results))
+      results.splice(0, results.length, ...rankProducts(results, continuousMode))
       try {
         await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results)}, ${CACHE_VERSION})
           ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()`
       } catch { /* non-fatal */ }
-      const filtered = results.filter(p => !shouldBlockProduct(p))
-      return apiOk({ niche, results: filtered, count: filtered.length, source: 'scrape' })
+      return respondWithProducts(results, 'scrape')
     }
 
     return apiError('Product search is temporarily unavailable. Try again in a few minutes.', {
@@ -393,6 +448,5 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const filtered = results.filter(p => !shouldBlockProduct(p))
-  return apiOk({ niche, results: filtered, count: filtered.length, source: 'live' })
+  return respondWithProducts(results, 'live')
 }

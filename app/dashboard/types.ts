@@ -1,4 +1,4 @@
-export type Tab = 'overview' | 'orders' | 'financials' | 'scripts' | 'asin' | 'product' | 'settings'
+export type Tab = 'overview' | 'orders' | 'financials' | 'scripts' | 'asin' | 'product' | 'continuous' | 'settings'
 
 export interface AsinResult {
   asin: string
@@ -46,6 +46,9 @@ export interface FinderProduct {
   specs?: Array<[string, string]>
   risk: string
   salesVolume?: string
+  sourceNiche?: string
+  sourceMode?: 'niche' | 'continuous'
+  qualityScore?: number
 }
 
 export interface ListResult {

@@ -7,6 +7,7 @@ export const NAV_ITEMS: Array<{ id: Tab; label: string; badge?: 'orders' }> = [
   { id: 'scripts', label: 'Scripts' },
   { id: 'asin', label: 'ASIN Lookup' },
   { id: 'product', label: 'Product Listing' },
+  { id: 'continuous', label: 'Continuous Listing' },
   { id: 'settings', label: 'Settings' },
 ]
 

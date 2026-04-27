@@ -198,7 +198,7 @@ export function ProductListingTab({
   )
 }
 
-function FinderResults({
+export function FinderResults({
   connected,
   niche,
   results,
@@ -293,6 +293,7 @@ function FinderResults({
                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <RiskBadge risk={product.risk} />
                   {product.salesVolume ? <span style={{ fontSize: '9px', color: 'var(--dim)' }}>Sales: {product.salesVolume}</span> : null}
+                  {product.sourceNiche ? <span style={{ fontSize: '9px', color: 'var(--dim)' }}>{product.sourceNiche}</span> : null}
                 </div>
                 <button onClick={() => onOpenListModal(product)} className="btn btn-gold btn-sm" style={{ fontSize: '10px' }}>
                   Review Listing
@@ -318,7 +319,9 @@ function FinderResults({
                 <tr key={product.asin} style={{ background: index % 2 === 0 ? 'rgba(17,12,7,0.80)' : 'rgba(12,9,4,0.70)', borderBottom: '1px solid rgba(195,158,88,0.06)' }}>
                   <td style={{ padding: '12px 14px', maxWidth: '280px' }}>
                     <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.title}</div>
-                    <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '2px' }}>{product.asin}</div>
+                    <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '2px' }}>
+                      {product.asin}{product.sourceNiche ? ` / ${product.sourceNiche}` : ''}
+                    </div>
                   </td>
                   <td style={{ padding: '12px 14px', textAlign: 'center', fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, fontSize: '12px', color: 'var(--txt)' }}>${product.amazonPrice.toFixed(2)}</td>
                   <td style={{ padding: '12px 14px', textAlign: 'center', fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700, fontSize: '12px', color: 'var(--gld2)' }}>${product.ebayPrice.toFixed(2)}</td>
