@@ -1,4 +1,124 @@
+'use client'
+import { useState } from 'react'
 import type { AsinResult, EbayOrder, OrderAsinMap } from '../types'
+
+function AmazonAsinLookup() {
+  const [asin, setAsin] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<AsinResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function lookup() {
+    const clean = asin.trim().toUpperCase()
+    if (!clean || clean.length !== 10) return
+    setLoading(true)
+    setError(null)
+    setResult(null)
+    try {
+      const res = await fetch(`/api/amazon/lookup?asin=${encodeURIComponent(clean)}`)
+      const data = await res.json()
+      if (data.error) { setError(data.error); return }
+      setResult(data)
+    } catch {
+      setError('Something went wrong — check the ASIN and try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function reset() {
+    setAsin('')
+    setResult(null)
+    setError(null)
+  }
+
+  return (
+    <div className="card" style={{ padding: '28px 32px' }}>
+      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--txt)', marginBottom: '4px' }}>
+        Amazon ASIN Lookup
+      </div>
+      <div style={{ fontSize: '11px', color: 'var(--dim)', lineHeight: 1.6, marginBottom: '16px' }}>
+        Found a product on Amazon you want to sell, or already bought something and need to check the details?
+        Paste the ASIN (the 10-character code in the Amazon URL — e.g. <code style={{ color: 'var(--gold)', fontFamily: 'monospace' }}>B08N5WRWNW</code>) and get the full product info instantly.
+      </div>
+
+      {!result ? (
+        <>
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '6px' }}>
+            <input
+              value={asin}
+              onChange={e => setAsin(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10))}
+              onKeyDown={e => e.key === 'Enter' ? lookup() : undefined}
+              placeholder="e.g. B08N5WRWNW"
+              style={{ flex: 1, fontFamily: 'monospace', fontSize: '16px', letterSpacing: '0.1em' }}
+            />
+            <button onClick={lookup} className="btn btn-gold" disabled={loading || asin.length !== 10}>
+              {loading ? 'Looking up...' : 'Look Up'}
+            </button>
+          </div>
+          {asin.length > 0 && asin.length < 10 ? (
+            <div style={{ fontSize: '10px', color: 'var(--dim)', marginBottom: '8px' }}>
+              {10 - asin.length} more character{10 - asin.length !== 1 ? 's' : ''} needed
+            </div>
+          ) : null}
+          {error ? (
+            <div style={{ marginTop: '12px', padding: '12px 16px', borderRadius: '10px', background: 'rgba(232,63,80,0.07)', border: '1px solid rgba(232,63,80,0.20)' }}>
+              <div style={{ fontSize: '12px', color: 'var(--red)', fontWeight: 600, marginBottom: '3px' }}>Product not found</div>
+              <div style={{ fontSize: '11px', color: 'var(--sil)', lineHeight: 1.6 }}>{error}</div>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: '18px', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap' }}>
+            {result.imageUrl ? (
+              <img src={result.imageUrl} alt={result.title} style={{ width: '90px', height: '90px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }} />
+            ) : null}
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--grn)', marginBottom: '6px' }}>✓ Product Found</div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4, marginBottom: '10px' }}>{result.title}</div>
+              <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--dim)', marginBottom: '2px' }}>Amazon Price</div>
+                  <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '26px', fontWeight: 800, color: 'var(--gld2)' }}>
+                    ${result.amazonPrice.toFixed(2)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--dim)', marginBottom: '2px' }}>ASIN</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '13px', color: 'var(--gold)', fontWeight: 600 }}>{result.asin}</div>
+                </div>
+                <div style={{
+                  padding: '4px 12px', borderRadius: '20px', fontSize: '10px', fontWeight: 700,
+                  background: result.available ? 'rgba(46,207,118,0.10)' : 'rgba(232,63,80,0.10)',
+                  color: result.available ? 'var(--grn)' : 'var(--red)',
+                  border: `1px solid ${result.available ? 'rgba(46,207,118,0.25)' : 'rgba(232,63,80,0.25)'}`,
+                }}>
+                  {result.available ? 'In Stock' : 'Out of Stock'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
+            <a
+              href={result.amazonUrl || `https://www.amazon.com/dp/${result.asin}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-gold"
+              style={{ flex: 1, textAlign: 'center', fontSize: '13px', padding: '12px', textDecoration: 'none', fontWeight: 700, minWidth: '160px' }}
+            >
+              View on Amazon
+            </a>
+            <button onClick={reset} className="btn btn-ghost" style={{ fontSize: '12px', padding: '12px 18px' }}>
+              Look Up Another
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 export function AsinLookupTab({
   asinInput,
@@ -287,6 +407,17 @@ export function AsinLookupTab({
             </div>
           </div>
         ) : null}
+
+        {/* Divider */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', margin: '8px 0 20px' }}>
+          <div style={{ flex: 1, height: '1px', background: 'rgba(195,158,88,0.10)' }} />
+          <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)' }}>
+            Or look up any Amazon product
+          </div>
+          <div style={{ flex: 1, height: '1px', background: 'rgba(195,158,88,0.10)' }} />
+        </div>
+
+        <AmazonAsinLookup />
 
       </div>
     </div>
