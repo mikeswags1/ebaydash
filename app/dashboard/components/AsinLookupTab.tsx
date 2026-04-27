@@ -7,6 +7,10 @@ function AmazonAsinLookup() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<AsinResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [linkItemId, setLinkItemId] = useState('')
+  const [linking, setLinking] = useState(false)
+  const [linkSuccess, setLinkSuccess] = useState(false)
+  const [linkError, setLinkError] = useState<string | null>(null)
 
   async function lookup() {
     const clean = asin.trim().toUpperCase()
@@ -14,6 +18,8 @@ function AmazonAsinLookup() {
     setLoading(true)
     setError(null)
     setResult(null)
+    setLinkSuccess(false)
+    setLinkError(null)
     try {
       const res = await fetch(`/api/amazon/lookup?asin=${encodeURIComponent(clean)}`)
       const data = await res.json()
@@ -26,10 +32,34 @@ function AmazonAsinLookup() {
     }
   }
 
+  async function saveLink() {
+    if (!result || !linkItemId.trim()) return
+    setLinking(true)
+    setLinkError(null)
+    try {
+      const res = await fetch('/api/fulfillment/manual-map', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: linkItemId.trim(), asin: result.asin }),
+      })
+      const data = await res.json()
+      if (data.error || data.ok === false) { setLinkError(data.error?.message || data.error || 'Failed to save link.'); return }
+      setLinkSuccess(true)
+      setLinkItemId('')
+    } catch {
+      setLinkError('Something went wrong — try again.')
+    } finally {
+      setLinking(false)
+    }
+  }
+
   function reset() {
     setAsin('')
     setResult(null)
     setError(null)
+    setLinkItemId('')
+    setLinkSuccess(false)
+    setLinkError(null)
   }
 
   return (
@@ -38,8 +68,8 @@ function AmazonAsinLookup() {
         Amazon ASIN Lookup
       </div>
       <div style={{ fontSize: '11px', color: 'var(--dim)', lineHeight: 1.6, marginBottom: '16px' }}>
-        Found a product on Amazon you want to sell, or already bought something and need to check the details?
-        Paste the ASIN (the 10-character code in the Amazon URL — e.g. <code style={{ color: 'var(--gold)', fontFamily: 'monospace' }}>B08N5WRWNW</code>) and get the full product info instantly.
+        Already bought something or found a product on Amazon? Paste the ASIN to look it up and optionally link it to an eBay order.
+        Find the ASIN in the Amazon URL: <code style={{ color: 'var(--gold)', fontFamily: 'monospace' }}>amazon.com/dp/<strong>B08N5WRWNW</strong></code>
       </div>
 
       {!result ? (
@@ -57,63 +87,83 @@ function AmazonAsinLookup() {
             </button>
           </div>
           {asin.length > 0 && asin.length < 10 ? (
-            <div style={{ fontSize: '10px', color: 'var(--dim)', marginBottom: '8px' }}>
-              {10 - asin.length} more character{10 - asin.length !== 1 ? 's' : ''} needed
-            </div>
+            <div style={{ fontSize: '10px', color: 'var(--dim)' }}>{10 - asin.length} more character{10 - asin.length !== 1 ? 's' : ''} needed</div>
           ) : null}
           {error ? (
             <div style={{ marginTop: '12px', padding: '12px 16px', borderRadius: '10px', background: 'rgba(232,63,80,0.07)', border: '1px solid rgba(232,63,80,0.20)' }}>
               <div style={{ fontSize: '12px', color: 'var(--red)', fontWeight: 600, marginBottom: '3px' }}>Product not found</div>
-              <div style={{ fontSize: '11px', color: 'var(--sil)', lineHeight: 1.6 }}>{error}</div>
+              <div style={{ fontSize: '11px', color: 'var(--sil)' }}>{error}</div>
             </div>
           ) : null}
         </>
       ) : (
         <>
+          {/* Product result */}
           <div style={{ display: 'flex', gap: '18px', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap' }}>
             {result.imageUrl ? (
-              <img src={result.imageUrl} alt={result.title} style={{ width: '90px', height: '90px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }} />
+              <img src={result.imageUrl} alt={result.title} style={{ width: '88px', height: '88px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }} />
             ) : null}
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--grn)', marginBottom: '6px' }}>✓ Product Found</div>
               <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4, marginBottom: '10px' }}>{result.title}</div>
-              <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '18px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--dim)', marginBottom: '2px' }}>Amazon Price</div>
-                  <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '26px', fontWeight: 800, color: 'var(--gld2)' }}>
-                    ${result.amazonPrice.toFixed(2)}
-                  </div>
+                  <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '24px', fontWeight: 800, color: 'var(--gld2)' }}>${result.amazonPrice.toFixed(2)}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--dim)', marginBottom: '2px' }}>ASIN</div>
-                  <div style={{ fontFamily: 'monospace', fontSize: '13px', color: 'var(--gold)', fontWeight: 600 }}>{result.asin}</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--gold)', fontWeight: 600 }}>{result.asin}</div>
                 </div>
-                <div style={{
-                  padding: '4px 12px', borderRadius: '20px', fontSize: '10px', fontWeight: 700,
-                  background: result.available ? 'rgba(46,207,118,0.10)' : 'rgba(232,63,80,0.10)',
-                  color: result.available ? 'var(--grn)' : 'var(--red)',
-                  border: `1px solid ${result.available ? 'rgba(46,207,118,0.25)' : 'rgba(232,63,80,0.25)'}`,
-                }}>
+                <div style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, background: result.available ? 'rgba(46,207,118,0.10)' : 'rgba(232,63,80,0.10)', color: result.available ? 'var(--grn)' : 'var(--red)', border: `1px solid ${result.available ? 'rgba(46,207,118,0.25)' : 'rgba(232,63,80,0.25)'}` }}>
                   {result.available ? 'In Stock' : 'Out of Stock'}
                 </div>
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
-            <a
-              href={result.amazonUrl || `https://www.amazon.com/dp/${result.asin}`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-gold"
-              style={{ flex: 1, textAlign: 'center', fontSize: '13px', padding: '12px', textDecoration: 'none', fontWeight: 700, minWidth: '160px' }}
-            >
-              View on Amazon
-            </a>
-            <button onClick={reset} className="btn btn-ghost" style={{ fontSize: '12px', padding: '12px 18px' }}>
-              Look Up Another
-            </button>
+          <a
+            href={result.amazonUrl || `https://www.amazon.com/dp/${result.asin}`}
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-gold"
+            style={{ display: 'block', textAlign: 'center', fontSize: '13px', padding: '12px', textDecoration: 'none', fontWeight: 700, marginBottom: '16px' }}
+          >
+            View on Amazon
+          </a>
+
+          {/* Link to eBay order */}
+          <div style={{ padding: '18px 20px', borderRadius: '12px', background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(195,158,88,0.12)' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--txt)', marginBottom: '4px' }}>Link to an eBay Order</div>
+            <div style={{ fontSize: '11px', color: 'var(--dim)', lineHeight: 1.55, marginBottom: '12px' }}>
+              Want to connect this Amazon product to one of your eBay orders? Enter the eBay item ID and we'll save the link — it'll show up in Order Lookup and Financials automatically.
+            </div>
+            {linkSuccess ? (
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(46,207,118,0.08)', border: '1px solid rgba(46,207,118,0.2)', fontSize: '12px', color: 'var(--grn)', fontWeight: 600 }}>
+                ✓ Linked! This order will now show up with Amazon source data.
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <input
+                    value={linkItemId}
+                    onChange={e => setLinkItemId(e.target.value.replace(/\D/g, ''))}
+                    onKeyDown={e => e.key === 'Enter' ? saveLink() : undefined}
+                    placeholder="eBay Item ID (e.g. 387234561234)"
+                    style={{ flex: '1 1 200px', fontFamily: 'monospace', fontSize: '14px', letterSpacing: '0.06em' }}
+                  />
+                  <button onClick={saveLink} className="btn btn-gold btn-sm" disabled={linking || !linkItemId.trim()}>
+                    {linking ? 'Saving...' : 'Save Link'}
+                  </button>
+                </div>
+                {linkError ? <div style={{ marginTop: '8px', fontSize: '11px', color: 'var(--red)' }}>{linkError}</div> : null}
+              </>
+            )}
           </div>
+
+          <button onClick={reset} className="btn btn-ghost btn-sm" style={{ fontSize: '11px', marginTop: '14px' }}>
+            Look Up Another ASIN
+          </button>
         </>
       )}
     </div>
