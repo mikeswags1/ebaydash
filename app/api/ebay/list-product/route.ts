@@ -300,6 +300,39 @@ async function getCategoryByAsin(asin: string, token: string): Promise<string | 
   }
 }
 
+// eBay Taxonomy REST API — purpose-built for category selection, semantic matching,
+// always returns leaf categories. Significantly more accurate than GetSuggestedCategories.
+async function getTaxonomyCategoryIds(title: string, token: string): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `https://api.ebay.com/commerce/taxonomy/v1/category_tree/0/get_category_suggestions?q=${encodeURIComponent(title)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(8000),
+      }
+    )
+    if (!res.ok) return []
+    const data = await res.json() as {
+      categorySuggestions?: Array<{
+        category?: { categoryId?: string; categoryName?: string }
+        categoryTreeNodeAncestors?: Array<{ categoryId?: string }>
+      }>
+    }
+    const suggestions = data.categorySuggestions || []
+    return suggestions
+      .map(s => s.category?.categoryId)
+      .filter((id): id is string => Boolean(id))
+      .slice(0, 6)
+  } catch {
+    return []
+  }
+}
+
+// Legacy Trading API fallback — kept as backup only
 async function getSuggestedCategoryIds(title: string, appId: string, token: string): Promise<string[]> {
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetSuggestedCategoriesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
@@ -319,23 +352,18 @@ async function getSuggestedCategoryIds(title: string, appId: string, token: stri
         'Content-Type': 'text/xml',
       },
       body: xml,
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(8000),
     })
     const text = await res.text()
     const suggestionBlocks = [...text.matchAll(/<SuggestedCategory>([\s\S]*?)<\/SuggestedCategory>/g)]
       .map((match) => match[1])
-
     const leafCandidates = suggestionBlocks
       .map((block) => {
         const ids = [...block.matchAll(/<CategoryID>(\d+)<\/CategoryID>/g)].map((match) => match[1])
         return ids[ids.length - 1]
       })
       .filter((value): value is string => Boolean(value))
-
-    if (leafCandidates.length > 0) {
-      return Array.from(new Set(leafCandidates))
-    }
-
+    if (leafCandidates.length > 0) return Array.from(new Set(leafCandidates))
     const allIds = [...text.matchAll(/<CategoryID>(\d+)<\/CategoryID>/g)].map((match) => match[1])
     return Array.from(new Set(allIds)).reverse()
   } catch {
@@ -1156,24 +1184,24 @@ export async function POST(req: NextRequest) {
     ? `<PictureDetails><GalleryType>Gallery</GalleryType>${usablePictureList.map(u => `<PictureURL>${xmlEncodeUrl(u)}</PictureURL>`).join('')}</PictureDetails>`
     : ''
 
-  // Run all three category sources in parallel for zero added latency:
-  // 1. ASIN Browse lookup — searches real eBay listings, guaranteed leaf, most accurate
-  // 2. Title-based GetSuggestedCategories — eBay keyword matching on full title
-  // 3. Short keyword variant — catches products with long titles
+  // Run category sources in parallel — no added latency:
+  // 1. Taxonomy REST API — eBay's modern semantic engine, purpose-built for this, most accurate
+  // 2. ASIN Browse lookup — crowd-sourced from real listings, exact match
+  // 3. Legacy Trading API — keyword fallback only
   const cleanAsin = String(asin).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)
   const titleQuery = safeTitle.split(' ').slice(0, 6).join(' ')
-  const [asinCategory, titleSuggestions, keywordSuggestions] = await Promise.all([
+  const [taxonomyIds, asinCategory, legacySuggestions] = await Promise.all([
+    getTaxonomyCategoryIds(safeTitle, credentials.accessToken),
     getCategoryByAsin(cleanAsin, credentials.accessToken),
-    getSuggestedCategoryIds(safeTitle, appId, credentials.accessToken),
     getSuggestedCategoryIds(titleQuery, appId, credentials.accessToken),
   ])
-  const leafSuggestedCategoryIds = Array.from(new Set([...titleSuggestions, ...keywordSuggestions])).slice(0, 6)
 
-  // Niche map as last resort only
+  // Niche map as absolute last resort
   const nicheFallback = NICHE_FALLBACK_LEAF_CATEGORY[niche || ''] || nicheCategoryId
 
-  // Priority: ASIN lookup (real listings) → title suggestions → niche fallback → Everything Else
-  const preferredCategoryId = asinCategory || leafSuggestedCategoryIds[0] || nicheFallback || '29223'
+  // Priority: Taxonomy API (semantic) → ASIN crowd-source → legacy keyword → niche → Everything Else
+  const preferredCategoryId = taxonomyIds[0] || asinCategory || legacySuggestions[0] || nicheFallback || '29223'
+  const leafSuggestedCategoryIds = Array.from(new Set([...taxonomyIds, ...legacySuggestions])).slice(0, 6)
   const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId: preferredCategoryId, price, pictureXml, itemSpecificsXml, sourceAsin: String(asin).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) }
 
   // Parse eBay response — skip deprecated warnings to surface real errors
