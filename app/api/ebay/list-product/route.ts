@@ -71,17 +71,46 @@ const NICHE_CATEGORY: Record<string, string> = {
 }
 
 const NICHE_FALLBACK_LEAF_CATEGORY: Record<string, string> = {
-  'Phone Accessories': '9394',
-  'Computer Parts': '58058',
-  'Audio & Headphones': '14985',
-  'Smart Home Devices': '183406',
-  'Kitchen Gadgets': '20625',
-  'Camping & Hiking': '16034',
-  'Sporting Goods': '15273',
-  'Fitness Equipment': '15273',
-  'Pet Supplies': '1281',
-  'Safety Gear': '31776',
-  'Medical Supplies': '31776',
+  'Phone Accessories':      '9394',
+  'Computer Parts':         '58058',
+  'Audio & Headphones':     '14985',
+  'Smart Home Devices':     '183406',
+  'Gaming Gear':            '139971',
+  'Kitchen Gadgets':        '20625',
+  'Home Decor':             '10033',
+  'Furniture & Lighting':   '95672',
+  'Cleaning Supplies':      '29223',
+  'Storage & Organization': '29223',
+  'Camping & Hiking':       '16034',
+  'Garden & Tools':         '29223',
+  'Sporting Goods':         '29223',
+  'Fishing & Hunting':      '29223',
+  'Cycling':                '2904',
+  'Fitness Equipment':      '29223',
+  'Personal Care':          '26248',
+  'Supplements & Vitamins': '180960',
+  'Medical Supplies':       '29223',
+  'Mental Wellness':        '29223',
+  'Car Parts':              '29223',
+  'Car Accessories':        '14946',
+  'Motorcycle Gear':        '29223',
+  'Truck & Towing':         '29223',
+  'Car Care':               '29223',
+  'Pet Supplies':           '1281',
+  'Baby & Kids':            '2984',
+  'Toys & Games':           '19169',
+  'Clothing & Accessories': '29223',
+  'Jewelry & Watches':      '29223',
+  'Office Supplies':        '26215',
+  'Industrial Equipment':   '29223',
+  'Safety Gear':            '29223',
+  'Janitorial & Cleaning':  '29223',
+  'Packaging Materials':    '29223',
+  'Trading Cards':          '183050',
+  'Vintage & Antiques':     '29223',
+  'Coins & Currency':       '29223',
+  'Comics & Manga':         '259104',
+  'Sports Memorabilia':     '64482',
 }
 
 const NICHE_SPECIFICS: Record<string, Array<[string, string]>> = {
@@ -1058,7 +1087,14 @@ export async function POST(req: NextRequest) {
   const proto = host.startsWith('localhost') ? 'http' : 'https'
   const siteUrl = `${proto}://${host}`
 
-  const validatedGallery = dedupeImageUrls(validatedAmazon.images)
+  // Merge all image sources: validated API data + scraper data + fallback URLs
+  // fetchedAmazon.images from the scraper is the key fix — it often has more angles
+  const validatedGallery = dedupeImageUrls([
+    ...validatedAmazon.images,
+    ...fetchedAmazon.images,
+    validatedAmazon.imageUrl,
+    imageUrl,
+  ])
   const allImages = filterVariantSpecificImages(
     validatedGallery.length > 0
       ? validatedGallery
