@@ -14,16 +14,138 @@ export function normalizeLookupTitle(value: string) {
 }
 
 export function getTitleScore(ebayTitle: string, candidateTitle: string) {
-  const ebayWords = new Set(normalizeLookupTitle(ebayTitle).split(' ').filter(Boolean))
-  const candidateWords = new Set(normalizeLookupTitle(candidateTitle).split(' ').filter(Boolean))
-  if (ebayWords.size === 0 || candidateWords.size === 0) return 0
+  return getTitleMatch(ebayTitle, candidateTitle).score
+}
+
+const IMPORTANT_WORD_STOPLIST = new Set([
+  'new',
+  'free',
+  'ship',
+  'shipping',
+  'fast',
+  'sale',
+  'home',
+  'office',
+  'premium',
+  'heavy',
+  'duty',
+  'compatible',
+  'replacement',
+  'assorted',
+  'color',
+  'colors',
+])
+
+function getLookupWords(value: string) {
+  return normalizeLookupTitle(value)
+    .split(' ')
+    .filter((word) => word.length > 2 && !IMPORTANT_WORD_STOPLIST.has(word))
+}
+
+function getImportantWords(value: string) {
+  return getLookupWords(value).filter((word) => (
+    /\d/.test(word) ||
+    word.length >= 5 ||
+    /^[a-z]+\d+[a-z0-9]*$/.test(word) ||
+    /^[a-z0-9]*\d+[a-z]+$/.test(word)
+  ))
+}
+
+function getQuantitySignals(value: string) {
+  const normalized = normalizeLookupTitle(value)
+  const signals = new Set<string>()
+  const patterns = [
+    /\b(\d{1,4})\s*(pack|pk|count|ct|pcs|piece|pieces|roll|rolls|sheet|sheets|oz|ounce|ounces|lb|lbs|inch|inches|ft|feet)\b/g,
+    /\b(pack|pk|count|ct|pcs|piece|pieces|roll|rolls|sheet|sheets|oz|ounce|ounces|lb|lbs|inch|inches|ft|feet)\s*(of\s*)?(\d{1,4})\b/g,
+  ]
+
+  for (const pattern of patterns) {
+    for (const match of normalized.matchAll(pattern)) {
+      const amount = match[1] && /^\d/.test(match[1]) ? match[1] : match[3]
+      const unit = match[2] && !/of/.test(match[2]) ? match[2] : match[1]
+      if (amount && unit) signals.add(`${amount}:${normalizeQuantityUnit(unit)}`)
+    }
+  }
+
+  return signals
+}
+
+function normalizeQuantityUnit(unit: string) {
+  const clean = unit.toLowerCase().replace(/s$/, '')
+  if (['pack', 'pk', 'count', 'ct', 'pcs', 'piece'].includes(clean)) return 'unit'
+  if (['ounce', 'oz'].includes(clean)) return 'oz'
+  if (['lb', 'lbs'].includes(clean)) return 'lb'
+  if (['inch', 'inche'].includes(clean)) return 'inch'
+  if (['ft', 'feet'].includes(clean)) return 'ft'
+  return clean
+}
+
+function hasQuantityConflict(ebayTitle: string, candidateTitle: string) {
+  const ebaySignals = getQuantitySignals(ebayTitle)
+  const candidateSignals = getQuantitySignals(candidateTitle)
+  if (ebaySignals.size === 0 || candidateSignals.size === 0) return false
+
+  for (const signal of ebaySignals) {
+    if (candidateSignals.has(signal)) return false
+  }
+
+  return true
+}
+
+function getTitleMatch(ebayTitle: string, candidateTitle: string) {
+  const ebayWords = new Set(getLookupWords(ebayTitle))
+  const candidateWords = new Set(getLookupWords(candidateTitle))
+  if (ebayWords.size === 0 || candidateWords.size === 0) {
+    return { score: 0, queryCoverage: 0, importantCoverage: 0, quantityConflict: false }
+  }
 
   let overlap = 0
   for (const word of ebayWords) {
     if (candidateWords.has(word)) overlap += 1
   }
 
-  return overlap / Math.max(ebayWords.size, candidateWords.size)
+  const importantWords = getImportantWords(ebayTitle)
+  const importantMatches = importantWords.filter((word) => candidateWords.has(word)).length
+  const queryCoverage = overlap / ebayWords.size
+  const candidateCoverage = overlap / candidateWords.size
+  const importantCoverage = importantWords.length > 0 ? importantMatches / importantWords.length : queryCoverage
+  const quantityConflict = hasQuantityConflict(ebayTitle, candidateTitle)
+  const score = Math.max(
+    0,
+    Math.min(1, (queryCoverage * 0.55) + (candidateCoverage * 0.2) + (importantCoverage * 0.25) - (quantityConflict ? 0.25 : 0))
+  )
+
+  return {
+    score,
+    queryCoverage,
+    importantCoverage,
+    quantityConflict,
+  }
+}
+
+type TitleCandidate = {
+  asin: string
+  title: string
+  price?: number
+  imageUrl?: string
+}
+
+function chooseBestTitleCandidate(ebayTitle: string, candidates: TitleCandidate[], minScore: number) {
+  const ranked = candidates
+    .map((candidate) => ({ ...candidate, match: getTitleMatch(ebayTitle, candidate.title) }))
+    .filter((candidate) => /^[A-Z0-9]{10}$/i.test(candidate.asin))
+    .filter((candidate) => candidate.match.score >= minScore)
+    .filter((candidate) => candidate.match.queryCoverage >= 0.45)
+    .filter((candidate) => candidate.match.importantCoverage >= 0.5)
+    .filter((candidate) => !candidate.match.quantityConflict)
+    .sort((a, b) => b.match.score - a.match.score)
+
+  const best = ranked[0]
+  const second = ranked[1]
+  if (!best) return null
+  if (second && best.match.score - second.match.score < 0.05) return null
+
+  return best
 }
 
 function decodeXml(value: string) {
@@ -376,42 +498,17 @@ export async function recoverAmazonProductByItemId(args: {
   if (products.length > 0) {
     const candidates = products
       .map((product) => ({
-        asin: String(product.asin || ''),
+        asin: String(product.asin || '').toUpperCase(),
         title: String(product.product_title || ''),
-        score: getTitleScore(ebayTitle, String(product.product_title || '')),
       }))
       .filter((product) => product.asin && product.title)
       .filter((product) => !shouldSkipAsin(product.asin))
-      .sort((a, b) => b.score - a.score)
-    const bestCandidate = candidates[0]
+    const bestCandidate = chooseBestTitleCandidate(ebayTitle, candidates, 0.64)
 
-    if (bestCandidate?.asin && bestCandidate.score >= 0.45) {
+    if (bestCandidate?.asin) {
       const validated = await fetchAmazonProductByAsin({ asin: bestCandidate.asin, strictAsin: true })
 
-      if (validated) {
-        await saveRecoveredMapping({
-          userId,
-          itemId,
-          asin: validated.asin,
-          title: validated.title,
-          amazonPrice: validated.amazonPrice,
-          amazonImageUrl: validated.imageUrl,
-          amazonImages: validated.images,
-          amazonSnapshot: {
-            asin: validated.asin,
-            title: validated.title,
-            amazonPrice: validated.amazonPrice,
-            imageUrl: validated.imageUrl,
-            images: validated.images,
-            features: validated.features,
-            description: validated.description,
-            specs: validated.specs,
-            available: validated.available,
-            source: validated.source,
-            amazonUrl: `https://www.amazon.com/dp/${validated.asin}`,
-          },
-        })
-
+      if (validated && getTitleMatch(ebayTitle, validated.title || bestCandidate.title).score >= 0.58) {
         return {
           asin: validated.asin,
           title: validated.title,
@@ -435,40 +532,18 @@ export async function recoverAmazonProductByItemId(args: {
   if (scraped.length > 0) {
     const scrapedCandidates = scraped
       .map((product) => ({
-        ...product,
-        score: getTitleScore(ebayTitle, product.title),
+        asin: product.asin.toUpperCase(),
+        title: product.title,
+        price: product.price,
+        imageUrl: product.imageUrl,
       }))
       .filter((product) => !shouldSkipAsin(product.asin))
-      .sort((a, b) => b.score - a.score)
-    const bestScraped = scrapedCandidates[0]
+    const bestScraped = chooseBestTitleCandidate(ebayTitle, scrapedCandidates, 0.68)
 
-    if (bestScraped?.asin && bestScraped.score >= 0.45) {
+    if (bestScraped?.asin) {
       const validated = await fetchAmazonProductByAsin({ asin: bestScraped.asin, fallbackImage: bestScraped.imageUrl, strictAsin: true })
 
-      if (validated) {
-        await saveRecoveredMapping({
-          userId,
-          itemId,
-          asin: validated.asin,
-          title: validated.title,
-          amazonPrice: validated.amazonPrice,
-          amazonImageUrl: validated.imageUrl,
-          amazonImages: validated.images,
-          amazonSnapshot: {
-            asin: validated.asin,
-            title: validated.title,
-            amazonPrice: validated.amazonPrice,
-            imageUrl: validated.imageUrl,
-            images: validated.images,
-            features: validated.features,
-            description: validated.description,
-            specs: validated.specs,
-            available: validated.available,
-            source: validated.source,
-            amazonUrl: `https://www.amazon.com/dp/${validated.asin}`,
-          },
-        })
-
+      if (validated && getTitleMatch(ebayTitle, validated.title || bestScraped.title).score >= 0.58) {
         return {
           asin: validated.asin,
           title: validated.title,
@@ -479,39 +554,11 @@ export async function recoverAmazonProductByItemId(args: {
           description: validated.description,
           specs: validated.specs,
           amazonUrl: `https://www.amazon.com/dp/${validated.asin}`,
-         available: validated.available,
-         ebayTitle,
-         source: 'search',
+          available: validated.available,
+          ebayTitle,
+          source: 'search',
           confidence: 'search',
-       }
-      }
-    }
-
-    if (bestScraped?.asin && bestScraped.price > 0) {
-      await saveRecoveredMapping({
-        userId,
-        itemId,
-        asin: bestScraped.asin,
-        title: bestScraped.title,
-        amazonPrice: bestScraped.price,
-        amazonImageUrl: bestScraped.imageUrl,
-        amazonImages: bestScraped.imageUrl ? [bestScraped.imageUrl] : [],
-      })
-
-      return {
-        asin: bestScraped.asin,
-        title: bestScraped.title,
-        amazonPrice: bestScraped.price,
-        imageUrl: bestScraped.imageUrl,
-        images: bestScraped.imageUrl ? [bestScraped.imageUrl] : [],
-        features: [],
-        description: '',
-        specs: [],
-        amazonUrl: `https://www.amazon.com/dp/${bestScraped.asin}`,
-        available: true,
-        ebayTitle,
-        source: 'search',
-        confidence: 'search',
+        }
       }
     }
   }

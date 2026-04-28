@@ -521,6 +521,7 @@ export default function Dashboard() {
     } catch (error) {
       setLookupState((prev) => ({
         ...prev,
+        result: null,
         error: getErrorMessage(error, 'No alternate match found. Paste the correct ASIN and save it manually.'),
       }))
     } finally {

@@ -23,7 +23,7 @@ function AmazonAsinLookup() {
     try {
       const res = await fetch(`/api/amazon/lookup?asin=${encodeURIComponent(clean)}`)
       const data = await res.json()
-      if (data.error) { setError(data.error); return }
+      if (data.error) { setError(data.error?.message || String(data.error)); return }
       setResult(data)
     } catch {
       setError('Something went wrong — check the ASIN and try again.')
@@ -351,6 +351,22 @@ export function AsinLookupTab({
                           <button onClick={onRejectCurrent} className="btn btn-ghost btn-sm" disabled={asinLoading || manualSaving}>
                             {asinLoading ? 'Searching...' : 'Wrong product, try again'}
                           </button>
+                        </div>
+                        <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid rgba(195,158,88,0.10)' }}>
+                          <div style={{ fontSize: '10px', color: 'var(--dim)', marginBottom: '8px', lineHeight: 1.5 }}>
+                            Know the exact Amazon ASIN? Paste it here to override the match and link it to this eBay item.
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <input
+                              value={manualAsin}
+                              onChange={e => onManualAsinChange(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10))}
+                              placeholder="Exact ASIN"
+                              style={{ flex: '1 1 160px', fontFamily: 'monospace', fontSize: '13px', letterSpacing: '0.08em' }}
+                            />
+                            <button onClick={onSaveManualMapping} className="btn btn-ghost btn-sm" disabled={manualSaving || manualAsin.length !== 10}>
+                              Save Exact ASIN
+                            </button>
+                          </div>
                         </div>
                       </>
                     )}

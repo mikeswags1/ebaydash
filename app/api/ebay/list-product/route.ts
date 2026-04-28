@@ -828,7 +828,7 @@ async function verifyToEbay(xml: string, appId: string, token: string): Promise<
 
 function buildXml(params: {
   token: string; safeTitle: string; description: string; categoryId: string
-  price: string; pictureXml: string; itemSpecificsXml: string; shippingService?: string; requestType?: 'add' | 'verify'; simplifiedShipping?: boolean
+  price: string; pictureXml: string; itemSpecificsXml: string; sourceAsin?: string; shippingService?: string; requestType?: 'add' | 'verify'; simplifiedShipping?: boolean
 }) {
   const rootTag = params.requestType === 'verify' ? 'VerifyAddFixedPriceItemRequest' : 'AddFixedPriceItemRequest'
   const shippingService = params.shippingService || 'USPSPriority'
@@ -861,6 +861,7 @@ function buildXml(params: {
   <WarningLevel>High</WarningLevel>
   <Item>
     <Title>${params.safeTitle}</Title>
+    ${params.sourceAsin ? `<SKU>EBAYDASH-${params.sourceAsin}</SKU>` : ''}
     <Description>${params.description}</Description>
     <PrimaryCategory><CategoryID>${params.categoryId}</CategoryID></PrimaryCategory>
     <StartPrice>${params.price}</StartPrice>
@@ -1096,7 +1097,7 @@ export async function POST(req: NextRequest) {
     )
   )
   const preferredCategoryId = fallbackLeafCategoryIds[0] || leafSuggestedCategoryIds[0] || nicheCategoryId
-  const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId: preferredCategoryId, price, pictureXml, itemSpecificsXml }
+  const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId: preferredCategoryId, price, pictureXml, itemSpecificsXml, sourceAsin: String(asin).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) }
 
   // Parse eBay response — skip deprecated warnings to surface real errors
   const notWarn = (s: string) => {
