@@ -162,6 +162,7 @@ function chooseBestDescription(...values: Array<string | undefined>) {
 function sanitizeContent(text: string): string {
   return text
     .replace(/\b(amazon\.?com?|amazon prime|prime\s+shipping|prime\s+eligible|prime\s+member|fulfilled\s+by\s+amazon|ships\s+from\s+amazon|sold\s+by\s+amazon|amazon\s+basics|amazon\s+brand|buy\s+on\s+amazon|visit\s+the\s+\S+\s+store|fba)\b/gi, '')
+    .replace(/\b(amazon[''']?s?\s+choice|overall\s+pick|#?\s*1\s+best\s+seller|best\s+seller|limited\s+time\s+deal|climate\s+pledge\s+friendly|small\s+business|sponsored|top\s+brand|highly\s+rated|deal\s+of\s+the\s+day)\b/gi, '')
     .replace(/<[^>]*>/g, ' ')
     .replace(/[<>&"]/g, ' ')
     // Strip leading emoji that Amazon includes in bullet points
@@ -994,6 +995,8 @@ export async function POST(req: NextRequest) {
     .replace(/&amp;|&#38;/gi, '&')
     .replace(/&lt;|&#60;/gi, '<')
     .replace(/&gt;|&#62;/gi, '>')
+    // Strip Amazon-specific badges and labels that must never appear on eBay
+    .replace(/\[?\b(amazon[''']?s?\s+choice|overall\s+pick|#?\s*1\s+best\s+seller|best\s+seller|limited\s+time\s+deal|climate\s+pledge\s+friendly|small\s+business|sponsored|top\s+brand|highly\s+rated|deal\s+of\s+the\s+day)\b\]?/gi, '')
     .replace(/[^\x20-\x7E]/g, '')
     .replace(/[<>"]/g, '')
     .replace(/&/g, '&amp;')
