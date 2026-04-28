@@ -838,8 +838,9 @@ function buildXml(params: {
       <ShippingServiceOptions>
         <ShippingServicePriority>1</ShippingServicePriority>
         <ShippingService>${shippingService}</ShippingService>
-        <FreeShipping>true</FreeShipping>
         <ShippingServiceCost currencyID="USD">0.00</ShippingServiceCost>
+        <FreeShipping>true</FreeShipping>
+        <ExpeditedService>true</ExpeditedService>
       </ShippingServiceOptions>
     </ShippingDetails>`
     : `<ShippingDetails>
@@ -849,6 +850,7 @@ function buildXml(params: {
         <ShippingService>${shippingService}</ShippingService>
         <ShippingServiceCost currencyID="USD">0.00</ShippingServiceCost>
         <FreeShipping>true</FreeShipping>
+        <ExpeditedService>true</ExpeditedService>
         <ShippingServiceAdditionalCost currencyID="USD">0.00</ShippingServiceAdditionalCost>
       </ShippingServiceOptions>
     </ShippingDetails>`
@@ -1272,7 +1274,7 @@ export async function POST(req: NextRequest) {
     const attemptedShippingServices: string[] = [activeShippingService]
     let transientRetryUsed = false
     let simplifiedShipping = false
-    const shippingFallbacks = ['USPSPriority', 'StandardShipping', 'FedExHomeDelivery', 'UPSGround']
+    const shippingFallbacks = ['USPSPriority', 'USPSPriorityFlatRateBox', 'FedExHomeDelivery', 'UPSGround']
 
     for (let guard = 0; guard < 4; guard += 1) {
       attemptedCategoryIds.push(activeCategoryId)
