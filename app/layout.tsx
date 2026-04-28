@@ -3,7 +3,7 @@ import Providers from './providers'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'EbayDash | Professional eBay Operations Platform',
+  title: 'StackPilot | Professional eBay Operations Platform',
   description: 'Real-time eBay order management, listing workflows, sourcing tools, and automation for serious sellers.',
 }
 

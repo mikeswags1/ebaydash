@@ -218,7 +218,7 @@ export function AsinLookupTab({
       {/* Header */}
       <div style={{ padding: '40px 44px 28px' }}>
         <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>
-          EbayDash / Fulfillment
+          StackPilot / Fulfillment
         </div>
         <div style={{ fontFamily: 'var(--serif)', fontSize: '36px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
           Order Lookup
@@ -391,7 +391,7 @@ export function AsinLookupTab({
               Listed from another tool?
             </div>
             <div style={{ fontSize: '11px', color: 'var(--sil)', lineHeight: 1.7, marginBottom: '16px' }}>
-              If this item was listed using a different dashboard or tool (not EbayDash), we won't have the Amazon ASIN saved automatically.
+              If this item was listed using a different dashboard or tool (not StackPilot), we won't have the Amazon ASIN saved automatically.
               No problem — find the Amazon product manually and paste its ASIN below. We'll save the link so future orders of this item are instant.
             </div>
             <div style={{ fontSize: '10px', color: 'var(--dim)', marginBottom: '12px', padding: '10px 14px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', lineHeight: 1.6 }}>

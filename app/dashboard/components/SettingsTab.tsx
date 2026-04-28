@@ -25,7 +25,7 @@ export function SettingsTab({
 }) {
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
-      <SectionIntro eyebrow="EbayDash / Configuration" title="Settings" />
+      <SectionIntro eyebrow="StackPilot / Configuration" title="Settings" />
 
       <div style={{ padding: '0 44px 44px', maxWidth: '680px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div className="card" style={{ padding: '40px', textAlign: 'center' }}>

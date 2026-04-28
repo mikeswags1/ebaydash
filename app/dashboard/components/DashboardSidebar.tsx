@@ -36,7 +36,7 @@ export function DashboardSidebar({
     >
       <div className="dashboard-brand" style={{ padding: '32px 24px 28px', borderBottom: '1px solid rgba(195,158,88,0.10)' }}>
         <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1 }}>
-          Ebay
+          Stack
           <span
             style={{
               background: 'linear-gradient(135deg,var(--gold),var(--gld2))',
@@ -44,7 +44,7 @@ export function DashboardSidebar({
               WebkitTextFillColor: 'transparent',
             }}
           >
-            Dash
+            Pilot
           </span>
         </div>
         <div

@@ -22,7 +22,7 @@ export function OrdersTab({
       {/* Header */}
       <div style={{ padding: '40px 44px 28px' }}>
         <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>
-          EbayDash / Orders
+          StackPilot / Orders
         </div>
         <div style={{ fontFamily: 'var(--serif)', fontSize: '36px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
           Order Management

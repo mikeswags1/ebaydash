@@ -27,7 +27,7 @@ export function ContinuousListingTab({
 }) {
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
-      <SectionIntro eyebrow="EbayDash / Queue" title="Continuous Listing" />
+      <SectionIntro eyebrow="StackPilot / Queue" title="Continuous Listing" />
 
       <div style={{ padding: '0 44px 44px' }}>
         {!connected ? (

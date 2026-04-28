@@ -28,7 +28,7 @@ export function PerformanceTab({
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
       <SectionIntro
-        eyebrow="EbayDash / Intelligence"
+        eyebrow="StackPilot / Intelligence"
         title="Performance"
         subtitle="See what's selling, what's not, and exactly what to do next. Based on your last 90 days of eBay activity."
       />

@@ -376,7 +376,7 @@ export default function Landing() {
         <div style={{ fontFamily: 'var(--serif)', fontSize: '16px', color: 'var(--sil)' }}>
           Ebay<span style={{ color: 'var(--gold)' }}>Dash</span>
         </div>
-        <div>&copy; 2026 EbayDash. All rights reserved.</div>
+        <div>&copy; 2026 StackPilot. All rights reserved.</div>
       </footer>
     </main>
   )

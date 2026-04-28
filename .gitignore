@@ -12,3 +12,4 @@ out/
 test-*.mjs
 test-*.json
 tsconfig.tsbuildinfo
+.env.cron

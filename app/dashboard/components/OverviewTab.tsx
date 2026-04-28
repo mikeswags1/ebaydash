@@ -23,7 +23,7 @@ export function OverviewTab({
       {/* Header */}
       <div style={{ padding: '40px 44px 32px' }}>
         <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>
-          EbayDash / Operations
+          StackPilot / Operations
         </div>
         <div style={{ fontFamily: 'var(--serif)', fontSize: '38px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
           {greeting} 👋

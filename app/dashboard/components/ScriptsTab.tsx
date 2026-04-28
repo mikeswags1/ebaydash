@@ -29,7 +29,7 @@ export function ScriptsTab({
 }) {
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
-      <SectionIntro eyebrow="EbayDash / Automation" title="Scripts" />
+      <SectionIntro eyebrow="StackPilot / Automation" title="Scripts" />
       <div style={{ padding: '0 44px 44px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: '18px' }}>
           {SCRIPT_CARDS.map((script) => {
