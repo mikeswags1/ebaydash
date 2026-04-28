@@ -831,7 +831,7 @@ function buildXml(params: {
   price: string; pictureXml: string; itemSpecificsXml: string; sourceAsin?: string; shippingService?: string; requestType?: 'add' | 'verify'; simplifiedShipping?: boolean
 }) {
   const rootTag = params.requestType === 'verify' ? 'VerifyAddFixedPriceItemRequest' : 'AddFixedPriceItemRequest'
-  const shippingService = params.shippingService || 'USPSPriority'
+  const shippingService = params.shippingService || 'FedEx2Day'
   const shippingDetailsXml = params.simplifiedShipping
     ? `<ShippingDetails>
       <ShippingType>Flat</ShippingType>
@@ -1266,7 +1266,7 @@ export async function POST(req: NextRequest) {
 
   const attemptListing = async (params: typeof xmlParams & { itemSpecificsXml: string; shippingService?: string }) => {
     let activeCategoryId = params.categoryId
-    let activeShippingService = params.shippingService || 'USPSPriority'
+    let activeShippingService = params.shippingService || 'FedEx2Day'
     let responseText = ''
     let parsed = { short: '', long: '', codes: [] as string[], longs: [] as string[] }
     let errorKind: 'leaf' | 'specific' | 'other' = 'other'
@@ -1274,7 +1274,7 @@ export async function POST(req: NextRequest) {
     const attemptedShippingServices: string[] = [activeShippingService]
     let transientRetryUsed = false
     let simplifiedShipping = false
-    const shippingFallbacks = ['USPSPriority', 'USPSPriorityFlatRateBox', 'FedExHomeDelivery', 'UPSGround']
+    const shippingFallbacks = ['FedEx2Day', 'USPSPriority', 'FedExHomeDelivery', 'UPSGround']
 
     for (let guard = 0; guard < 4; guard += 1) {
       attemptedCategoryIds.push(activeCategoryId)
