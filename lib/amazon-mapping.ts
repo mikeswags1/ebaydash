@@ -197,6 +197,69 @@ type EbayItemDetails = {
   possibleAsins: string[]
 }
 
+function normalizeNameValueList(value: unknown): Array<{ name: string; values: string[] }> {
+  const list = Array.isArray(value) ? value : value ? [value] : []
+  return list
+    .map((entry) => {
+      const record = entry && typeof entry === 'object' ? entry as Record<string, unknown> : {}
+      const rawValues = record.Value || record.value || []
+      const values = (Array.isArray(rawValues) ? rawValues : [rawValues])
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+
+      return {
+        name: String(record.Name || record.name || '').trim(),
+        values,
+      }
+    })
+    .filter((specific) => specific.name || specific.values.length > 0)
+}
+
+async function getPublicEbayItemDetails(itemId: string, appId: string): Promise<EbayItemDetails | null> {
+  if (!appId) return null
+
+  const params = new URLSearchParams({
+    callname: 'GetSingleItem',
+    responseencoding: 'JSON',
+    appid: appId,
+    siteid: '0',
+    version: '1199',
+    ItemID: itemId,
+    IncludeSelector: 'Details,Description,ItemSpecifics',
+  })
+
+  const res = await fetch(`https://open.api.ebay.com/shopping?${params.toString()}`, {
+    signal: AbortSignal.timeout(8000),
+  })
+
+  if (!res.ok) return null
+
+  const data = await res.json().catch(() => null)
+  const item = data?.Item && typeof data.Item === 'object' ? data.Item as Record<string, unknown> : null
+  if (!item) return null
+
+  const itemSpecificsContainer = item.ItemSpecifics && typeof item.ItemSpecifics === 'object'
+    ? item.ItemSpecifics as Record<string, unknown>
+    : {}
+  const itemSpecifics = normalizeNameValueList(itemSpecificsContainer.NameValueList)
+  const title = String(item.Title || '').trim()
+  const sku = String(item.SKU || item.SellerSKU || '').trim()
+  const description = stripHtml(String(item.Description || ''))
+  const specificText = itemSpecifics
+    .flatMap((specific) => [specific.name, ...specific.values])
+    .join(' ')
+
+  if (!title && !sku && !description && !specificText) return null
+
+  return {
+    title,
+    sku,
+    description,
+    itemSpecifics,
+    possibleAsins: extractAsinsFromText(sku, specificText, description, title),
+  }
+}
+
 export async function getEbayItemDetails(itemId: string, token: string, appId: string): Promise<EbayItemDetails | null> {
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
@@ -210,47 +273,55 @@ export async function getEbayItemDetails(itemId: string, token: string, appId: s
   <OutputSelector>PictureDetails</OutputSelector>
 </GetItemRequest>`
 
-  const res = await fetch('https://api.ebay.com/ws/api.dll', {
-    method: 'POST',
-    headers: {
-      'X-EBAY-API-CALL-NAME': 'GetItem',
-      'X-EBAY-API-SITEID': '0',
-      'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
-      'X-EBAY-API-APP-NAME': appId,
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'text/xml',
-    },
-    body: xml,
-    signal: AbortSignal.timeout(8000),
-  })
-
-  if (!res.ok) return null
-
-  const text = await res.text()
-  const title = getXmlValue(text, 'Title')
-  const sku = getXmlValue(text, 'SKU')
-  const description = stripHtml(getXmlValue(text, 'Description'))
-  const itemSpecifics = Array.from(text.matchAll(/<NameValueList>([\s\S]*?)<\/NameValueList>/gi))
-    .map((match) => {
-      const block = match[1] || ''
-      return {
-        name: getXmlValue(block, 'Name'),
-        values: getXmlValues(block, 'Value'),
-      }
+  try {
+    const res = await fetch('https://api.ebay.com/ws/api.dll', {
+      method: 'POST',
+      headers: {
+        'X-EBAY-API-CALL-NAME': 'GetItem',
+        'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
+        'X-EBAY-API-APP-NAME': appId,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'text/xml',
+      },
+      body: xml,
+      signal: AbortSignal.timeout(8000),
     })
-    .filter((specific) => specific.name || specific.values.length > 0)
 
-  const specificText = itemSpecifics
-    .flatMap((specific) => [specific.name, ...specific.values])
-    .join(' ')
+    if (res.ok) {
+      const text = await res.text()
+      const title = getXmlValue(text, 'Title')
+      const sku = getXmlValue(text, 'SKU')
+      const description = stripHtml(getXmlValue(text, 'Description'))
+      const itemSpecifics = Array.from(text.matchAll(/<NameValueList>([\s\S]*?)<\/NameValueList>/gi))
+        .map((match) => {
+          const block = match[1] || ''
+          return {
+            name: getXmlValue(block, 'Name'),
+            values: getXmlValues(block, 'Value'),
+          }
+        })
+        .filter((specific) => specific.name || specific.values.length > 0)
 
-  return {
-    title,
-    sku,
-    description,
-    itemSpecifics,
-    possibleAsins: extractAsinsFromText(sku, specificText, description, title),
+      const specificText = itemSpecifics
+        .flatMap((specific) => [specific.name, ...specific.values])
+        .join(' ')
+
+      if (title || sku || description || specificText) {
+        return {
+          title,
+          sku,
+          description,
+          itemSpecifics,
+          possibleAsins: extractAsinsFromText(sku, specificText, description, title),
+        }
+      }
+    }
+  } catch {
+    // Fall through to public Shopping API lookup.
   }
+
+  return getPublicEbayItemDetails(itemId, appId)
 }
 
 export async function getEbayItemTitle(itemId: string, token: string, appId: string): Promise<string | null> {
