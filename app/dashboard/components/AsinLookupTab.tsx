@@ -203,6 +203,9 @@ export function AsinLookupTab({
   orderAsinMap: OrderAsinMap
   onReset: () => void
 }) {
+  const normalizedInput = asinInput.trim().toUpperCase()
+  const inputIsDirectAsin = /^[A-Z0-9]{10}$/.test(normalizedInput)
+  const inputIsItemId = /^\d+$/.test(normalizedInput) && !inputIsDirectAsin
   const untrackedOrders = orders.filter(o => {
     const itemId = o.lineItems?.[0]?.legacyItemId || ''
     return itemId && !orderAsinMap[itemId]?.asin
@@ -221,7 +224,7 @@ export function AsinLookupTab({
         </div>
         <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.6, maxWidth: '560px' }}>
           Someone bought your item — now find out exactly what to order on Amazon to ship it.
-          Enter the eBay item ID and we'll find the matching Amazon product automatically.
+          Enter the eBay item ID to save the match, or paste an Amazon ASIN to open that product directly.
         </div>
       </div>
 
@@ -254,17 +257,17 @@ export function AsinLookupTab({
         {/* Search box */}
         <div className="card" style={{ padding: '28px 32px', marginBottom: '20px' }}>
           <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--txt)', marginBottom: '4px' }}>
-            Enter eBay Item ID
+            Enter eBay Item ID or Amazon ASIN
           </div>
           <div style={{ fontSize: '11px', color: 'var(--dim)', marginBottom: '14px' }}>
-            Only numbers — found on the order details page on eBay under "Item number".
+            Use the eBay item number to save a source link, or paste a 10-character Amazon ASIN for direct lookup.
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
             <input
               value={asinInput}
-              onChange={e => onAsinInputChange(e.target.value.replace(/\D/g, ''))}
+              onChange={e => onAsinInputChange(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase())}
               onKeyDown={e => e.key === 'Enter' ? onLookup() : undefined}
-              placeholder="e.g. 387234561234"
+              placeholder="e.g. 387234561234 or B08N5WRWNW"
               style={{ flex: 1, fontFamily: 'monospace', fontSize: '16px', letterSpacing: '0.08em' }}
             />
             <button onClick={onLookup} className="btn btn-gold" disabled={asinLoading || !asinInput.trim()}>
@@ -274,8 +277,13 @@ export function AsinLookupTab({
 
           {asinError ? (
             <div style={{ marginTop: '14px', padding: '14px 16px', borderRadius: '10px', background: 'rgba(232,63,80,0.07)', border: '1px solid rgba(232,63,80,0.20)' }}>
-              <div style={{ fontSize: '12px', color: 'var(--red)', fontWeight: 600, marginBottom: '4px' }}>Couldn't find this item automatically</div>
+              <div style={{ fontSize: '12px', color: 'var(--red)', fontWeight: 600, marginBottom: '4px' }}>Couldn't find this product automatically</div>
               <div style={{ fontSize: '11px', color: 'var(--sil)', lineHeight: 1.6 }}>{asinError}</div>
+            </div>
+          ) : null}
+          {inputIsDirectAsin && !asinResult ? (
+            <div style={{ marginTop: '12px', padding: '12px 14px', borderRadius: '10px', background: 'rgba(200,162,80,0.06)', border: '1px solid rgba(200,162,80,0.16)', fontSize: '11px', color: 'var(--sil)', lineHeight: 1.55 }}>
+              Direct Amazon ASIN mode. This validates the Amazon product only; use an eBay item ID when you want to save the ASIN to an order or listing.
             </div>
           ) : null}
         </div>
@@ -324,15 +332,23 @@ export function AsinLookupTab({
 
               {/* Confirm/reject */}
               <div style={{ marginTop: '14px', padding: '14px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(195,158,88,0.10)' }}>
-                <div style={{ fontSize: '11px', color: 'var(--sil)', marginBottom: '10px' }}>
-                  Is this the right product? Confirming saves the link for future orders.
-                </div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button onClick={onConfirmCurrent} className="btn btn-gold btn-sm" disabled={manualSaving}>Yes, that's it</button>
-                  <button onClick={onRejectCurrent} className="btn btn-ghost btn-sm" disabled={asinLoading}>
-                    {asinLoading ? 'Searching...' : 'Wrong product, try again'}
-                  </button>
-                </div>
+                {inputIsItemId ? (
+                  <>
+                    <div style={{ fontSize: '11px', color: 'var(--sil)', marginBottom: '10px' }}>
+                      Is this the right product? Confirming saves the link for future orders.
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button onClick={onConfirmCurrent} className="btn btn-gold btn-sm" disabled={manualSaving}>Yes, that's it</button>
+                      <button onClick={onRejectCurrent} className="btn btn-ghost btn-sm" disabled={asinLoading}>
+                        {asinLoading ? 'Searching...' : 'Wrong product, try again'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: '11px', color: 'var(--sil)', lineHeight: 1.55 }}>
+                    Direct ASIN lookup loaded. To save this ASIN for financials and fulfillment, look up the numeric eBay item ID and save the mapping.
+                  </div>
+                )}
               </div>
             </div>
             <button onClick={onReset} className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }}>
@@ -342,7 +358,7 @@ export function AsinLookupTab({
         ) : null}
 
         {/* Listed from another dashboard - manual entry guide */}
-        {(asinError || (asinInput.trim() && !asinResult && !asinLoading)) ? (
+        {inputIsItemId && (asinError || (asinInput.trim() && !asinResult && !asinLoading)) ? (
           <div className="card" style={{ padding: '24px 28px', marginBottom: '20px', border: '1px solid rgba(200,162,80,0.18)' }}>
             <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gld2)', marginBottom: '6px' }}>
               Listed from another tool?

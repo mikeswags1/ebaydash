@@ -475,22 +475,26 @@ export default function Dashboard() {
   }, [])
 
   const handleLookupAsin = useCallback(async () => {
-    const raw = lookupState.input.trim()
+    const raw = lookupState.input.trim().toUpperCase()
     if (!raw) return
-    if (!/^\d+$/.test(raw)) {
-      setLookupState((prev) => ({ ...prev, error: 'Please enter the numeric eBay item ID shown on your order.' }))
+
+    const isDirectAsin = /^[A-Z0-9]{10}$/.test(raw)
+    const isItemId = /^\d+$/.test(raw) && !isDirectAsin
+
+    if (!isItemId && !isDirectAsin) {
+      setLookupState((prev) => ({ ...prev, error: 'Enter a numeric eBay item ID or a valid 10-character Amazon ASIN.' }))
       return
     }
 
-    setLookupState((prev) => ({ ...prev, loading: true, error: null, result: null }))
+    setLookupState((prev) => ({ ...prev, input: raw, loading: true, error: null, result: null, rejectedAsins: [] }))
 
     try {
-      const result = await lookupAsinByItemId(raw)
+      const result = isDirectAsin ? await validateAmazonAsin(raw) : await lookupAsinByItemId(raw)
       setLookupState((prev) => ({ ...prev, result, manualAsin: result.asin }))
     } catch (error) {
       setLookupState((prev) => ({
         ...prev,
-        error: isReconnectError(error)
+        error: isItemId && isReconnectError(error)
           ? 'Your eBay connection expired. Reconnect it in Settings.'
           : getErrorMessage(error, 'Lookup failed. Please try again.'),
       }))
@@ -503,6 +507,10 @@ export default function Dashboard() {
     const itemId = lookupState.input.trim()
     const currentAsin = lookupState.result?.asin
     if (!itemId || !currentAsin) return
+    if (!/^\d+$/.test(itemId)) {
+      setLookupState((prev) => ({ ...prev, error: 'Alternate matching works with a numeric eBay item ID. Direct ASIN lookup already points to a specific Amazon product.' }))
+      return
+    }
 
     const rejectedAsins = Array.from(new Set([...lookupState.rejectedAsins, currentAsin]))
     setLookupState((prev) => ({ ...prev, loading: true, error: null, rejectedAsins }))
