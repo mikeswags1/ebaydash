@@ -300,6 +300,77 @@ async function getCategoryByAsin(asin: string, token: string): Promise<string | 
   }
 }
 
+function getCategoryTitleScore(query: string, candidate: string) {
+  const queryWords = new Set(canonicalWords(query).filter((word) => word.length > 2))
+  const candidateWords = new Set(canonicalWords(candidate).filter((word) => word.length > 2))
+  if (queryWords.size === 0 || candidateWords.size === 0) return 0
+
+  let overlap = 0
+  for (const word of queryWords) {
+    if (candidateWords.has(word)) overlap += 1
+  }
+
+  const queryCoverage = overlap / queryWords.size
+  const candidateCoverage = overlap / candidateWords.size
+  return (queryCoverage * 0.7) + (candidateCoverage * 0.3)
+}
+
+// Use categories from real active eBay listings with similar titles.
+// This catches cases where Taxonomy returns a valid but too-generic/wrong category.
+async function getCategoryByComparableListings(title: string, token: string): Promise<string | null> {
+  try {
+    const query = title
+      .split(/\s+/)
+      .slice(0, 10)
+      .join(' ')
+      .trim()
+    if (!query) return null
+
+    const res = await fetch(
+      `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(query)}&limit=20&fieldgroups=MATCHING_ITEMS`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(8000),
+      }
+    )
+    if (!res.ok) return null
+
+    const data = await res.json() as {
+      itemSummaries?: Array<{
+        title?: string
+        categories?: Array<{ categoryId?: string }>
+      }>
+    }
+    const tally = new Map<string, { count: number; score: number }>()
+
+    for (const item of data.itemSummaries || []) {
+      const categoryId = item.categories?.[0]?.categoryId
+      const score = getCategoryTitleScore(title, String(item.title || ''))
+      if (!categoryId || score < 0.42) continue
+
+      const current = tally.get(categoryId) || { count: 0, score: 0 }
+      tally.set(categoryId, { count: current.count + 1, score: current.score + score })
+    }
+
+    const ranked = Array.from(tally.entries())
+      .filter(([categoryId]) => categoryId !== '29223')
+      .sort((a, b) => b[1].score - a[1].score)
+    const best = ranked[0]
+    const second = ranked[1]
+    if (!best) return null
+    if (best[1].count < 2 && best[1].score < 0.75) return null
+    if (second && best[1].score - second[1].score < 0.2) return null
+
+    return best[0]
+  } catch {
+    return null
+  }
+}
+
 // eBay Taxonomy REST API — purpose-built for category selection, semantic matching,
 // always returns leaf categories. Significantly more accurate than GetSuggestedCategories.
 async function getTaxonomyCategoryIds(title: string, token: string): Promise<string[]> {
@@ -1185,23 +1256,48 @@ export async function POST(req: NextRequest) {
     : ''
 
   // Run category sources in parallel — no added latency:
-  // 1. Taxonomy REST API — eBay's modern semantic engine, purpose-built for this, most accurate
-  // 2. ASIN Browse lookup — crowd-sourced from real listings, exact match
-  // 3. Legacy Trading API — keyword fallback only
+  // 1. ASIN Browse lookup — exact product signal from real listings when available
+  // 2. Comparable listing lookup — categories real sellers use for similar titles
+  // 3. Taxonomy REST API — semantic fallback
+  // 4. Legacy Trading API — keyword fallback only
   const cleanAsin = String(asin).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)
   const titleQuery = safeTitle.split(' ').slice(0, 6).join(' ')
-  const [taxonomyIds, asinCategory, legacySuggestions] = await Promise.all([
-    getTaxonomyCategoryIds(safeTitle, credentials.accessToken),
+  const [asinCategory, comparableCategory, taxonomyIds, legacySuggestions] = await Promise.all([
     getCategoryByAsin(cleanAsin, credentials.accessToken),
+    getCategoryByComparableListings(safeTitle, credentials.accessToken),
+    getTaxonomyCategoryIds(safeTitle, credentials.accessToken),
     getSuggestedCategoryIds(titleQuery, appId, credentials.accessToken),
   ])
 
   // Niche map as absolute last resort
   const nicheFallback = NICHE_FALLBACK_LEAF_CATEGORY[niche || ''] || nicheCategoryId
 
-  // Priority: Taxonomy API (semantic) → ASIN crowd-source → legacy keyword → niche → Everything Else
-  const preferredCategoryId = taxonomyIds[0] || asinCategory || legacySuggestions[0] || nicheFallback || '29223'
-  const leafSuggestedCategoryIds = Array.from(new Set([...taxonomyIds, ...legacySuggestions])).slice(0, 6)
+  const categorySourceById = new Map<string, string[]>()
+  const addCategorySource = (categoryId: string | null | undefined, source: string) => {
+    if (!categoryId) return
+    categorySourceById.set(categoryId, Array.from(new Set([...(categorySourceById.get(categoryId) || []), source])))
+  }
+  addCategorySource(asinCategory, 'asin-browse')
+  addCategorySource(comparableCategory, 'comparable-listings')
+  taxonomyIds.forEach((categoryId) => addCategorySource(categoryId, 'taxonomy'))
+  legacySuggestions.forEach((categoryId) => addCategorySource(categoryId, 'legacy-suggested'))
+  addCategorySource(nicheFallback, 'niche-fallback')
+  addCategorySource(nicheCategoryId, 'niche-default')
+  addCategorySource('29223', 'default-everything-else')
+
+  // Priority: exact/similar real listing signals → semantic Taxonomy → legacy keyword → niche → Everything Else.
+  const categoryCandidateIds = [
+    asinCategory,
+    comparableCategory,
+    ...taxonomyIds,
+    ...legacySuggestions,
+    nicheFallback,
+    nicheCategoryId,
+    '29223',
+  ]
+  const categoryCandidates = Array.from(new Set(categoryCandidateIds.filter(Boolean) as string[]))
+  const preferredCategoryId = categoryCandidates[0] || '29223'
+  const leafSuggestedCategoryIds = Array.from(new Set([asinCategory, comparableCategory, ...taxonomyIds, ...legacySuggestions].filter(Boolean) as string[])).slice(0, 8)
   const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId: preferredCategoryId, price, pictureXml, itemSpecificsXml, sourceAsin: String(asin).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) }
 
   // Parse eBay response — skip deprecated warnings to surface real errors
@@ -1432,16 +1528,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const categoryCandidates = Array.from(
-    new Set([
-      asinCategory,
-      ...leafSuggestedCategoryIds,
-      nicheFallback,
-      nicheCategoryId,
-      '29223',
-    ].filter(Boolean) as string[])
-  )
-
   let verifiedParams = { categoryId: preferredCategoryId, itemSpecificsXml }
   let verificationAttempts: string[] = []
   let verificationResponseText = ''
@@ -1527,6 +1613,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const categoryDebug = {
+    asinCategory,
+    comparableCategory,
+    taxonomyIds,
+    legacySuggestions,
+    nicheFallback,
+    nicheCategoryId,
+    candidates: categoryCandidates.map((categoryId) => ({
+      categoryId,
+      sources: categorySourceById.get(categoryId) || ['unknown'],
+    })),
+    selectedCategoryId: finalCategoryId,
+    selectedSources: categorySourceById.get(finalCategoryId) || ['ebay-replacement-or-verified'],
+  }
+
   const itemIdMatch = responseText.match(/<ItemID>(\d+)<\/ItemID>/)
   const ackMatch    = responseText.match(/<Ack>(.*?)<\/Ack>/)
 
@@ -1560,6 +1661,7 @@ export async function POST(req: NextRequest) {
         suggestedCategoryIds: leafSuggestedCategoryIds,
         attemptedCategoryIds: Array.from(new Set(attemptedCategoryIds)),
         finalCategoryId,
+        categoryDebug,
       },
     })
   }
@@ -1623,6 +1725,7 @@ export async function POST(req: NextRequest) {
       validatedSource: validatedAmazon.source,
       usedFallbackTitle: validatedAmazon.usedFallbackTitle,
       usedFallbackPrice: validatedAmazon.usedFallbackPrice,
+      category: categoryDebug,
     },
   })
 }
