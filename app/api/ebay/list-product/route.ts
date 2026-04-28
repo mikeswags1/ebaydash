@@ -1081,22 +1081,21 @@ export async function POST(req: NextRequest) {
     ? `<PictureDetails><GalleryType>Gallery</GalleryType>${usablePictureList.map(u => `<PictureURL>${xmlEncodeUrl(u)}</PictureURL>`).join('')}</PictureDetails>`
     : ''
 
-  const categorySearchQueries = buildCategorySearchQueries(safeTitle, niche)
-  const categorySuggestionGroups = await Promise.all(
-    categorySearchQueries.map((query) => getSuggestedCategoryIds(query, appId, credentials.accessToken))
-  )
-  const suggestedCategoryIds = Array.from(new Set(categorySuggestionGroups.flat()))
-  const leafSuggestedCategoryIds = await getLeafCategoryCandidates(suggestedCategoryIds, appId, credentials.accessToken)
-  const nicheIsLeaf = await isLeafCategory(nicheCategoryId, appId, credentials.accessToken)
-  const fallbackLeafCategoryIds = Array.from(
-    new Set(
-      [
-        nicheIsLeaf ? nicheCategoryId : '',
-        NICHE_FALLBACK_LEAF_CATEGORY[niche || ''] || '',
-      ].filter(Boolean)
-    )
-  )
-  const preferredCategoryId = fallbackLeafCategoryIds[0] || leafSuggestedCategoryIds[0] || nicheCategoryId
+  // GetSuggestedCategories already returns leaf nodes (last ID in each block = deepest).
+  // Use the product title — far more accurate than the niche name.
+  // Run two parallel queries, skip the slow per-category leaf verification.
+  const titleQuery = safeTitle.split(' ').slice(0, 6).join(' ')
+  const [titleSuggestions, keywordSuggestions] = await Promise.all([
+    getSuggestedCategoryIds(safeTitle, appId, credentials.accessToken),
+    getSuggestedCategoryIds(titleQuery, appId, credentials.accessToken),
+  ])
+  const leafSuggestedCategoryIds = Array.from(new Set([...titleSuggestions, ...keywordSuggestions])).slice(0, 6)
+
+  // Niche map as secondary fallback only
+  const nicheFallback = NICHE_FALLBACK_LEAF_CATEGORY[niche || ''] || nicheCategoryId
+
+  // Priority: title-based suggestion → niche fallback → Everything Else (29223)
+  const preferredCategoryId = leafSuggestedCategoryIds[0] || nicheFallback || '29223'
   const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId: preferredCategoryId, price, pictureXml, itemSpecificsXml, sourceAsin: String(asin).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) }
 
   // Parse eBay response — skip deprecated warnings to surface real errors
@@ -1329,10 +1328,11 @@ export async function POST(req: NextRequest) {
 
   const categoryCandidates = Array.from(
     new Set([
-      ...fallbackLeafCategoryIds,
-      ...suggestedCategoryIds,
+      preferredCategoryId,
       ...leafSuggestedCategoryIds,
+      nicheFallback,
       nicheCategoryId,
+      '29223',
     ].filter(Boolean))
   )
 
@@ -1451,7 +1451,7 @@ export async function POST(req: NextRequest) {
       details: {
         raw: responseText.slice(0, 1200),
         verificationRaw: verificationResponseText.slice(0, 1200),
-        suggestedCategoryIds,
+        suggestedCategoryIds: leafSuggestedCategoryIds,
         attemptedCategoryIds: Array.from(new Set(attemptedCategoryIds)),
         finalCategoryId,
       },
