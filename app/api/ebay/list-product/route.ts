@@ -1095,10 +1095,11 @@ export async function POST(req: NextRequest) {
     pictureList.filter((u): u is string => Boolean(u) && u.length <= 500)
   )
   if (usablePictureList.length === 0) {
+    // EPS upload failed — fall back to badge URL first (keeps the FREE SHIPPING stamp),
+    // then remaining images without the stamp
     usablePictureList.push(
-      ...filteredImages
-        .filter((u) => u.length <= 500)
-        .slice(0, 6)
+      badgeUrl,
+      ...filteredImages.slice(1).filter((u) => u.length <= 500).slice(0, 5)
     )
   }
 
