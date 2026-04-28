@@ -237,6 +237,39 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+// Look up the correct eBay category by searching existing listings for this ASIN.
+// Real listings always use leaf categories — this is the most accurate source possible.
+async function getCategoryByAsin(asin: string, token: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(asin)}&limit=10&fieldgroups=MATCHING_ITEMS`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(8000),
+      }
+    )
+    if (!res.ok) return null
+    const data = await res.json() as { itemSummaries?: Array<{ categories?: Array<{ categoryId?: string }> }> }
+    const items = data.itemSummaries || []
+    if (items.length === 0) return null
+
+    // Tally categories across results — most common = most reliable
+    const tally: Record<string, number> = {}
+    for (const item of items) {
+      const catId = item.categories?.[0]?.categoryId
+      if (catId) tally[catId] = (tally[catId] || 0) + 1
+    }
+    const sorted = Object.entries(tally).sort((a, b) => b[1] - a[1])
+    return sorted[0]?.[0] || null
+  } catch {
+    return null
+  }
+}
+
 async function getSuggestedCategoryIds(title: string, appId: string, token: string): Promise<string[]> {
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetSuggestedCategoriesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
@@ -1083,21 +1116,24 @@ export async function POST(req: NextRequest) {
     ? `<PictureDetails><GalleryType>Gallery</GalleryType>${usablePictureList.map(u => `<PictureURL>${xmlEncodeUrl(u)}</PictureURL>`).join('')}</PictureDetails>`
     : ''
 
-  // GetSuggestedCategories already returns leaf nodes (last ID in each block = deepest).
-  // Use the product title — far more accurate than the niche name.
-  // Run two parallel queries, skip the slow per-category leaf verification.
+  // Run all three category sources in parallel for zero added latency:
+  // 1. ASIN Browse lookup — searches real eBay listings, guaranteed leaf, most accurate
+  // 2. Title-based GetSuggestedCategories — eBay keyword matching on full title
+  // 3. Short keyword variant — catches products with long titles
+  const cleanAsin = String(asin).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)
   const titleQuery = safeTitle.split(' ').slice(0, 6).join(' ')
-  const [titleSuggestions, keywordSuggestions] = await Promise.all([
+  const [asinCategory, titleSuggestions, keywordSuggestions] = await Promise.all([
+    getCategoryByAsin(cleanAsin, credentials.accessToken),
     getSuggestedCategoryIds(safeTitle, appId, credentials.accessToken),
     getSuggestedCategoryIds(titleQuery, appId, credentials.accessToken),
   ])
   const leafSuggestedCategoryIds = Array.from(new Set([...titleSuggestions, ...keywordSuggestions])).slice(0, 6)
 
-  // Niche map as secondary fallback only
+  // Niche map as last resort only
   const nicheFallback = NICHE_FALLBACK_LEAF_CATEGORY[niche || ''] || nicheCategoryId
 
-  // Priority: title-based suggestion → niche fallback → Everything Else (29223)
-  const preferredCategoryId = leafSuggestedCategoryIds[0] || nicheFallback || '29223'
+  // Priority: ASIN lookup (real listings) → title suggestions → niche fallback → Everything Else
+  const preferredCategoryId = asinCategory || leafSuggestedCategoryIds[0] || nicheFallback || '29223'
   const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId: preferredCategoryId, price, pictureXml, itemSpecificsXml, sourceAsin: String(asin).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) }
 
   // Parse eBay response — skip deprecated warnings to surface real errors
@@ -1330,12 +1366,12 @@ export async function POST(req: NextRequest) {
 
   const categoryCandidates = Array.from(
     new Set([
-      preferredCategoryId,
+      asinCategory,
       ...leafSuggestedCategoryIds,
       nicheFallback,
       nicheCategoryId,
       '29223',
-    ].filter(Boolean))
+    ].filter(Boolean) as string[])
   )
 
   let verifiedParams = { categoryId: preferredCategoryId, itemSpecificsXml }
