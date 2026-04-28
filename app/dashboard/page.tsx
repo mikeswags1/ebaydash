@@ -478,7 +478,7 @@ export default function Dashboard() {
     const raw = lookupState.input.trim().toUpperCase()
     if (!raw) return
 
-    const isDirectAsin = /^[A-Z0-9]{10}$/.test(raw)
+    const isDirectAsin = /^(?=.*[A-Z])[A-Z0-9]{10}$/.test(raw)
     const isItemId = /^\d+$/.test(raw) && !isDirectAsin
 
     if (!isItemId && !isDirectAsin) {

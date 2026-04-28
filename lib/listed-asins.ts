@@ -11,6 +11,14 @@ export async function ensureListedAsinsFinancialColumns() {
   await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS category_id VARCHAR(50)`.catch(() => {})
   await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS category_name TEXT`.catch(() => {})
   await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ`.catch(() => {})
+  await sql`
+    DELETE FROM listed_asins a
+    USING listed_asins b
+    WHERE a.user_id = b.user_id
+      AND a.asin = b.asin
+      AND a.id < b.id
+  `.catch(() => {})
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS listed_asins_user_asin_unique_idx ON listed_asins (user_id, asin)`.catch(() => {})
   await sql`CREATE INDEX IF NOT EXISTS listed_asins_user_listing_idx ON listed_asins (user_id, ebay_listing_id)`.catch(() => {})
   await sql`CREATE INDEX IF NOT EXISTS listed_asins_user_niche_idx ON listed_asins (user_id, niche)`.catch(() => {})
 }

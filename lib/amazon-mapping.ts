@@ -153,7 +153,7 @@ export async function saveRecoveredMapping(args: {
     WHERE user_id = ${args.userId}
       AND ebay_listing_id = ${args.itemId}
       AND asin <> ${args.asin}
-  `.catch(() => {})
+  `
   await sql`
     INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, amazon_image_url, amazon_images, amazon_snapshot)
     VALUES (${args.userId}, ${args.asin}, ${args.title.slice(0, 200)}, ${args.itemId}, ${args.amazonPrice.toFixed(2)}, ${args.amazonImageUrl || null}, ${JSON.stringify(args.amazonImages || [])}, ${JSON.stringify(args.amazonSnapshot || null)})
@@ -165,7 +165,7 @@ export async function saveRecoveredMapping(args: {
       amazon_images = ${JSON.stringify(args.amazonImages || [])},
       amazon_snapshot = COALESCE(${JSON.stringify(args.amazonSnapshot || null)}::jsonb, listed_asins.amazon_snapshot),
       listed_at = NOW()
-  `.catch(() => {})
+  `
 }
 
 type StoredMappingRow = {

@@ -204,8 +204,9 @@ export function AsinLookupTab({
   onReset: () => void
 }) {
   const normalizedInput = asinInput.trim().toUpperCase()
-  const inputIsDirectAsin = /^[A-Z0-9]{10}$/.test(normalizedInput)
+  const inputIsDirectAsin = /^(?=.*[A-Z])[A-Z0-9]{10}$/.test(normalizedInput)
   const inputIsItemId = /^\d+$/.test(normalizedInput) && !inputIsDirectAsin
+  const currentMappingSaved = inputIsItemId && (asinResult?.source === 'manual' || asinResult?.confidence === 'manual')
   const untrackedOrders = orders.filter(o => {
     const itemId = o.lineItems?.[0]?.legacyItemId || ''
     return itemId && !orderAsinMap[itemId]?.asin
@@ -334,15 +335,25 @@ export function AsinLookupTab({
               <div style={{ marginTop: '14px', padding: '14px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(195,158,88,0.10)' }}>
                 {inputIsItemId ? (
                   <>
-                    <div style={{ fontSize: '11px', color: 'var(--sil)', marginBottom: '10px' }}>
-                      Is this the right product? Confirming saves the link for future orders.
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      <button onClick={onConfirmCurrent} className="btn btn-gold btn-sm" disabled={manualSaving}>Yes, that's it</button>
-                      <button onClick={onRejectCurrent} className="btn btn-ghost btn-sm" disabled={asinLoading}>
-                        {asinLoading ? 'Searching...' : 'Wrong product, try again'}
-                      </button>
-                    </div>
+                    {currentMappingSaved ? (
+                      <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(46,207,118,0.08)', border: '1px solid rgba(46,207,118,0.20)', fontSize: '12px', color: 'var(--grn)', fontWeight: 700 }}>
+                        Saved. This eBay item is now linked to ASIN {asinResult.asin}.
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: '11px', color: 'var(--sil)', marginBottom: '10px' }}>
+                          Is this the right product? Confirming saves the link for future orders.
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <button onClick={onConfirmCurrent} className="btn btn-gold btn-sm" disabled={manualSaving}>
+                            {manualSaving ? 'Saving...' : "Yes, that's it"}
+                          </button>
+                          <button onClick={onRejectCurrent} className="btn btn-ghost btn-sm" disabled={asinLoading || manualSaving}>
+                            {asinLoading ? 'Searching...' : 'Wrong product, try again'}
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </>
                 ) : (
                   <div style={{ fontSize: '11px', color: 'var(--sil)', lineHeight: 1.55 }}>
