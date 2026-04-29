@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server'
+import { after, NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
@@ -6,7 +6,6 @@ import { queryRows, sql } from '@/lib/db'
 import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice, isHealthyListing } from '@/lib/listing-pricing'
-import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 
 export const maxDuration = 60
@@ -430,7 +429,6 @@ async function getUserNicheWeights(userId: string, options: { includeSoldSignals
   const includeSoldSignals = options.includeSoldSignals !== false
 
   try {
-    await ensureListedAsinsFinancialColumns()
     const rows = await queryRows<NichePreferenceRow>`
       SELECT ebay_listing_id, title, niche, category_name, amazon_price, ebay_price, ebay_fee_rate, ended_at
       FROM listed_asins
@@ -512,14 +510,14 @@ function buildContinuousQueryEntries(weights: Map<string, number>, seed: string)
   return chosen
 }
 
-async function loadContinuousProductsFromNicheCache() {
+async function loadContinuousProductsFromNicheCache(limit = 20) {
   try {
     const rows = await queryRows<{ niche: string; results: Product[]; version?: number }>`
       SELECT niche, results, version
       FROM product_cache
       WHERE niche <> ${CONTINUOUS_CACHE_KEY}
       ORDER BY cached_at DESC
-      LIMIT 80
+      LIMIT ${limit}
     `
     const products: Product[] = []
     const seen = new Set<string>()
@@ -540,16 +538,18 @@ async function loadContinuousProductsFromNicheCache() {
   }
 }
 
-async function ensureCacheTable() {
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null
   try {
-    await sql`CREATE TABLE IF NOT EXISTS product_cache (
-      niche      TEXT        PRIMARY KEY,
-      results    JSONB       NOT NULL,
-      cached_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      version    INTEGER     NOT NULL DEFAULT 1
-    )`
-  } catch { /* already exists */ }
-  await sql`ALTER TABLE product_cache ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1`.catch(() => {})
+    return await Promise.race([
+      promise.catch(() => fallback),
+      new Promise<T>((resolve) => {
+        timeout = setTimeout(() => resolve(fallback), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -574,7 +574,6 @@ export async function GET(req: NextRequest) {
   const liveFetchBudgetMs = continuousMode ? CONTINUOUS_LIVE_FETCH_BUDGET_MS : NICHE_LIVE_FETCH_BUDGET_MS
   const isOutOfLiveFetchTime = () => Date.now() - startedAt > liveFetchBudgetMs
 
-  await ensureCacheTable()
   const userId = String(session.user.id)
   const requestSeed = forceRefresh ? `${Date.now()}:${Math.random()}` : String(getRotationBucket())
   const distributionSeed = `${userId}:${continuousMode ? 'continuous' : niche}:${requestSeed}`
@@ -587,8 +586,17 @@ export async function GET(req: NextRequest) {
   let listedAsins = new Set<string>()
   let listedTitles: string[] = []
   try {
-    await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ`.catch(() => {})
-    const listedRows = await queryRows<{ asin: string; title: string | null }>`SELECT asin, title FROM listed_asins WHERE user_id = ${session.user.id} AND ended_at IS NULL`
+    const listedRows = await withTimeout(
+      queryRows<{ asin: string; title: string | null }>`
+        SELECT asin, title
+        FROM listed_asins
+        WHERE user_id = ${session.user.id} AND ended_at IS NULL
+        ORDER BY listed_at DESC
+        LIMIT 750
+      `,
+      continuousMode ? 900 : 1800,
+      []
+    )
     listedAsins = new Set(listedRows.map((r) => String(r.asin).toUpperCase()))
     listedTitles = listedRows.map((r) => String(r.title || '')).filter(Boolean)
   } catch { /* table may not exist yet */ }
@@ -609,6 +617,13 @@ export async function GET(req: NextRequest) {
 
   const respondWithProducts = (products: Product[], source: string) => {
     const ranked = getAvailableProducts(products)
+    console.info('[product-finder]', JSON.stringify({
+      mode: continuousMode ? 'continuous' : 'niche',
+      source,
+      count: Math.min(ranked.length, targetCount),
+      available: ranked.length,
+      durationMs: Date.now() - startedAt,
+    }))
     return apiOk({
       niche: continuousMode ? 'Continuous Listing' : niche,
       mode: continuousMode ? 'continuous' : 'niche',
@@ -628,7 +643,9 @@ export async function GET(req: NextRequest) {
 
   const cacheAge = cacheRow ? Date.now() - new Date(cacheRow.cached_at).getTime() : Infinity
   const cacheIsFresh = cacheAge < CACHE_TTL && (cacheRow?.version || 1) === CACHE_VERSION
-  const continuousNicheCacheProducts = continuousMode ? await loadContinuousProductsFromNicheCache() : []
+  const continuousNicheCacheProducts = continuousMode
+    ? await withTimeout(loadContinuousProductsFromNicheCache(16), 750, [])
+    : []
   const cachedProducts = continuousMode
     ? [...(cacheRow?.results || []), ...continuousNicheCacheProducts]
     : (cacheRow?.results || [])
@@ -650,7 +667,7 @@ export async function GET(req: NextRequest) {
 
   // Cache miss — load lightweight DB-only niche weights before live fetch.
   if (continuousMode) {
-    nicheWeights = await getUserNicheWeights(userId, { includeSoldSignals: false })
+    nicheWeights = await withTimeout(getUserNicheWeights(userId, { includeSoldSignals: false }), 700, new Map<string, number>())
   }
 
   // ── Fetch fresh data from API ────────────────────────────────────────────────
@@ -779,14 +796,19 @@ export async function GET(req: NextRequest) {
     results.splice(0, results.length, ...rankProducts([...results, ...fallback], false))
   }
 
-  const saveResultsToCache = async () => {
-    if (results.length === 0) return
+  const saveResultsToCache = async (productsToSave = results) => {
+    if (productsToSave.length === 0) return
     try {
       await sql`
-        INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(rankProducts(results, false))}, ${CACHE_VERSION})
+        INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(rankProducts(productsToSave, false))}, ${CACHE_VERSION})
         ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()
       `
     } catch { /* non-fatal */ }
+  }
+
+  const scheduleCacheSave = (productsToSave = results) => {
+    const snapshot = rankProducts([...productsToSave], false)
+    after(() => saveResultsToCache(snapshot))
   }
 
   const fetchRapidProducts = async (
@@ -849,7 +871,7 @@ export async function GET(req: NextRequest) {
   if (results.length > 0) {
     results.splice(0, results.length, ...rankProducts(results, false))
     if (continuousMode) {
-      await saveResultsToCache()
+      // Continuous Listing should return fast; cache writes happen when we return below.
     } else {
       const enrichmentCount = targetCount
 
@@ -914,7 +936,8 @@ export async function GET(req: NextRequest) {
 
     if (results.length > 0) {
       results.splice(0, results.length, ...rankProducts(results, false))
-      await saveResultsToCache()
+      if (continuousMode) scheduleCacheSave()
+      else await saveResultsToCache()
       return respondWithProducts(results, 'scrape')
     }
 
@@ -936,7 +959,7 @@ export async function GET(req: NextRequest) {
 
   if (continuousMode && getAvailableProducts(results).length > 0) {
     results.splice(0, results.length, ...rankProducts(results, false))
-    await saveResultsToCache()
+    scheduleCacheSave()
     return respondWithProducts(results, getAvailableProducts(results).length >= targetCount ? 'live' : 'live-partial')
   }
 
