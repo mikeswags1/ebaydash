@@ -6,14 +6,18 @@ import { queryRows, sql } from '@/lib/db'
 import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice, isHealthyListing } from '@/lib/listing-pricing'
+import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
+import { getValidEbayAccessToken } from '@/lib/ebay-auth'
+
+export const maxDuration = 60
 
 const MAX_COST   = 300
 const CACHE_TTL  = 23 * 60 * 60 * 1000 // 23 hours — refresh once per day
-const CACHE_VERSION = 4
+const CACHE_VERSION = 5
 const TARGET_STOCK = 30
-const MAX_POOL_SIZE = 120
+const MAX_POOL_SIZE = 240
 const CONTINUOUS_CACHE_KEY = '__continuous_listing__'
-const CONTINUOUS_QUERY_LIMIT = 52
+const CONTINUOUS_QUERY_LIMIT = 72
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -31,7 +35,34 @@ type Product = {
   profit: number; roi: number; imageUrl?: string; risk: string; salesVolume?: string
   images?: string[]; features?: string[]; description?: string; specs?: Array<[string, string]>
   sourceNiche?: string; qualityScore?: number
+  distributionScore?: number
   _rating?: number; _numRatings?: number
+}
+
+type QueryEntry = { sourceNiche: string; query: string }
+
+type NichePreferenceRow = {
+  ebay_listing_id?: string | null
+  title?: string | null
+  niche?: string | null
+  category_name?: string | null
+  amazon_price?: string | number | null
+  ebay_price?: string | number | null
+  ebay_fee_rate?: string | number | null
+  ended_at?: string | null
+}
+
+type LightweightEbayOrder = {
+  orderPaymentStatus?: string
+  paymentSummary?: {
+    refunds?: Array<{ refundStatus?: string; amount?: { value?: string } }>
+  }
+  lineItems?: Array<{
+    legacyItemId?: string
+    quantity?: number
+    lineItemCost?: { value?: string }
+    refunds?: Array<{ refundStatus?: string; amount?: { value?: string } }>
+  }>
 }
 
 function normalizeTitle(value: string) {
@@ -117,13 +148,48 @@ const parseSales = (v?: string) => {
   return isNaN(n) ? 1 : Math.max(1, n)
 }
 
-function shuffle<T>(values: T[]) {
-  const arr = [...values]
-  for (let i = arr.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+function hashString(value: string) {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
   }
-  return arr
+  return hash >>> 0
+}
+
+function seededRatio(seed: string) {
+  return hashString(seed) / 0xffffffff
+}
+
+function seededShuffle<T>(values: T[], seed: string) {
+  return [...values]
+    .map((value, index) => ({ value, score: seededRatio(`${seed}:${index}:${JSON.stringify(value)}`) }))
+    .sort((a, b) => a.score - b.score)
+    .map((entry) => entry.value)
+}
+
+function getRotationBucket() {
+  return Math.floor(Date.now() / (6 * 60 * 60 * 1000))
+}
+
+function nicheKey(value?: string | null) {
+  return normalizeTitle(String(value || ''))
+}
+
+function getNicheWeight(weights: Map<string, number> | undefined, sourceNiche?: string) {
+  if (!sourceNiche || !weights?.size) return 1
+  return Math.max(0.75, Math.min(1.8, weights.get(nicheKey(sourceNiche)) || 1))
+}
+
+function isRefundedOrder(order: LightweightEbayOrder) {
+  const refunds = [
+    ...(order.paymentSummary?.refunds || []),
+    ...(order.lineItems || []).flatMap((lineItem) => lineItem.refunds || []),
+  ]
+  const statuses = [order.orderPaymentStatus, ...refunds.map((refund) => refund.refundStatus)]
+    .map((status) => String(status || '').toUpperCase())
+  const refundedAmount = refunds.reduce((sum, refund) => sum + parsePrice(refund.amount?.value), 0)
+  return statuses.includes('FULLY_REFUNDED') || statuses.includes('PARTIALLY_REFUNDED') || refundedAmount > 0
 }
 
 function getProductScore(product: Product) {
@@ -144,16 +210,52 @@ function getProductScore(product: Product) {
   return Number.isFinite(score) ? parseFloat(score.toFixed(2)) : 0
 }
 
-function rankProducts(products: Product[], randomize = false) {
+function spreadProductsAcrossNiches(products: Product[]) {
+  const counts = new Map<string, number>()
+  const primary: Product[] = []
+  const overflow: Product[] = []
+  const maxInitialPerNiche = Math.max(4, Math.ceil(TARGET_STOCK / 5))
+
+  for (const product of products) {
+    const key = product.sourceNiche || 'Other'
+    const count = counts.get(key) || 0
+    counts.set(key, count + 1)
+    if (count < maxInitialPerNiche) primary.push(product)
+    else overflow.push(product)
+  }
+
+  return [...primary, ...overflow]
+}
+
+function rankProducts(
+  products: Product[],
+  options: boolean | { randomize?: boolean; seed?: string; nicheWeights?: Map<string, number>; spreadNiches?: boolean } = false
+) {
+  const randomize = typeof options === 'boolean' ? options : Boolean(options.randomize)
+  const seed = typeof options === 'boolean' ? String(getRotationBucket()) : options.seed || String(getRotationBucket())
+  const nicheWeights = typeof options === 'boolean' ? undefined : options.nicheWeights
+  const spreadNiches = typeof options === 'boolean' ? false : Boolean(options.spreadNiches)
+  const jitterSpread = randomize ? (spreadNiches ? 0.72 : 0.28) : 0
+
   const ranked = dedupeProducts(products)
-    .map((product) => ({ ...product, qualityScore: getProductScore(product) }))
-    .sort((a, b) => (b.qualityScore || 0) - (a.qualityScore || 0))
+    .map((product) => {
+      const qualityScore = getProductScore(product)
+      const jitter = randomize ? seededRatio(`${seed}:${product.asin}:${product.sourceNiche || ''}`) : 0.5
+      const distributionMultiplier = randomize ? 1 - jitterSpread / 2 + jitter * jitterSpread : 1
+      const distributionScore = qualityScore * getNicheWeight(nicheWeights, product.sourceNiche) * distributionMultiplier
+      return {
+        ...product,
+        qualityScore,
+        distributionScore: Number.isFinite(distributionScore) ? parseFloat(distributionScore.toFixed(2)) : qualityScore,
+      }
+    })
+    .sort((a, b) => {
+      if (randomize) return (b.distributionScore || 0) - (a.distributionScore || 0)
+      return (b.qualityScore || 0) - (a.qualityScore || 0)
+    })
 
   if (!randomize) return ranked
-
-  const top = ranked.slice(0, Math.min(60, ranked.length))
-  const rest = ranked.slice(top.length)
-  return [...shuffle(top), ...rest]
+  return spreadNiches ? spreadProductsAcrossNiches(ranked) : ranked
 }
 
 const NICHE_QUERIES: Record<string, string[]> = {
@@ -199,6 +301,193 @@ const NICHE_QUERIES: Record<string, string[]> = {
   'Sports Memorabilia':     ['sports card display case frame', 'autograph frame display signed', 'jersey display case shadow box', 'trading card storage box'],
 }
 
+function findKnownSourceNiche(value?: string | null) {
+  const normalized = nicheKey(value)
+  if (!normalized) return null
+  return Object.keys(NICHE_QUERIES).find((nicheName) => {
+    const known = nicheKey(nicheName)
+    return normalized === known || normalized.includes(known) || known.includes(normalized)
+  }) || null
+}
+
+function inferSourceNiche(...values: Array<string | null | undefined>) {
+  const text = normalizeTitle(values.filter(Boolean).join(' '))
+  if (!text) return null
+
+  let best: { niche: string; score: number } | null = null
+  for (const [sourceNiche, queries] of Object.entries(NICHE_QUERIES)) {
+    const nicheText = normalizeTitle(sourceNiche)
+    let score = text.includes(nicheText) ? 12 : 0
+    const queryWords = new Set(normalizeTitle(queries.join(' ')).split(' ').filter((word) => word.length > 3))
+    for (const word of queryWords) {
+      if (text.includes(word)) score += 1
+    }
+    if (score > 0 && (!best || score > best.score)) best = { niche: sourceNiche, score }
+  }
+
+  return best && best.score >= 2 ? best.niche : null
+}
+
+async function getRecentSoldListingSignals(userId: string) {
+  const signals = new Map<string, { units: number; revenue: number }>()
+
+  try {
+    const credentials = await getValidEbayAccessToken(userId)
+    if (!credentials?.accessToken) return signals
+
+    const base = credentials.sandboxMode ? 'https://api.sandbox.ebay.com' : 'https://api.ebay.com'
+    const limit = 100
+    let offset = 0
+
+    while (offset < 300) {
+      const url = new URL(`${base}/sell/fulfillment/v1/order`)
+      url.searchParams.set('limit', String(limit))
+      url.searchParams.set('offset', String(offset))
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${credentials.accessToken}`, 'Content-Language': 'en-US' },
+        signal: AbortSignal.timeout(5000),
+      }).catch(() => null)
+
+      if (!response?.ok) break
+      const payload = await response.json()
+      const orders = Array.isArray(payload.orders) ? payload.orders as LightweightEbayOrder[] : []
+      for (const order of orders) {
+        if (isRefundedOrder(order)) continue
+        for (const lineItem of order.lineItems || []) {
+          const listingId = String(lineItem.legacyItemId || '')
+          if (!listingId) continue
+          const current = signals.get(listingId) || { units: 0, revenue: 0 }
+          current.units += Math.max(1, Number(lineItem.quantity || 1))
+          current.revenue += parsePrice(lineItem.lineItemCost?.value)
+          signals.set(listingId, current)
+        }
+      }
+
+      if (orders.length < limit) break
+      offset += limit
+    }
+  } catch {
+    // Sales signals are an optimization only; the queue still works without eBay data.
+  }
+
+  return signals
+}
+
+async function getUserNicheWeights(userId: string) {
+  const weights = new Map<string, number>()
+
+  try {
+    await ensureListedAsinsFinancialColumns()
+    const rows = await queryRows<NichePreferenceRow>`
+      SELECT ebay_listing_id, title, niche, category_name, amazon_price, ebay_price, ebay_fee_rate, ended_at
+      FROM listed_asins
+      WHERE user_id = ${userId}
+    `
+    const stats = new Map<string, { score: number; listings: number }>()
+    const listingRowsById = new Map(rows.filter((row) => row.ebay_listing_id).map((row) => [String(row.ebay_listing_id), row] as const))
+    const addNicheScore = (sourceNiche: string, score: number, listingCount = 0) => {
+      const key = nicheKey(sourceNiche)
+      const current = stats.get(key) || { score: 0, listings: 0 }
+      current.score += score
+      current.listings += listingCount
+      stats.set(key, current)
+    }
+
+    for (const row of rows) {
+      const sourceNiche = findKnownSourceNiche(row.niche) || inferSourceNiche(row.title, row.category_name, row.niche)
+      if (!sourceNiche) continue
+
+      const amazonPrice = parsePrice(row.amazon_price)
+      const ebayPrice = parsePrice(row.ebay_price)
+      const feeRate = Number(row.ebay_fee_rate) || EBAY_DEFAULT_FEE_RATE
+      const estimatedProfit = amazonPrice > 0 && ebayPrice > 0 ? ebayPrice - amazonPrice - ebayPrice * feeRate : 0
+      const margin = ebayPrice > 0 ? estimatedProfit / ebayPrice : 0
+      const activeSignal = row.ended_at ? 0.65 : 1
+      const rowScore = activeSignal + Math.max(0, estimatedProfit) / 18 + Math.max(0, margin) * 2.4
+      addNicheScore(sourceNiche, rowScore, 1)
+    }
+
+    const soldSignals = await getRecentSoldListingSignals(userId)
+    for (const [listingId, signal] of soldSignals) {
+      const row = listingRowsById.get(listingId)
+      const sourceNiche = findKnownSourceNiche(row?.niche) || inferSourceNiche(row?.title, row?.category_name, row?.niche)
+      if (!sourceNiche) continue
+      addNicheScore(sourceNiche, signal.units * 3.2 + signal.revenue / 42, 0)
+    }
+
+    const maxScore = Math.max(0, ...Array.from(stats.values()).map((stat) => stat.score))
+    if (maxScore > 0) {
+      for (const [key, stat] of stats) {
+        const confidence = Math.min(1, stat.listings / 8)
+        const normalizedScore = stat.score / maxScore
+        weights.set(key, 1 + normalizedScore * 0.6 + confidence * 0.15)
+      }
+    }
+  } catch {
+    // Performance weighting is best-effort; product finding should still work without it.
+  }
+
+  return weights
+}
+
+function buildContinuousQueryEntries(weights: Map<string, number>, seed: string): QueryEntry[] {
+  const allEntries = Object.entries(NICHE_QUERIES).flatMap(([sourceNiche, queries]) =>
+    queries.map((query) => ({ sourceNiche, query }))
+  )
+  const weightedLimit = Math.ceil(CONTINUOUS_QUERY_LIMIT * (weights.size > 0 ? 0.72 : 0.5))
+  const weightedEntries = allEntries
+    .map((entry) => ({
+      entry,
+      score:
+        getNicheWeight(weights, entry.sourceNiche) * (0.82 + seededRatio(`${seed}:weighted:${entry.sourceNiche}:${entry.query}`) * 0.36) +
+        seededRatio(`${seed}:explore:${entry.query}`) * 0.16,
+    }))
+    .sort((a, b) => b.score - a.score)
+    .map(({ entry }) => entry)
+  const explorationEntries = seededShuffle(allEntries, `${seed}:all-niches`)
+  const chosen: QueryEntry[] = []
+  const seen = new Set<string>()
+  const addEntry = (entry: QueryEntry) => {
+    const key = `${entry.sourceNiche}:${entry.query}`
+    if (seen.has(key) || chosen.length >= CONTINUOUS_QUERY_LIMIT) return
+    seen.add(key)
+    chosen.push(entry)
+  }
+
+  for (const entry of weightedEntries.slice(0, weightedLimit)) addEntry(entry)
+  for (const entry of explorationEntries) addEntry(entry)
+  return chosen
+}
+
+async function loadContinuousProductsFromNicheCache() {
+  try {
+    const rows = await queryRows<{ niche: string; results: Product[]; version?: number }>`
+      SELECT niche, results, version
+      FROM product_cache
+      WHERE niche <> ${CONTINUOUS_CACHE_KEY}
+      ORDER BY cached_at DESC
+      LIMIT 80
+    `
+    const products: Product[] = []
+    const seen = new Set<string>()
+
+    for (const row of rows) {
+      const sourceNiche = findKnownSourceNiche(row.niche) || row.niche
+      const rowProducts = Array.isArray(row.results) ? row.results : []
+      for (const product of rowProducts) {
+        if (!product?.asin || seen.has(product.asin.toUpperCase())) continue
+        seen.add(product.asin.toUpperCase())
+        products.push({ ...product, sourceNiche: product.sourceNiche || sourceNiche })
+      }
+    }
+
+    return products
+  } catch {
+    return []
+  }
+}
+
 async function ensureCacheTable() {
   try {
     await sql`CREATE TABLE IF NOT EXISTS product_cache (
@@ -231,6 +520,10 @@ export async function GET(req: NextRequest) {
   const forceRefresh = req.nextUrl.searchParams.get('refresh') === '1'
 
   await ensureCacheTable()
+  const userId = String(session.user.id)
+  const requestSeed = forceRefresh ? `${Date.now()}:${Math.random()}` : String(getRotationBucket())
+  const distributionSeed = `${userId}:${continuousMode ? 'continuous' : niche}:${requestSeed}`
+  const nicheWeights = continuousMode ? await getUserNicheWeights(userId) : new Map<string, number>()
 
   // ── Load user's already-listed ASINs (to filter duplicates) ─────────────────
   // Only block ASINs that are currently active on eBay (ended_at IS NULL)
@@ -251,7 +544,12 @@ export async function GET(req: NextRequest) {
     listedAsins.has(product.asin.toUpperCase()) || excludeAsins.has(product.asin.toUpperCase()) || matchesActiveListing(product.title)
 
   const getAvailableProducts = (products: Product[]) =>
-    rankProducts(products.filter((product) => !shouldBlockProduct(product)), continuousMode)
+    rankProducts(products.filter((product) => !shouldBlockProduct(product)), {
+      randomize: true,
+      seed: distributionSeed,
+      nicheWeights,
+      spreadNiches: continuousMode,
+    })
 
   const respondWithProducts = (products: Product[], source: string) => {
     const ranked = getAvailableProducts(products)
@@ -274,12 +572,16 @@ export async function GET(req: NextRequest) {
 
   const cacheAge = cacheRow ? Date.now() - new Date(cacheRow.cached_at).getTime() : Infinity
   const cacheIsFresh = cacheAge < CACHE_TTL && (cacheRow?.version || 1) === CACHE_VERSION
+  const continuousNicheCacheProducts = continuousMode ? await loadContinuousProductsFromNicheCache() : []
+  const cachedProducts = continuousMode
+    ? [...(cacheRow?.results || []), ...continuousNicheCacheProducts]
+    : (cacheRow?.results || [])
 
   if (cacheIsFresh && !forceRefresh) {
     // Serve from cache — filter out already-listed ASINs for this user
-    const cachedAvailable = getAvailableProducts(cacheRow!.results as Product[])
+    const cachedAvailable = getAvailableProducts(cachedProducts)
     if (cachedAvailable.length >= targetCount) {
-      return respondWithProducts(cachedAvailable, 'cache')
+      return respondWithProducts(cachedProducts, 'cache')
     }
   }
 
@@ -287,8 +589,8 @@ export async function GET(req: NextRequest) {
   const rapidKey = process.env.RAPIDAPI_KEY
   if (!rapidKey) {
     // No API key — fall back to cache if available
-    if (cacheRow) {
-      return respondWithProducts(cacheRow.results as Product[], 'cache')
+    if (cachedProducts.length > 0) {
+      return respondWithProducts(cachedProducts, 'cache')
     }
     return apiError('Product sourcing is not configured right now.', {
       status: 503,
@@ -298,7 +600,7 @@ export async function GET(req: NextRequest) {
   }
 
   const queryEntries = continuousMode
-    ? shuffle(Object.entries(NICHE_QUERIES).flatMap(([sourceNiche, queries]) => queries.map((query) => ({ sourceNiche, query })))).slice(0, CONTINUOUS_QUERY_LIMIT)
+    ? buildContinuousQueryEntries(nicheWeights, distributionSeed)
     : [...(NICHE_QUERIES[niche] || [`${niche} bestseller`]), `${niche} bestseller`, `${niche} high demand`, `${niche} trending`]
         .map((query) => ({ sourceNiche: niche, query }))
   const results: Product[] = []
@@ -356,22 +658,22 @@ export async function GET(req: NextRequest) {
   }
 
   const mergeCachedProducts = () => {
-    if (!cacheRow) return
+    if (cachedProducts.length === 0) return
     const seen = new Set(results.map((product) => product.asin.toUpperCase()))
-    const cached = (cacheRow.results as Product[]).filter((product) => {
+    const cached = cachedProducts.filter((product) => {
       const asin = product.asin.toUpperCase()
       if (seen.has(asin)) return false
       seen.add(asin)
       return true
     })
-    results.splice(0, results.length, ...rankProducts([...results, ...cached], continuousMode))
+    results.splice(0, results.length, ...rankProducts([...results, ...cached], false))
   }
 
   const saveResultsToCache = async () => {
     if (results.length === 0) return
     try {
       await sql`
-        INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(rankProducts(results, continuousMode))}, ${CACHE_VERSION})
+        INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(rankProducts(results, false))}, ${CACHE_VERSION})
         ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()
       `
     } catch { /* non-fatal */ }
@@ -398,7 +700,7 @@ export async function GET(req: NextRequest) {
 
   // ── Save fresh results to cache ──────────────────────────────────────────────
   if (results.length > 0) {
-    results.splice(0, results.length, ...rankProducts(results, continuousMode))
+    results.splice(0, results.length, ...rankProducts(results, false))
 
     const enriched = await Promise.all(
       results.slice(0, targetCount).map(async (product) => {
@@ -442,7 +744,7 @@ export async function GET(req: NextRequest) {
         .filter((asin) => !filteredEnriched.some((product) => product.asin === asin))
     )
     const remainder = results.slice(targetCount).filter((product) => !droppedSourceAsins.has(product.asin))
-    results.splice(0, results.length, ...rankProducts([...filteredEnriched, ...remainder], continuousMode))
+    results.splice(0, results.length, ...rankProducts([...filteredEnriched, ...remainder], false))
 
     await saveResultsToCache()
   }
@@ -455,7 +757,7 @@ export async function GET(req: NextRequest) {
     await addScrapedProducts(queryEntries, continuousMode ? 24 : 6)
 
     if (results.length > 0) {
-      results.splice(0, results.length, ...rankProducts(results, continuousMode))
+      results.splice(0, results.length, ...rankProducts(results, false))
       await saveResultsToCache()
       return respondWithProducts(results, 'scrape')
     }
@@ -473,7 +775,7 @@ export async function GET(req: NextRequest) {
 
   if (getAvailableProducts(results).length < targetCount) {
     await addScrapedProducts(queryEntries, continuousMode ? 24 : 6)
-    results.splice(0, results.length, ...rankProducts(results, continuousMode))
+    results.splice(0, results.length, ...rankProducts(results, false))
     await saveResultsToCache()
   }
 
