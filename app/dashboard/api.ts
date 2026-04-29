@@ -10,8 +10,23 @@ export class DashboardApiError extends Error {
   }
 }
 
-async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, init)
+async function requestJson<T>(input: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
+  const { timeoutMs, ...requestInit } = init || {}
+  const controller = timeoutMs ? new AbortController() : null
+  const timeout = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null
+
+  let response: Response
+  try {
+    response = await fetch(input, controller ? { ...requestInit, signal: controller.signal } : requestInit)
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new DashboardApiError('Product search is taking too long. Try again in a moment while the product pool warms up.', 'REQUEST_TIMEOUT')
+    }
+    throw error
+  } finally {
+    if (timeout) window.clearTimeout(timeout)
+  }
+
   const data = await response.json().catch(() => null)
 
   if (data?.ok === false && data?.error) {
@@ -118,7 +133,9 @@ export async function fetchFinderProducts(
   if (options.limit) params.set('limit', String(options.limit))
   if (options.excludeAsins?.length) params.set('exclude', options.excludeAsins.join(','))
   if (refresh) params.set('refresh', '1')
-  return requestJson<{ ok: true; results: FinderProduct[]; available?: number; source?: string; mode?: 'niche' | 'continuous' }>(`/api/scripts/product-finder?${params.toString()}`)
+  return requestJson<{ ok: true; results: FinderProduct[]; available?: number; source?: string; mode?: 'niche' | 'continuous' }>(`/api/scripts/product-finder?${params.toString()}`, {
+    timeoutMs: options.mode === 'continuous' ? 9_000 : 22_000,
+  })
 }
 
 export async function publishProduct(input: {

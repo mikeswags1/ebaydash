@@ -18,9 +18,11 @@ const TARGET_STOCK = 30
 const MAX_POOL_SIZE = 160
 const CONTINUOUS_CACHE_KEY = '__continuous_listing__'
 const CONTINUOUS_QUERY_LIMIT = 28
-const CONTINUOUS_LIVE_FETCH_BUDGET_MS = 8_000
+const CONTINUOUS_LIVE_FETCH_BUDGET_MS = 4_500
 const NICHE_LIVE_FETCH_BUDGET_MS = 16_000
-const CONTINUOUS_MIN_FAST_RETURN = 24
+const CONTINUOUS_MIN_FAST_RETURN = 1
+const CONTINUOUS_PARALLEL_QUERY_LIMIT = 8
+const CONTINUOUS_FETCH_TIMEOUT_MS = 2_500
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -377,8 +379,9 @@ async function getRecentSoldListingSignals(userId: string) {
   return signals
 }
 
-async function getUserNicheWeights(userId: string) {
+async function getUserNicheWeights(userId: string, options: { includeSoldSignals?: boolean } = {}) {
   const weights = new Map<string, number>()
+  const includeSoldSignals = options.includeSoldSignals !== false
 
   try {
     await ensureListedAsinsFinancialColumns()
@@ -411,12 +414,14 @@ async function getUserNicheWeights(userId: string) {
       addNicheScore(sourceNiche, rowScore, 1)
     }
 
-    const soldSignals = await getRecentSoldListingSignals(userId)
-    for (const [listingId, signal] of soldSignals) {
-      const row = listingRowsById.get(listingId)
-      const sourceNiche = findKnownSourceNiche(row?.niche) || inferSourceNiche(row?.title, row?.category_name, row?.niche)
-      if (!sourceNiche) continue
-      addNicheScore(sourceNiche, signal.units * 3.2 + signal.revenue / 42, 0)
+    if (includeSoldSignals) {
+      const soldSignals = await getRecentSoldListingSignals(userId)
+      for (const [listingId, signal] of soldSignals) {
+        const row = listingRowsById.get(listingId)
+        const sourceNiche = findKnownSourceNiche(row?.niche) || inferSourceNiche(row?.title, row?.category_name, row?.niche)
+        if (!sourceNiche) continue
+        addNicheScore(sourceNiche, signal.units * 3.2 + signal.revenue / 42, 0)
+      }
     }
 
     const maxScore = Math.max(0, ...Array.from(stats.values()).map((stat) => stat.score))
@@ -589,8 +594,8 @@ export async function GET(req: NextRequest) {
     return respondWithProducts(cachedProducts, forceRefresh ? 'cache-reshuffle' : 'cache')
   }
 
-  if (continuousMode && forceRefresh && cachedAvailable.length >= CONTINUOUS_MIN_FAST_RETURN) {
-    return respondWithProducts(cachedProducts, 'cache-reshuffle')
+  if (continuousMode && cachedAvailable.length >= CONTINUOUS_MIN_FAST_RETURN) {
+    return respondWithProducts(cachedProducts, forceRefresh ? 'cache-reshuffle-partial' : 'cache-partial')
   }
 
   if (cacheIsFresh && !forceRefresh) {
@@ -599,9 +604,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Cache miss — now load niche weights (requires eBay API) before live fetch
+  // Cache miss — load lightweight DB-only niche weights before live fetch.
   if (continuousMode) {
-    nicheWeights = await getUserNicheWeights(userId)
+    nicheWeights = await getUserNicheWeights(userId, { includeSoldSignals: false })
   }
 
   // ── Fetch fresh data from API ────────────────────────────────────────────────
@@ -699,22 +704,55 @@ export async function GET(req: NextRequest) {
     } catch { /* non-fatal */ }
   }
 
-  for (const { query, sourceNiche } of liveQueryEntries) {
-    if (isOutOfLiveFetchTime() || results.length >= apiPoolTarget || apiQuotaExceeded) break
-    for (const page of apiPages) {
-      if (isOutOfLiveFetchTime() || results.length >= apiPoolTarget) break
-      try {
-        const res = await fetch(
-          `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(query)}&country=US&category_id=aps&page=${page}`,
-          { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey }, signal: AbortSignal.timeout(continuousMode ? 3500 : 6000) }
-        )
-        if (res.status === 429 || res.status === 403) { apiQuotaExceeded = true; break }
-        const data = await res.json()
-        if (String(data?.message || '').toLowerCase().match(/limit|quota|exceed/)) { apiQuotaExceeded = true; break }
-        const products: Record<string, unknown>[] = (data?.data?.products || []).map((product: Record<string, unknown>) => ({ ...product, _sourceNiche: sourceNiche }))
-        processProducts(products)
-        if (products.length === 0) break
-      } catch { continue }
+  const fetchRapidProducts = async (
+    entry: QueryEntry,
+    page: number,
+    timeoutMs: number
+  ): Promise<{ quotaExceeded: boolean; products: Record<string, unknown>[] }> => {
+    try {
+      const res = await fetch(
+        `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(entry.query)}&country=US&category_id=aps&page=${page}`,
+        { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey }, signal: AbortSignal.timeout(timeoutMs) }
+      )
+      if (res.status === 429 || res.status === 403) return { quotaExceeded: true, products: [] }
+      if (!res.ok) return { quotaExceeded: false, products: [] }
+      const data = await res.json()
+      if (String(data?.message || '').toLowerCase().match(/limit|quota|exceed/)) return { quotaExceeded: true, products: [] }
+      const products: Record<string, unknown>[] = (data?.data?.products || []).map((product: Record<string, unknown>) => ({
+        ...product,
+        _sourceNiche: entry.sourceNiche,
+      }))
+      return { quotaExceeded: false, products }
+    } catch {
+      return { quotaExceeded: false, products: [] }
+    }
+  }
+
+  if (continuousMode) {
+    const liveFetches = liveQueryEntries
+      .slice(0, CONTINUOUS_PARALLEL_QUERY_LIMIT)
+      .map((entry) => fetchRapidProducts(entry, 1, CONTINUOUS_FETCH_TIMEOUT_MS))
+
+    const settled = await Promise.allSettled(liveFetches)
+    for (const result of settled) {
+      if (results.length >= apiPoolTarget) break
+      if (result.status !== 'fulfilled') continue
+      if (result.value.quotaExceeded) {
+        apiQuotaExceeded = true
+        continue
+      }
+      processProducts(result.value.products)
+    }
+  } else {
+    for (const { query, sourceNiche } of liveQueryEntries) {
+      if (isOutOfLiveFetchTime() || results.length >= apiPoolTarget || apiQuotaExceeded) break
+      for (const page of apiPages) {
+        if (isOutOfLiveFetchTime() || results.length >= apiPoolTarget) break
+        const response = await fetchRapidProducts({ query, sourceNiche }, page, 6000)
+        if (response.quotaExceeded) { apiQuotaExceeded = true; break }
+        processProducts(response.products)
+        if (response.products.length === 0) break
+      }
     }
   }
 

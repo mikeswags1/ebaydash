@@ -10,6 +10,8 @@ export const maxDuration = 300
 const EBAY_FEE = 0.15
 const MIN_PROFIT = 6
 const MAX_COST = 300
+const CACHE_VERSION = 5
+const SCHEDULED_NICHE_BATCH_SIZE = 8
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -137,8 +139,8 @@ async function refreshNiche(niche: string, rapidKey: string): Promise<number> {
   })
 
   try {
-    await sql`INSERT INTO product_cache (niche, results) VALUES (${niche}, ${JSON.stringify(results)})
-              ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, cached_at = NOW()`
+    await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results)}, ${CACHE_VERSION})
+              ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()`
   } catch { return 0 }
   return results.length
 }
@@ -173,8 +175,8 @@ async function refreshNicheScrape(niche: string): Promise<number> {
     return s(b) - s(a)
   })
   try {
-    await sql`INSERT INTO product_cache (niche, results) VALUES (${niche}, ${JSON.stringify(results)})
-              ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, cached_at = NOW()`
+    await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results)}, ${CACHE_VERSION})
+              ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()`
   } catch { return 0 }
   return results.length
 }
@@ -232,25 +234,37 @@ export async function GET(req: NextRequest) {
 
   // Ensure ended_at column exists
   await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ`.catch(() => {})
-  await sql`CREATE TABLE IF NOT EXISTS product_cache (niche TEXT PRIMARY KEY, results JSONB NOT NULL, cached_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`.catch(() => {})
+  await sql`CREATE TABLE IF NOT EXISTS product_cache (niche TEXT PRIMARY KEY, results JSONB NOT NULL, cached_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), version INTEGER NOT NULL DEFAULT 1)`.catch(() => {})
+  await sql`ALTER TABLE product_cache ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1`.catch(() => {})
 
   const startedAt = Date.now()
   const report: Record<string, unknown> = {}
+  const fullRefresh = req.nextUrl.searchParams.get('full') === '1'
+  const now = new Date()
 
   // 1. Sync eBay listing statuses for all users
-  try {
-    const users = await queryRows<{ user_id: number }>`SELECT user_id FROM ebay_credentials`
-    let synced = 0
-    for (const u of users) {
-      try { await syncUserListings(Number(u.user_id)); synced++ } catch { /* skip */ }
-      if (Date.now() - startedAt > 120_000) break // stay within budget
-    }
-    report.usersSynced = synced
-  } catch (e) { report.syncError = String(e) }
+  const shouldSyncUsers = fullRefresh || (now.getUTCMinutes() === 0 && now.getUTCHours() % 4 === 0)
+  if (shouldSyncUsers) {
+    try {
+      const users = await queryRows<{ user_id: number }>`SELECT user_id FROM ebay_credentials`
+      let synced = 0
+      for (const u of users) {
+        try { await syncUserListings(Number(u.user_id)); synced++ } catch { /* skip */ }
+        if (Date.now() - startedAt > 120_000) break // stay within budget
+      }
+      report.usersSynced = synced
+    } catch (e) { report.syncError = String(e) }
+  } else {
+    report.usersSynced = 'skipped'
+  }
 
   // 2. Refresh product cache for all niches
   const rapidKey = process.env.RAPIDAPI_KEY
-  const niches = Object.keys(NICHE_QUERIES)
+  const allNiches = Object.keys(NICHE_QUERIES)
+  const batchSize = fullRefresh ? allNiches.length : SCHEDULED_NICHE_BATCH_SIZE
+  const rotation = Math.floor(Date.now() / (15 * 60 * 1000))
+  const startIndex = fullRefresh ? 0 : (rotation * batchSize) % allNiches.length
+  const niches = Array.from({ length: Math.min(batchSize, allNiches.length) }, (_, index) => allNiches[(startIndex + index) % allNiches.length])
   let refreshed = 0, quotaHit = false
 
   if (rapidKey) {
@@ -278,6 +292,7 @@ export async function GET(req: NextRequest) {
   }
 
   report.nichesRefreshed = refreshed
+  report.nichesAttempted = niches
   report.quotaHit = quotaHit
 
   report.durationMs = Date.now() - startedAt
