@@ -239,7 +239,8 @@ export async function GET(req: NextRequest) {
 
   const startedAt = Date.now()
   const report: Record<string, unknown> = {}
-  const fullRefresh = req.nextUrl.searchParams.get('full') === '1'
+  const rollingRefresh = req.nextUrl.searchParams.get('rolling') === '1'
+  const fullRefresh = req.nextUrl.searchParams.get('full') === '1' || !rollingRefresh
   const now = new Date()
 
   // 1. Sync eBay listing statuses for all users
