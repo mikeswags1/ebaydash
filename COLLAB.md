@@ -18,6 +18,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-04-29 | Codex | Fixed Product Listing and Continuous Listing queue stocking with broader niche queries, strict-plus-backup product sourcing, tighter continuous cache rules, and safer request timeouts | `app/api/scripts/product-finder/route.ts`, `app/dashboard/api.ts`, `lib/amazon-scrape.ts` |
 | 2026-04-29 | Codex | Made Continuous Listing cold starts fast with parallel capped product searches, added client timeout protection, and kept cron deploy-safe on Vercel Hobby while supporting rolling refresh mode | `app/api/scripts/product-finder/route.ts`, `app/dashboard/api.ts`, `app/api/cron/refresh-products/route.ts`, `vercel.json` |
 | 2026-04-29 | Codex | Fixed Continuous Listing 504 risk with cache-first fast queue refreshes, kept existing products visible while shuffling, and made the dashboard theme calmer/readable | `app/api/scripts/product-finder/route.ts`, `app/dashboard/page.tsx`, `app/dashboard/components/*`, `app/globals.css` |
 | 2026-04-29 | Codex | Fixed StackPilot Vercel alias/protection check, reduced Continuous Listing timeout risk, and softened dashboard UI into a friendlier tropical/sky theme | `app/api/scripts/product-finder/route.ts`, `app/dashboard/page.tsx`, dashboard components, `app/globals.css` |

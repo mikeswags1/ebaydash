@@ -20,9 +20,16 @@ const CONTINUOUS_CACHE_KEY = '__continuous_listing__'
 const CONTINUOUS_QUERY_LIMIT = 28
 const CONTINUOUS_LIVE_FETCH_BUDGET_MS = 4_500
 const NICHE_LIVE_FETCH_BUDGET_MS = 16_000
-const CONTINUOUS_MIN_FAST_RETURN = 1
+const CONTINUOUS_MIN_FAST_RETURN = 24
 const CONTINUOUS_PARALLEL_QUERY_LIMIT = 8
 const CONTINUOUS_FETCH_TIMEOUT_MS = 2_500
+const MIN_STOCK_PROFIT = 8
+const MIN_STOCK_ROI = 30
+const MIN_STOCK_MARGIN = 16
+const MIN_PRIMARY_RATING = 3.8
+const MIN_ACCEPTABLE_RATING = 3.5
+const MIN_PRIMARY_REVIEW_COUNT = 12
+const MIN_PRIMARY_SALES = 20
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -333,6 +340,45 @@ function inferSourceNiche(...values: Array<string | null | undefined>) {
   return best && best.score >= 2 ? best.niche : null
 }
 
+function dedupeQueryEntries(entries: QueryEntry[]) {
+  const seen = new Set<string>()
+  const deduped: QueryEntry[] = []
+
+  for (const entry of entries) {
+    const query = entry.query.replace(/\s+/g, ' ').trim()
+    if (!query) continue
+    const key = `${entry.sourceNiche}:${normalizeTitle(query)}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    deduped.push({ ...entry, query })
+  }
+
+  return deduped
+}
+
+function buildNicheQueryEntries(sourceNiche: string): QueryEntry[] {
+  const baseQueries = NICHE_QUERIES[sourceNiche] || [`${sourceNiche} bestseller`]
+  const accessoriesQuery = sourceNiche.toLowerCase().includes('accessories')
+    ? `${sourceNiche} kit`
+    : `${sourceNiche} accessories`
+  const expansionQueries = [
+    `${sourceNiche} bestseller`,
+    `${sourceNiche} best sellers`,
+    `top rated ${sourceNiche}`,
+    `popular ${sourceNiche}`,
+    `trending ${sourceNiche}`,
+    `high demand ${sourceNiche}`,
+    `${sourceNiche} deals`,
+    accessoriesQuery,
+    `${sourceNiche} bundle`,
+    `${sourceNiche} pack`,
+    `${sourceNiche} replacement`,
+    `${sourceNiche} set`,
+  ]
+
+  return dedupeQueryEntries([...baseQueries, ...expansionQueries].map((query) => ({ sourceNiche, query })))
+}
+
 async function getRecentSoldListingSignals(userId: string) {
   const signals = new Map<string, { units: number; revenue: number }>()
 
@@ -440,9 +486,7 @@ async function getUserNicheWeights(userId: string, options: { includeSoldSignals
 }
 
 function buildContinuousQueryEntries(weights: Map<string, number>, seed: string): QueryEntry[] {
-  const allEntries = Object.entries(NICHE_QUERIES).flatMap(([sourceNiche, queries]) =>
-    queries.map((query) => ({ sourceNiche, query }))
-  )
+  const allEntries = Object.keys(NICHE_QUERIES).flatMap((sourceNiche) => buildNicheQueryEntries(sourceNiche))
   const weightedLimit = Math.ceil(CONTINUOUS_QUERY_LIMIT * (weights.size > 0 ? 0.72 : 0.5))
   const weightedEntries = allEntries
     .map((entry) => ({
@@ -625,18 +669,42 @@ export async function GET(req: NextRequest) {
 
   const queryEntries = continuousMode
     ? buildContinuousQueryEntries(nicheWeights, distributionSeed)
-    : [...(NICHE_QUERIES[niche] || [`${niche} bestseller`]), `${niche} bestseller`, `${niche} high demand`, `${niche} trending`]
-        .map((query) => ({ sourceNiche: niche, query }))
+    : buildNicheQueryEntries(niche)
   const liveQueryEntries = continuousMode ? queryEntries.slice(0, 10) : queryEntries
   const results: Product[] = []
+  const fallbackResults: Product[] = []
   const seenAsins = new Set<string>()
   let apiQuotaExceeded = false
   const apiPoolTarget = continuousMode ? Math.min(MAX_POOL_SIZE, targetCount + 18) : Math.min(MAX_POOL_SIZE, Math.max(targetCount * 3, targetCount + 24))
   const apiPages = continuousMode ? [1] : [1, 2]
 
+  const candidateCount = () => results.length + fallbackResults.length
+  const isStockableListing = (amazonPrice: number, ebayPrice: number) => {
+    const metrics = getListingMetrics(amazonPrice, ebayPrice, EBAY_DEFAULT_FEE_RATE)
+    return metrics.profit >= MIN_STOCK_PROFIT && metrics.roi >= MIN_STOCK_ROI && metrics.margin >= MIN_STOCK_MARGIN
+  }
+  const hasStrongDemandSignal = (rating: number, reviewCount: number, salesVolume?: string) => {
+    const sales = parseSales(salesVolume)
+    const ratingOk = rating === 0 || rating >= MIN_PRIMARY_RATING
+    const demandOk = reviewCount === 0 || reviewCount >= MIN_PRIMARY_REVIEW_COUNT || sales >= MIN_PRIMARY_SALES
+    return ratingOk && demandOk
+  }
+  const getRisk = (price: number, roi: number, fallback = false) => {
+    if (price > 150) return 'HIGH'
+    if (price > 60 || roi < 45 || fallback) return 'MEDIUM'
+    return 'LOW'
+  }
+  const addCandidate = (product: Product, primary: boolean) => {
+    if (primary) {
+      results.push(product)
+    } else {
+      fallbackResults.push({ ...product, risk: getRisk(product.amazonPrice, product.roi, true) })
+    }
+  }
+
   const processProducts = (products: Record<string, unknown>[]) => {
     for (const p of products) {
-      if (results.length >= MAX_POOL_SIZE) break
+      if (candidateCount() >= MAX_POOL_SIZE) break
       const asin = String(p.asin || '')
       const title       = String(p.product_title || '')
       if (!asin || seenAsins.has(asin) || shouldBlockProduct({ asin, title })) continue
@@ -646,37 +714,41 @@ export async function GET(req: NextRequest) {
       const salesVolume = String(p.sales_volume || '')
       if (!price || price <= 0 || price > MAX_COST) continue
       if (!title || isRejected(title)) continue
-      const { ebayPrice, profit, roi } = calcMetrics(price)
-      if (!isHealthyListing(price, ebayPrice, EBAY_DEFAULT_FEE_RATE)) continue
       const rating = parseFloat(String(p.product_star_rating || '0')) || 0
       const reviewCount = parseInt(String(p.product_num_ratings || '0').replace(/[^0-9]/g, ''), 10) || 0
-      if (rating > 0 && rating < 3.8) continue
-      if (reviewCount > 0 && reviewCount < 12 && parseSales(salesVolume) < 20) continue
-      const risk = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
-      results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk, salesVolume,
+      if (rating > 0 && rating < MIN_ACCEPTABLE_RATING) continue
+      const { ebayPrice, profit, roi } = calcMetrics(price)
+      const healthy = isHealthyListing(price, ebayPrice, EBAY_DEFAULT_FEE_RATE)
+      if (!healthy && !isStockableListing(price, ebayPrice)) continue
+      const primary = healthy && hasStrongDemandSignal(rating, reviewCount, salesVolume)
+      const risk = getRisk(price, roi, !primary)
+      addCandidate({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk, salesVolume,
         sourceNiche: (p as Record<string, unknown>)._sourceNiche ? String((p as Record<string, unknown>)._sourceNiche) : undefined,
         _rating: rating,
         _numRatings: reviewCount,
-      })
+      }, primary)
     }
   }
 
-  const addScrapedProducts = async (entries: Array<{ query: string; sourceNiche: string }>, queryLimit: number) => {
+  const addScrapedProducts = async (entries: Array<{ query: string; sourceNiche: string }>, queryLimit: number, timeoutMs = 6000) => {
     for (const { query, sourceNiche } of entries.slice(0, queryLimit)) {
-      if (isOutOfLiveFetchTime() || getAvailableProducts(results).length >= targetCount || results.length >= MAX_POOL_SIZE) break
+      if (isOutOfLiveFetchTime() || getAvailableProducts(results).length >= targetCount || candidateCount() >= MAX_POOL_SIZE) break
       try {
-        const scraped = await scrapeAmazonSearch(query)
+        const scraped = await scrapeAmazonSearch(query, 1, timeoutMs)
         for (const p of scraped) {
-          if (isOutOfLiveFetchTime() || getAvailableProducts(results).length >= targetCount || results.length >= MAX_POOL_SIZE) break
+          if (isOutOfLiveFetchTime() || getAvailableProducts(results).length >= targetCount || candidateCount() >= MAX_POOL_SIZE) break
           if (!p.asin || seenAsins.has(p.asin) || shouldBlockProduct({ asin: p.asin, title: p.title })) continue
           seenAsins.add(p.asin)
           if (!p.price || p.price <= 0 || p.price > MAX_COST) continue
           if (!p.title || isRejected(p.title)) continue
           const { ebayPrice, profit, roi } = calcMetrics(p.price)
-          if (!isHealthyListing(p.price, ebayPrice, EBAY_DEFAULT_FEE_RATE)) continue
-          const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
-          results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
-            imageUrl: p.imageUrl, risk, salesVolume: undefined, sourceNiche, _rating: p.rating, _numRatings: p.reviewCount })
+          const healthy = isHealthyListing(p.price, ebayPrice, EBAY_DEFAULT_FEE_RATE)
+          if (p.rating > 0 && p.rating < MIN_ACCEPTABLE_RATING) continue
+          if (!healthy && !isStockableListing(p.price, ebayPrice)) continue
+          const primary = healthy && hasStrongDemandSignal(p.rating, p.reviewCount)
+          const risk = getRisk(p.price, roi, !primary)
+          addCandidate({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
+            imageUrl: p.imageUrl, risk, salesVolume: undefined, sourceNiche, _rating: p.rating, _numRatings: p.reviewCount }, primary)
         }
       } catch { /* ignore */ }
     }
@@ -692,6 +764,19 @@ export async function GET(req: NextRequest) {
       return true
     })
     results.splice(0, results.length, ...rankProducts([...results, ...cached], false))
+  }
+
+  const mergeFallbackProducts = () => {
+    if (fallbackResults.length === 0 || getAvailableProducts(results).length >= targetCount) return
+    const seen = new Set(results.map((product) => product.asin.toUpperCase()))
+    const fallback = fallbackResults.filter((product) => {
+      const asin = product.asin.toUpperCase()
+      if (seen.has(asin) || shouldBlockProduct(product)) return false
+      seen.add(asin)
+      return true
+    })
+    if (fallback.length === 0) return
+    results.splice(0, results.length, ...rankProducts([...results, ...fallback], false))
   }
 
   const saveResultsToCache = async () => {
@@ -735,7 +820,7 @@ export async function GET(req: NextRequest) {
 
     const settled = await Promise.allSettled(liveFetches)
     for (const result of settled) {
-      if (results.length >= apiPoolTarget) break
+      if (candidateCount() >= apiPoolTarget) break
       if (result.status !== 'fulfilled') continue
       if (result.value.quotaExceeded) {
         apiQuotaExceeded = true
@@ -745,9 +830,9 @@ export async function GET(req: NextRequest) {
     }
   } else {
     for (const { query, sourceNiche } of liveQueryEntries) {
-      if (isOutOfLiveFetchTime() || results.length >= apiPoolTarget || apiQuotaExceeded) break
+      if (isOutOfLiveFetchTime() || candidateCount() >= apiPoolTarget || apiQuotaExceeded) break
       for (const page of apiPages) {
-        if (isOutOfLiveFetchTime() || results.length >= apiPoolTarget) break
+        if (isOutOfLiveFetchTime() || candidateCount() >= apiPoolTarget) break
         const response = await fetchRapidProducts({ query, sourceNiche }, page, 6000)
         if (response.quotaExceeded) { apiQuotaExceeded = true; break }
         processProducts(response.products)
@@ -757,6 +842,10 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Save fresh results to cache ──────────────────────────────────────────────
+  if (getAvailableProducts(results).length < targetCount) {
+    mergeFallbackProducts()
+  }
+
   if (results.length > 0) {
     results.splice(0, results.length, ...rankProducts(results, false))
     if (continuousMode) {
@@ -820,9 +909,8 @@ export async function GET(req: NextRequest) {
     }
 
     // No cache at all — scrape Amazon search directly (free, no quota)
-    if (!continuousMode) {
-      await addScrapedProducts(queryEntries, 6)
-    }
+    await addScrapedProducts(queryEntries, continuousMode ? 1 : Math.min(queryEntries.length, 10), continuousMode ? 1800 : 6000)
+    mergeFallbackProducts()
 
     if (results.length > 0) {
       results.splice(0, results.length, ...rankProducts(results, false))
@@ -841,6 +929,11 @@ export async function GET(req: NextRequest) {
     mergeCachedProducts()
   }
 
+  if (continuousMode && getAvailableProducts(results).length === 0 && !isOutOfLiveFetchTime()) {
+    await addScrapedProducts(queryEntries, 1, 1800)
+    mergeFallbackProducts()
+  }
+
   if (continuousMode && getAvailableProducts(results).length > 0) {
     results.splice(0, results.length, ...rankProducts(results, false))
     await saveResultsToCache()
@@ -848,7 +941,8 @@ export async function GET(req: NextRequest) {
   }
 
   if (!continuousMode && getAvailableProducts(results).length < targetCount) {
-    await addScrapedProducts(queryEntries, 6)
+    await addScrapedProducts(queryEntries, Math.min(queryEntries.length, 10), 6000)
+    mergeFallbackProducts()
     results.splice(0, results.length, ...rankProducts(results, false))
     await saveResultsToCache()
   }

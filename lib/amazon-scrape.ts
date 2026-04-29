@@ -257,11 +257,12 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
 // Search Amazon for products in a niche — scrapes search results page
 export async function scrapeAmazonSearch(
   query: string,
-  page = 1
+  page = 1,
+  timeoutMs = 12000
 ): Promise<Array<{ asin: string; title: string; price: number; imageUrl: string; rating: number; reviewCount: number }>> {
   try {
     const url = `https://www.amazon.com/s?k=${encodeURIComponent(query)}&page=${page}`
-    const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(12000) })
+    const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(timeoutMs) })
     if (!res.ok) return []
 
     const html = await res.text()

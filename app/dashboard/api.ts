@@ -134,7 +134,7 @@ export async function fetchFinderProducts(
   if (options.excludeAsins?.length) params.set('exclude', options.excludeAsins.join(','))
   if (refresh) params.set('refresh', '1')
   return requestJson<{ ok: true; results: FinderProduct[]; available?: number; source?: string; mode?: 'niche' | 'continuous' }>(`/api/scripts/product-finder?${params.toString()}`, {
-    timeoutMs: options.mode === 'continuous' ? 9_000 : 22_000,
+    timeoutMs: options.mode === 'continuous' ? 15_000 : 38_000,
   })
 }
 
