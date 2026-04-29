@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const redirectUri = String(process.env.EBAY_RUNAME || '').trim()
 
   if (!clientId || !redirectUri) {
-    return NextResponse.redirect(new URL('/dashboard?ebay=error&msg=eBay%20OAuth%20is%20not%20configured.', process.env.NEXTAUTH_URL || 'https://ebaydash.vercel.app'))
+    return NextResponse.redirect(new URL('/dashboard?ebay=error&msg=eBay%20OAuth%20is%20not%20configured.', process.env.NEXTAUTH_URL || 'https://stackpilot-app.vercel.app'))
   }
 
   const url = new URL('https://auth.ebay.com/oauth2/authorize')
