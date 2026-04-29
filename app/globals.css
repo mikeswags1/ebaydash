@@ -1,23 +1,23 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#04101e;
-  --s:#071828;
-  --c:#0a1f32;
-  --ch:#0e263e;
-  --bdr:rgba(56,189,248,0.13);
-  --bdrh:rgba(56,189,248,0.45);
-  --txt:#e0f2fe;
-  --sil:#7ab8d4;
-  --dim:#3a6880;
-  --mute:#071828;
-  --gold:#38bdf8;
-  --gld2:#7dd3fc;
-  --plat:#bae6fd;
-  --grn:#34d399;
+  --bg:#050f08;
+  --s:#081a0c;
+  --c:#0b2010;
+  --ch:#0e2814;
+  --bdr:rgba(52,211,153,0.14);
+  --bdrh:rgba(52,211,153,0.45);
+  --txt:#eaf7ee;
+  --sil:#7ec8a0;
+  --dim:#3a6e52;
+  --mute:#071a0a;
+  --gold:#34d399;
+  --gld2:#6ee7b7;
+  --plat:#bbf7d0;
+  --grn:#4ade80;
   --red:#f87171;
-  --ora:#fb923c;
+  --ora:#fbbf24;
   --pur:#a78bfa;
-  --amb:#60a5fa;
+  --amb:#fb923c;
   --serif:'Cormorant Garamond',Georgia,serif;
 }
 html{scroll-behavior:smooth}
@@ -33,23 +33,23 @@ body{
 body::before{
   content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
   background:
-    radial-gradient(ellipse 90% 65% at 0% 0%,rgba(56,189,248,0.08) 0%,transparent 55%),
-    radial-gradient(ellipse 65% 55% at 100% 8%,rgba(14,165,233,0.06) 0%,transparent 48%),
-    radial-gradient(ellipse 75% 45% at 50% 100%,rgba(52,211,153,0.06) 0%,transparent 55%),
-    linear-gradient(180deg,#071828 0%,#05111e 40%,#04101e 100%);
+    radial-gradient(ellipse 90% 65% at 0% 0%,rgba(52,211,153,0.09) 0%,transparent 55%),
+    radial-gradient(ellipse 65% 55% at 100% 8%,rgba(74,222,128,0.06) 0%,transparent 48%),
+    radial-gradient(ellipse 60% 40% at 50% 100%,rgba(251,191,36,0.07) 0%,transparent 55%),
+    linear-gradient(180deg,#081a0c 0%,#060f08 40%,#050f08 100%);
 }
 body::after{
   content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
   background-image:
-    linear-gradient(rgba(56,189,248,0.018) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(56,189,248,0.018) 1px,transparent 1px);
+    linear-gradient(rgba(52,211,153,0.018) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(52,211,153,0.018) 1px,transparent 1px);
   background-size:88px 88px;
   mask-image:radial-gradient(ellipse 140% 90% at 50% 0%,rgba(0,0,0,0.45) 0%,transparent 62%);
 }
 
 /* ── INPUTS ── */
 input,textarea,select{
-  background:rgba(4,16,30,0.85);
+  background:rgba(5,15,8,0.85);
   color:var(--txt);
   border:1px solid var(--bdr);
   border-radius:12px;
@@ -60,10 +60,10 @@ input,textarea,select{
   width:100%;
   transition:border-color 0.2s,box-shadow 0.2s;
 }
-input::placeholder,textarea::placeholder{color:rgba(56,189,248,0.3)}
+input::placeholder,textarea::placeholder{color:rgba(52,211,153,0.3)}
 input:focus,textarea:focus{
-  border-color:rgba(56,189,248,0.45);
-  box-shadow:0 0 0 3px rgba(56,189,248,0.07),0 0 30px rgba(56,189,248,0.05);
+  border-color:rgba(52,211,153,0.45);
+  box-shadow:0 0 0 3px rgba(52,211,153,0.07),0 0 30px rgba(52,211,153,0.05);
 }
 textarea{resize:vertical;min-height:100px}
 
@@ -76,27 +76,27 @@ textarea{resize:vertical;min-height:100px}
   text-decoration:none;
 }
 .btn-gold{
-  background:linear-gradient(145deg,rgba(56,189,248,0.18),rgba(56,189,248,0.08));
-  color:var(--gold);border-color:rgba(56,189,248,0.32);
+  background:linear-gradient(145deg,rgba(52,211,153,0.18),rgba(52,211,153,0.08));
+  color:var(--gold);border-color:rgba(52,211,153,0.32);
 }
 .btn-gold:hover{
-  background:linear-gradient(145deg,rgba(56,189,248,0.30),rgba(56,189,248,0.16));
-  border-color:rgba(56,189,248,0.58);color:var(--gld2);
-  box-shadow:0 0 35px rgba(56,189,248,0.18),0 4px 20px rgba(0,0,0,0.4);
+  background:linear-gradient(145deg,rgba(52,211,153,0.30),rgba(52,211,153,0.16));
+  border-color:rgba(52,211,153,0.58);color:var(--gld2);
+  box-shadow:0 0 35px rgba(52,211,153,0.18),0 4px 20px rgba(0,0,0,0.4);
 }
 .btn-solid{
-  background:linear-gradient(145deg,rgba(56,189,248,0.88),rgba(14,165,233,0.94));
-  color:#04101e;border-color:rgba(56,189,248,0.6);
+  background:linear-gradient(145deg,rgba(52,211,153,0.88),rgba(16,185,129,0.94));
+  color:#050f08;border-color:rgba(52,211,153,0.6);
 }
 .btn-solid:hover{
   background:linear-gradient(145deg,var(--gld2),var(--gold));
-  box-shadow:0 0 40px rgba(56,189,248,0.30),0 6px 24px rgba(0,0,0,0.5);
+  box-shadow:0 0 40px rgba(52,211,153,0.30),0 6px 24px rgba(0,0,0,0.5);
   transform:translateY(-2px);
 }
 .btn-ghost{
   background:transparent;color:var(--sil);border-color:var(--bdr);
 }
-.btn-ghost:hover{color:var(--txt);border-color:rgba(56,189,248,0.28);background:rgba(56,189,248,0.05)}
+.btn-ghost:hover{color:var(--txt);border-color:rgba(52,211,153,0.28);background:rgba(52,211,153,0.05)}
 .btn-danger{background:rgba(232,63,80,0.12);color:var(--red);border-color:rgba(232,63,80,0.28)}
 .btn-danger:hover{background:rgba(232,63,80,0.22);border-color:rgba(232,63,80,0.5)}
 .btn-sm{padding:8px 18px;font-size:11px}
@@ -104,21 +104,21 @@ textarea{resize:vertical;min-height:100px}
 
 /* ── CARDS ── */
 .card{
-  background:linear-gradient(155deg,rgba(10,28,46,0.95),rgba(6,18,30,0.98));
+  background:linear-gradient(155deg,rgba(8,28,14,0.95),rgba(5,16,9,0.98));
   border:1px solid var(--bdr);border-radius:22px;
   position:relative;overflow:hidden;
-  box-shadow:0 8px 60px rgba(0,0,0,0.65),inset 0 1px 0 rgba(56,189,248,0.08);
+  box-shadow:0 8px 60px rgba(0,0,0,0.65),inset 0 1px 0 rgba(52,211,153,0.08);
 }
 .card::before{
   content:'';position:absolute;top:0;left:0;right:0;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(56,189,248,0.45),transparent);
+  background:linear-gradient(90deg,transparent,rgba(52,211,153,0.45),transparent);
 }
 
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:3px;height:3px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(56,189,248,0.2);border-radius:2px}
-::-webkit-scrollbar-thumb:hover{background:rgba(56,189,248,0.4)}
+::-webkit-scrollbar-thumb{background:rgba(52,211,153,0.2);border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:rgba(52,211,153,0.4)}
 
 /* ── PULSE ANIMATION ── */
 @keyframes glow-pulse{0%,100%{opacity:1}50%{opacity:0.4}}
@@ -134,7 +134,7 @@ textarea{resize:vertical;min-height:100px}
     height:auto!important;
     max-height:none!important;
     border-right:0!important;
-    border-bottom:1px solid rgba(56,189,248,0.16)!important;
+    border-bottom:1px solid rgba(52,211,153,0.16)!important;
     box-shadow:0 8px 50px rgba(0,0,0,0.55)!important;
   }
   .dashboard-brand{padding:20px 18px 16px!important}
