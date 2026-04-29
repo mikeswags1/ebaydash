@@ -100,7 +100,7 @@ export function SettingsTab({
         </div>
 
         {niche ? (
-          <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(200,162,80,0.06)', border: '1px solid rgba(200,162,80,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(226,247,255,0.62)', border: '1px solid rgba(14,165,233,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
             <div style={{ fontSize: '13px', color: 'var(--sil)' }}>
               Active niche: <span style={{ color: 'var(--gold)', fontWeight: 600 }}>{niche}</span>
               {nicheSaved ? <span style={{ color: 'var(--grn)', marginLeft: '8px', fontSize: '11px' }}>Saved</span> : null}
@@ -116,8 +116,8 @@ export function SettingsTab({
 }
 
 function StatusIcon({ tone, label }: { tone: 'success' | 'warning'; label: string }) {
-  const background = tone === 'success' ? 'rgba(46,207,118,0.12)' : 'rgba(200,162,80,0.10)'
-  const border = tone === 'success' ? '1px solid rgba(46,207,118,0.3)' : '1px solid rgba(200,162,80,0.25)'
+  const background = tone === 'success' ? 'rgba(46,207,118,0.12)' : 'rgba(14,165,233,0.10)'
+  const border = tone === 'success' ? '1px solid rgba(46,207,118,0.3)' : '1px solid rgba(14,165,233,0.25)'
   const color = tone === 'success' ? 'var(--grn)' : 'var(--gold)'
 
   return (

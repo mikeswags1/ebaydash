@@ -21,7 +21,7 @@ export function OrdersTab({
 
       {/* Header */}
       <div style={{ padding: '40px 44px 28px' }}>
-        <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--plat)', marginBottom: '8px' }}>
           StackPilot / Orders
         </div>
         <div style={{ fontFamily: 'var(--serif)', fontSize: '36px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
@@ -72,7 +72,7 @@ export function OrdersTab({
         <div style={{ margin: '0 44px 28px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
             <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--red)', boxShadow: '0 0 8px var(--red)', animation: 'glow-pulse 2s ease infinite' }} />
-            <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--red)' }}>
+            <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--red)' }}>
               Needs to Ship ({awaiting.length})
             </div>
           </div>
@@ -94,7 +94,7 @@ export function OrdersTab({
       {/* All orders */}
       <div style={{ padding: '0 44px 44px' }}>
         <div style={{ marginBottom: '12px' }}>
-          <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--dim)' }}>
+          <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)' }}>
             All Orders ({orders.length})
           </div>
           <div style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '4px' }}>
@@ -120,12 +120,12 @@ export function OrdersTab({
 function SummaryCard({ label, value, hint, tone, pulse = false }: { label: string; value: string; hint: string; tone: string; pulse?: boolean }) {
   return (
     <div className="card" style={{ padding: '22px' }}>
-      <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '10px' }}>
+      <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '10px' }}>
         {label}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
         {pulse ? <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: tone, boxShadow: `0 0 8px ${tone}`, animation: 'glow-pulse 2s ease infinite', flexShrink: 0 }} /> : null}
-        <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '32px', fontWeight: 800, color: tone, lineHeight: 1, letterSpacing: '-0.03em' }}>
+        <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '32px', fontWeight: 800, color: tone, lineHeight: 1, letterSpacing: 0 }}>
           {value}
         </div>
       </div>

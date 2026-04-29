@@ -16,10 +16,10 @@ export function SectionIntro({
       <div
         className="dashboard-title"
         style={{
-          fontSize: '8px',
+          fontSize: '10px',
           fontWeight: 700,
           textTransform: 'uppercase',
-          letterSpacing: '0.32em',
+          letterSpacing: 0,
           color: 'var(--gold)',
           marginBottom: '14px',
           opacity: 0.85,
@@ -30,12 +30,12 @@ export function SectionIntro({
       <div
         style={{
           fontFamily: 'var(--serif)',
-          fontSize: 'clamp(34px, 6vw, 68px)',
+          fontSize: '64px',
           fontWeight: 600,
           color: 'var(--txt)',
-          lineHeight: 0.92,
-          letterSpacing: '-0.015em',
-          textShadow: '0 4px 80px rgba(200,162,80,0.18)',
+          lineHeight: 1,
+          letterSpacing: 0,
+          textShadow: '0 10px 40px rgba(14,116,144,0.10)',
         }}
       >
         {title}
@@ -52,16 +52,16 @@ export function OrderTable({ orders }: { orders: EbayOrder[] }) {
     <div className="card" style={{ overflow: 'hidden' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
-          <tr style={{ background: 'rgba(20,14,6,0.95)', borderBottom: '1px solid rgba(195,158,88,0.11)' }}>
+          <tr style={{ background: 'rgba(224,247,255,0.72)', borderBottom: '1px solid rgba(14,116,144,0.12)' }}>
             {['Item', 'Buyer', 'Total', 'Status', 'Date'].map((heading) => (
               <th
                 key={heading}
                 style={{
-                  color: 'rgba(100,86,58,0.95)',
+                  color: 'var(--plat)',
                   fontSize: '7.5px',
                   fontWeight: 700,
                   textTransform: 'uppercase',
-                  letterSpacing: '0.18em',
+                  letterSpacing: 0,
                   padding: '13px 16px',
                   textAlign: heading === 'Item' ? 'left' : 'center',
                 }}
@@ -80,8 +80,8 @@ export function OrderTable({ orders }: { orders: EbayOrder[] }) {
               <tr
                 key={order.orderId}
                 style={{
-                  background: index % 2 === 0 ? 'rgba(17,12,7,0.80)' : 'rgba(12,9,4,0.70)',
-                  borderBottom: '1px solid rgba(195,158,88,0.06)',
+                  background: index % 2 === 0 ? 'rgba(255,255,255,0.74)' : 'rgba(238,250,255,0.72)',
+                  borderBottom: '1px solid rgba(14,116,144,0.08)',
                   transition: 'background 0.15s',
                 }}
               >
@@ -111,7 +111,7 @@ export function OrderTable({ orders }: { orders: EbayOrder[] }) {
                       borderRadius: '20px',
                       fontSize: '8px',
                       fontWeight: 700,
-                      letterSpacing: '0.05em',
+                      letterSpacing: 0,
                       background: badge.background,
                       color: badge.color,
                       border: `1px solid ${badge.border}`,
@@ -158,7 +158,7 @@ export function FinCard({
             <div
               style={{
                 height: '1px',
-                background: 'linear-gradient(90deg,transparent,rgba(200,162,80,0.14),transparent)',
+                background: 'linear-gradient(90deg,transparent,rgba(14,116,144,0.14),transparent)',
                 margin: '8px 0',
               }}
             />
@@ -200,7 +200,7 @@ export function EmptyState({
         textAlign: 'center',
         borderRadius: '20px',
         border: '1px solid var(--bdr)',
-        background: 'rgba(14,10,5,0.5)',
+        background: 'rgba(255,255,255,0.72)',
         ...style,
       }}
     >

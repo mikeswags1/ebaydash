@@ -50,10 +50,10 @@ export function SellOnEbayModal({
         style={{
           width: '100%',
           maxWidth: '520px',
-          borderRadius: '20px',
-          background: 'linear-gradient(160deg,rgba(18,13,6,1) 0%,rgba(10,8,3,1) 100%)',
-          border: '1px solid rgba(200,162,80,0.22)',
-          boxShadow: '0 40px 120px rgba(0,0,0,0.9)',
+          borderRadius: '14px',
+          background: 'linear-gradient(160deg,rgba(255,255,255,0.96) 0%,rgba(235,249,255,0.96) 100%)',
+          border: '1px solid rgba(14,165,233,0.22)',
+          boxShadow: '0 40px 120px rgba(5,80,120,0.28)',
           padding: '36px',
           animation: 'fadein 0.18s ease',
         }}
@@ -75,21 +75,21 @@ export function SellOnEbayModal({
         ) : (
           <>
             <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', marginBottom: '24px' }}>
-              {product.imageUrl ? <img src={product.imageUrl} alt={product.title} style={{ width: '64px', height: '64px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', flexShrink: 0 }} /> : null}
+              {product.imageUrl ? <img src={product.imageUrl} alt={product.title} style={{ width: '64px', height: '64px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.78)', border: '1px solid rgba(14,116,144,0.10)', flexShrink: 0 }} /> : null}
               <div>
-                <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--gold)', marginBottom: '6px' }}>Sell on eBay</div>
+                <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)', marginBottom: '6px' }}>Sell on eBay</div>
                 <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4 }}>{product.title.slice(0, 90)}</div>
                 <div style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '4px' }}>{product.asin}</div>
               </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
-              <div style={{ padding: '14px 16px', borderRadius: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(195,158,88,0.10)' }}>
-                <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--dim)', marginBottom: '6px' }}>Amazon Cost</div>
+              <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(226,247,255,0.62)', border: '1px solid rgba(12,132,167,0.10)' }}>
+                <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '6px' }}>Amazon Cost</div>
                 <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '22px', fontWeight: 800, color: 'var(--txt)' }}>${product.amazonPrice.toFixed(2)}</div>
               </div>
-              <div style={{ padding: '14px 16px', borderRadius: '12px', background: 'rgba(200,162,80,0.06)', border: '1px solid rgba(200,162,80,0.20)' }}>
-                <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--dim)', marginBottom: '4px' }}>Your eBay Price</div>
+              <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(226,247,255,0.62)', border: '1px solid rgba(14,165,233,0.22)' }}>
+                <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '4px' }}>Your eBay Price</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ color: 'var(--gold)', fontSize: '18px', fontWeight: 700 }}>$</span>
                   <input value={listPrice} onChange={(event) => onListPriceChange(event.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Space Grotesk,sans-serif', fontSize: '22px', fontWeight: 800, color: 'var(--gld2)', padding: 0 }} />
@@ -104,7 +104,7 @@ export function SellOnEbayModal({
               <PreviewStat label="Margin" value={`${preview.margin.toFixed(1)}%`} tone={preview.margin >= 0 ? 'var(--gold)' : 'var(--red)'} />
             </div>
 
-            <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', background: validated ? 'rgba(46,207,118,0.08)' : 'rgba(200,162,80,0.08)', border: validated ? '1px solid rgba(46,207,118,0.2)' : '1px solid rgba(200,162,80,0.18)', fontSize: '12px', color: validated ? 'var(--grn)' : 'var(--gold)', lineHeight: 1.6 }}>
+            <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', background: validated ? 'rgba(46,207,118,0.08)' : 'rgba(14,165,233,0.08)', border: validated ? '1px solid rgba(46,207,118,0.2)' : '1px solid rgba(14,165,233,0.18)', fontSize: '12px', color: validated ? 'var(--grn)' : 'var(--plat)', lineHeight: 1.6 }}>
               {validating
                 ? 'Validating the exact Amazon product, current price, and images now. Publishing unlocks as soon as the live Amazon price is confirmed.'
                 : validated
@@ -156,8 +156,8 @@ export function SellOnEbayModal({
 
 function PreviewStat({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
-    <div style={{ padding: '12px 14px', borderRadius: '12px', background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(195,158,88,0.08)' }}>
-      <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--dim)', marginBottom: '6px' }}>{label}</div>
+    <div style={{ padding: '12px 14px', borderRadius: '10px', background: 'rgba(226,247,255,0.52)', border: '1px solid rgba(14,116,144,0.10)' }}>
+      <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '6px' }}>{label}</div>
       <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '18px', fontWeight: 800, color: tone }}>{value}</div>
     </div>
   )

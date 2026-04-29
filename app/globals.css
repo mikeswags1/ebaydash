@@ -1,19 +1,19 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#f0f9ff;
-  --s:#e0f2fe;
+  --bg:#eef9ff;
+  --s:#dcf4ff;
   --c:#ffffff;
-  --ch:#f8fafc;
-  --bdr:rgba(14,165,233,0.18);
-  --bdrh:rgba(14,165,233,0.55);
-  --txt:#0c2a4a;
-  --sil:#2e6d96;
-  --dim:#94b4c8;
-  --mute:#e0f2fe;
-  --gold:#0ea5e9;
-  --gld2:#38bdf8;
-  --plat:#0369a1;
-  --grn:#10b981;
+  --ch:#f8fcff;
+  --bdr:rgba(12,132,167,0.18);
+  --bdrh:rgba(3,169,244,0.48);
+  --txt:#09223b;
+  --sil:#2b6987;
+  --dim:#7ca7bb;
+  --mute:#dff6ff;
+  --gold:#0284c7;
+  --gld2:#04b8e6;
+  --plat:#075985;
+  --grn:#0f9f74;
   --red:#ef4444;
   --ora:#f59e0b;
   --pur:#8b5cf6;
@@ -22,7 +22,7 @@
 }
 html{scroll-behavior:smooth}
 body{
-  background:var(--bg);
+  background:#eef9ff;
   color:var(--txt);
   font-family:'Inter',-apple-system,sans-serif;
   min-height:100vh;
@@ -33,18 +33,14 @@ body{
 body::before{
   content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
   background:
-    radial-gradient(ellipse 80% 60% at 15% 0%,rgba(56,189,248,0.22) 0%,transparent 55%),
-    radial-gradient(ellipse 60% 50% at 90% 5%,rgba(14,165,233,0.14) 0%,transparent 50%),
-    radial-gradient(ellipse 70% 40% at 50% 100%,rgba(16,185,129,0.10) 0%,transparent 55%),
-    linear-gradient(180deg,#e0f2fe 0%,#f0f9ff 45%,#f8fafc 100%);
+    linear-gradient(180deg,#bdeeff 0%,#e8f8ff 34%,#f7fcff 70%,#eefbf5 100%),
+    linear-gradient(120deg,rgba(0,170,217,0.18) 0%,transparent 38%,rgba(40,176,126,0.10) 100%);
 }
 body::after{
   content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
   background-image:
-    linear-gradient(rgba(14,165,233,0.04) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(14,165,233,0.04) 1px,transparent 1px);
-  background-size:72px 72px;
-  mask-image:radial-gradient(ellipse 140% 80% at 50% 0%,rgba(0,0,0,0.35) 0%,transparent 65%);
+    linear-gradient(135deg,rgba(255,255,255,0.48) 0%,rgba(255,255,255,0) 26%),
+    linear-gradient(180deg,rgba(255,255,255,0.24) 0%,rgba(255,255,255,0) 42%);
 }
 
 /* ── INPUTS ── */
@@ -72,7 +68,7 @@ textarea{resize:vertical;min-height:100px}
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
   padding:13px 28px;border-radius:12px;cursor:pointer;font-family:inherit;
-  font-size:13px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;
+  font-size:13px;font-weight:700;letter-spacing:0;text-transform:uppercase;
   transition:all 0.22s;border:1px solid transparent;white-space:nowrap;
   text-decoration:none;
 }
@@ -105,16 +101,16 @@ textarea{resize:vertical;min-height:100px}
 
 /* ── CARDS ── */
 .card{
-  background:rgba(255,255,255,0.85);
-  border:1px solid rgba(14,165,233,0.14);
-  border-radius:22px;
+  background:rgba(255,255,255,0.82);
+  border:1px solid rgba(12,132,167,0.14);
+  border-radius:14px;
   position:relative;overflow:hidden;
-  box-shadow:0 4px 24px rgba(14,165,233,0.10),0 1px 4px rgba(0,0,0,0.05);
+  box-shadow:0 14px 36px rgba(12,132,167,0.12),0 1px 4px rgba(4,60,88,0.05);
   backdrop-filter:blur(8px);
 }
 .card::before{
   content:'';position:absolute;top:0;left:0;right:0;height:2px;
-  background:linear-gradient(90deg,transparent,rgba(14,165,233,0.45),rgba(16,185,129,0.35),transparent);
+  background:linear-gradient(90deg,transparent,rgba(14,165,233,0.42),rgba(20,184,166,0.28),transparent);
 }
 
 /* ── SCROLLBAR ── */

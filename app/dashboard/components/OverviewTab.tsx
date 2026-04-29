@@ -22,7 +22,7 @@ export function OverviewTab({
 
       {/* Header */}
       <div style={{ padding: '40px 44px 32px' }}>
-        <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--plat)', marginBottom: '8px' }}>
           StackPilot / Operations
         </div>
         <div style={{ fontFamily: 'var(--serif)', fontSize: '38px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
@@ -39,7 +39,7 @@ export function OverviewTab({
 
       {/* Connect prompt */}
       {!connected ? (
-        <div style={{ margin: '0 44px 32px', padding: '28px 32px', borderRadius: '18px', background: 'rgba(200,162,80,0.06)', border: '1px solid rgba(200,162,80,0.20)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ margin: '0 44px 32px', padding: '28px 32px', borderRadius: '14px', background: 'rgba(226,247,255,0.70)', border: '1px solid rgba(14,165,233,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--txt)', marginBottom: '5px' }}>
               Connect your eBay account to get started
@@ -97,7 +97,7 @@ export function OverviewTab({
         <div style={{ padding: '0 44px 44px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
             <div>
-              <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--dim)' }}>
+              <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)' }}>
                 Recent Orders
               </div>
               <div style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '3px' }}>
@@ -119,7 +119,7 @@ export function OverviewTab({
                   key={order.orderId}
                   style={{
                     padding: '16px 24px',
-                    borderBottom: i < recentOrders.length - 1 ? '1px solid rgba(195,158,88,0.07)' : 'none',
+                    borderBottom: i < recentOrders.length - 1 ? '1px solid rgba(14,116,144,0.08)' : 'none',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -164,12 +164,12 @@ export function OverviewTab({
 function MetricCard({ label, value, hint, tone, pulse = false }: { label: string; value: string; hint: string; tone: string; pulse?: boolean }) {
   return (
     <div className="card" style={{ padding: '24px', position: 'relative', overflow: 'hidden' }}>
-      <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '12px' }}>
+      <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '12px' }}>
         {label}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
         {pulse ? <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: tone, boxShadow: `0 0 8px ${tone}`, animation: 'glow-pulse 2s ease infinite', flexShrink: 0 }} /> : null}
-        <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '36px', fontWeight: 800, color: tone, lineHeight: 1, letterSpacing: '-0.04em' }}>
+        <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '36px', fontWeight: 800, color: tone, lineHeight: 1, letterSpacing: 0 }}>
           {value}
         </div>
       </div>

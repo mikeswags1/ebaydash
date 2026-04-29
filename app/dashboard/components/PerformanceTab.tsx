@@ -61,14 +61,14 @@ export function PerformanceTab({
         <>
           {/* Traffic note */}
           {data.traffic.error ? (
-            <div style={{ margin: '0 44px 20px', padding: '12px 16px', borderRadius: '10px', background: 'rgba(200,162,80,0.07)', border: '1px solid rgba(200,162,80,0.15)', color: 'var(--dim)', fontSize: '11px', lineHeight: 1.6 }}>
+            <div style={{ margin: '0 44px 20px', padding: '12px 16px', borderRadius: '10px', background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.18)', color: 'var(--sil)', fontSize: '11px', lineHeight: 1.6 }}>
               ⚠ {data.traffic.error}
             </div>
           ) : null}
 
           {/* At-a-glance numbers */}
           <div style={{ padding: '0 44px 28px' }}>
-            <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--dim)', marginBottom: '12px' }}>
+            <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)', marginBottom: '12px' }}>
               Last 90 Days — At a Glance
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '14px' }}>
@@ -132,7 +132,7 @@ export function PerformanceTab({
             <div style={{ padding: '0 44px 28px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                 <div>
-                  <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--dim)' }}>
+                  <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)' }}>
                     Category Breakdown
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '4px' }}>
@@ -144,7 +144,7 @@ export function PerformanceTab({
               <div className="card" style={{ overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ background: 'rgba(20,14,6,0.95)', borderBottom: '1px solid rgba(195,158,88,0.11)' }}>
+                    <tr style={{ background: 'rgba(224,247,255,0.74)', borderBottom: '1px solid rgba(14,116,144,0.12)' }}>
                       {[
                         { label: 'Category', hint: null },
                         { label: 'Status', hint: null },
@@ -155,16 +155,16 @@ export function PerformanceTab({
                         { label: 'ROI', hint: 'Return on your Amazon cost' },
                         { label: 'Watchers', hint: 'Buyers watching your listings' },
                       ].map(col => (
-                        <th key={col.label} style={{ color: 'rgba(100,86,58,0.95)', fontSize: '7.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', padding: '12px 14px', textAlign: col.label === 'Category' ? 'left' : 'center', whiteSpace: 'nowrap' }}>
+                        <th key={col.label} style={{ color: 'var(--plat)', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, padding: '12px 14px', textAlign: col.label === 'Category' ? 'left' : 'center', whiteSpace: 'nowrap' }}>
                           {col.label}
-                          {col.hint ? <div style={{ fontSize: '7px', color: 'rgba(100,86,58,0.55)', fontWeight: 400, letterSpacing: 0, textTransform: 'none', marginTop: '2px' }}>{col.hint}</div> : null}
+                          {col.hint ? <div style={{ fontSize: '7px', color: 'var(--sil)', fontWeight: 400, letterSpacing: 0, textTransform: 'none', marginTop: '2px' }}>{col.hint}</div> : null}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {allNiches.map((niche, i) => (
-                      <tr key={niche.name} style={{ background: i % 2 === 0 ? 'rgba(17,12,7,0.80)' : 'rgba(12,9,4,0.70)', borderBottom: '1px solid rgba(195,158,88,0.06)' }}>
+                      <tr key={niche.name} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.78)' : 'rgba(238,250,255,0.72)', borderBottom: '1px solid rgba(14,116,144,0.08)' }}>
                         <td style={{ padding: '12px 14px', maxWidth: '220px' }}>
                           <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{niche.name}</div>
                           <div style={{ fontSize: '9px', color: 'var(--dim)', marginTop: '2px' }}>{niche.activeListings} active listing{niche.activeListings !== 1 ? 's' : ''}</div>
@@ -189,7 +189,7 @@ export function PerformanceTab({
           {/* Top products */}
           {topProducts.length > 0 ? (
             <div style={{ padding: '0 44px 44px' }}>
-              <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--dim)', marginBottom: '4px' }}>
+              <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)', marginBottom: '4px' }}>
                 Your Top Products
               </div>
               <div style={{ fontSize: '11px', color: 'var(--dim)', marginBottom: '12px' }}>
@@ -198,9 +198,9 @@ export function PerformanceTab({
               <div className="card" style={{ overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ background: 'rgba(20,14,6,0.95)', borderBottom: '1px solid rgba(195,158,88,0.11)' }}>
+                    <tr style={{ background: 'rgba(224,247,255,0.74)', borderBottom: '1px solid rgba(14,116,144,0.12)' }}>
                       {['Product', 'Category', 'Sold', 'Profit', 'ROI', 'Watchers', 'Status'].map(h => (
-                        <th key={h} style={{ color: 'rgba(100,86,58,0.95)', fontSize: '7.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', padding: '12px 14px', textAlign: h === 'Product' ? 'left' : 'center', whiteSpace: 'nowrap' }}>
+                        <th key={h} style={{ color: 'var(--plat)', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, padding: '12px 14px', textAlign: h === 'Product' ? 'left' : 'center', whiteSpace: 'nowrap' }}>
                           {h}
                         </th>
                       ))}
@@ -208,7 +208,7 @@ export function PerformanceTab({
                   </thead>
                   <tbody>
                     {topProducts.map((p, i) => (
-                      <tr key={p.listingId || p.asin || p.title} style={{ background: i % 2 === 0 ? 'rgba(17,12,7,0.80)' : 'rgba(12,9,4,0.70)', borderBottom: '1px solid rgba(195,158,88,0.06)' }}>
+                      <tr key={p.listingId || p.asin || p.title} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.78)' : 'rgba(238,250,255,0.72)', borderBottom: '1px solid rgba(14,116,144,0.08)' }}>
                         <td style={{ padding: '12px 14px', maxWidth: '280px' }}>
                           <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
                           <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '2px' }}>{p.asin || p.listingId || '—'}</div>
@@ -235,7 +235,7 @@ export function PerformanceTab({
 function GlanceCard({ label, value, hint, tone }: { label: string; value: string; hint: string; tone: string }) {
   return (
     <div className="card" style={{ padding: '20px' }}>
-      <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '10px' }}>{label}</div>
+      <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '10px' }}>{label}</div>
       <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '30px', fontWeight: 800, color: tone, lineHeight: 1, marginBottom: '8px' }}>{value}</div>
       <div style={{ fontSize: '10px', color: 'var(--dim)', lineHeight: 1.4 }}>{hint}</div>
     </div>
@@ -266,11 +266,11 @@ function ActionCard({
         <button onClick={onAction} className="btn btn-ghost btn-sm" style={{ fontSize: '10px', whiteSpace: 'nowrap' }}>{actionLabel}</button>
       </div>
       {items.length === 0 ? (
-        <div style={{ fontSize: '11px', color: 'var(--dim)', padding: '14px', borderRadius: '8px', background: 'rgba(0,0,0,0.15)', lineHeight: 1.6 }}>{empty}</div>
+        <div style={{ fontSize: '11px', color: 'var(--sil)', padding: '14px', borderRadius: '8px', background: 'rgba(226,247,255,0.52)', lineHeight: 1.6 }}>{empty}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {items.map(niche => (
-            <div key={niche.name} style={{ padding: '12px 14px', borderRadius: '10px', background: 'rgba(0,0,0,0.18)' }}>
+            <div key={niche.name} style={{ padding: '12px 14px', borderRadius: '10px', background: 'rgba(226,247,255,0.52)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--txt)' }}>{niche.name}</div>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: tone === 'green' ? 'var(--grn)' : 'var(--red)' }}>
@@ -290,12 +290,12 @@ function ActionPill({ action }: { action: string }) {
   const isGood = action === 'List More'
   const isBad = action === 'Avoid For Now'
   const color = isGood ? 'var(--grn)' : isBad ? 'var(--red)' : 'var(--gold)'
-  const bg = isGood ? 'rgba(46,207,118,0.10)' : isBad ? 'rgba(232,63,80,0.10)' : 'rgba(200,162,80,0.10)'
-  const border = isGood ? 'rgba(46,207,118,0.25)' : isBad ? 'rgba(232,63,80,0.25)' : 'rgba(200,162,80,0.25)'
+  const bg = isGood ? 'rgba(46,207,118,0.10)' : isBad ? 'rgba(232,63,80,0.10)' : 'rgba(14,165,233,0.10)'
+  const border = isGood ? 'rgba(46,207,118,0.25)' : isBad ? 'rgba(232,63,80,0.25)' : 'rgba(14,165,233,0.25)'
   const label = isGood ? '✓ Keep Listing' : isBad ? '✗ Slow Down' : '~ Monitor'
 
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: '20px', fontSize: '8px', fontWeight: 800, color, background: bg, border: `1px solid ${border}`, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: '20px', fontSize: '8px', fontWeight: 800, color, background: bg, border: `1px solid ${border}`, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: 0 }}>
       {label}
     </span>
   )

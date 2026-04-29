@@ -51,9 +51,9 @@ export function DashboardTopbar({
       className="dashboard-topbar"
       style={{
         height: '56px',
-        background: 'rgba(12,9,4,0.96)',
-        backdropFilter: 'blur(70px)',
-        borderBottom: '1px solid rgba(195,158,88,0.12)',
+        background: 'rgba(240,250,255,0.92)',
+        backdropFilter: 'blur(24px)',
+        borderBottom: '1px solid rgba(14,116,144,0.12)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -61,10 +61,10 @@ export function DashboardTopbar({
         position: 'sticky',
         top: 0,
         zIndex: 200,
-        boxShadow: '0 1px 40px rgba(0,0,0,0.6)',
+        boxShadow: '0 1px 22px rgba(14,116,144,0.12)',
       }}
     >
-      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--sil)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+      <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plat)', letterSpacing: 0, textTransform: 'uppercase' }}>
         {NAV_ITEMS.find((item) => item.id === tab)?.label}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>

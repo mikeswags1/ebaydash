@@ -18,6 +18,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-04-29 | Codex | Fixed StackPilot Vercel alias/protection check, reduced Continuous Listing timeout risk, and softened dashboard UI into a friendlier tropical/sky theme | `app/api/scripts/product-finder/route.ts`, `app/dashboard/page.tsx`, dashboard components, `app/globals.css` |
 | 2026-04-28 | Codex | Improve Product Finder/Continuous Listing distribution with per-user randomized ranking, larger Amazon pools, active-listing duplicate filtering, and performance-weighted continuous sourcing | `app/api/scripts/product-finder/route.ts` |
 | 2026-04-28 | Claude | Rebrand EbayDash → StackPilot, URL renamed to stackpilot-app.vercel.app | `app/layout.tsx`, `app/page.tsx`, all tab components, `DashboardSidebar.tsx` |
 | 2026-04-28 | Claude | Replace free shipping stamp with new FREE 2-4 DAY SHIPPING label | `public/free-shipping-stamp.png` |
@@ -39,6 +40,7 @@ _Clear this section when done._
 - **Free shipping stamp**: `public/free-shipping-stamp.png` was replaced with new design — do not overwrite.
 - **Brand name**: All UI references are now `StackPilot`. Vercel project is `stackpilot-app`, URL is `stackpilot-app.vercel.app`.
 - **`NEXTAUTH_URL`** in Vercel is set to `https://stackpilot-app.vercel.app` — matches eBay Dev Console.
+- **Vercel access**: Deployment Protection and password protection are off. `stackpilot-app.vercel.app` is aliased to the latest StackPilot deployment.
 - **Product Finder distribution**: Continuous/product finder queues now use per-user seeded ranking, a larger shared Amazon pool, and user performance/listing signals. Do NOT change back to one shared shuffled top-30 queue.
 
 ---

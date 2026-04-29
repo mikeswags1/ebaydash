@@ -41,7 +41,7 @@ export function ScriptsTab({
               <div key={script.file} className="card" style={{ padding: '28px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', gap: '12px' }}>
                   <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 600, color: 'var(--txt)' }}>{script.title}</div>
-                  <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '8px', fontWeight: 700, letterSpacing: '0.06em', background: 'rgba(200,162,80,0.08)', color: 'var(--gold)', border: '1px solid rgba(200,162,80,0.2)' }}>
+                  <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '8px', fontWeight: 700, letterSpacing: 0, background: 'rgba(14,165,233,0.08)', color: 'var(--plat)', border: '1px solid rgba(14,165,233,0.22)' }}>
                     {script.badge}
                   </span>
                 </div>
@@ -56,7 +56,7 @@ export function ScriptsTab({
                       padding: '8px 12px',
                       borderRadius: '8px',
                       background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(195,158,88,0.12)',
+                  border: '1px solid rgba(14,116,144,0.12)',
                     }}
                   >
                     {message.text}

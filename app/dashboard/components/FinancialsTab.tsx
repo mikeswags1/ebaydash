@@ -37,7 +37,7 @@ export function FinancialsTab({
 
       {/* Header */}
       <div style={{ padding: '40px 44px 24px' }}>
-        <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--plat)', marginBottom: '8px' }}>
           StackPilot / Analytics
         </div>
         <div style={{ fontFamily: 'var(--serif)', fontSize: '36px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
@@ -68,9 +68,9 @@ export function FinancialsTab({
                 fontWeight: period === p.value ? 700 : 500,
                 padding: '7px 16px',
                 borderRadius: '22px',
-                border: period === p.value ? '1px solid rgba(200,162,80,0.55)' : '1px solid rgba(195,158,88,0.14)',
-                background: period === p.value ? 'rgba(200,162,80,0.14)' : 'transparent',
-                color: period === p.value ? 'var(--gld2)' : 'var(--dim)',
+                border: period === p.value ? '1px solid rgba(14,165,233,0.45)' : '1px solid rgba(14,116,144,0.14)',
+                background: period === p.value ? 'rgba(14,165,233,0.12)' : 'rgba(255,255,255,0.50)',
+                color: period === p.value ? 'var(--plat)' : 'var(--sil)',
                 cursor: 'pointer',
                 transition: 'all 0.15s',
                 fontFamily: 'inherit',
@@ -126,7 +126,7 @@ export function FinancialsTab({
 
           {/* Money flow breakdown */}
           <div style={{ padding: '0 44px 28px' }}>
-            <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--dim)', marginBottom: '14px' }}>
+            <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)', marginBottom: '14px' }}>
               Where Your Money Went
             </div>
             <div className="card" style={{ padding: '28px' }}>
@@ -148,7 +148,7 @@ export function FinancialsTab({
 
               {/* Visual profit bar */}
               {summary.grossRevenue > 0 ? (
-                <div style={{ marginTop: '24px', borderTop: '1px solid rgba(195,158,88,0.08)', paddingTop: '20px' }}>
+                <div style={{ marginTop: '24px', borderTop: '1px solid rgba(14,116,144,0.10)', paddingTop: '20px' }}>
                   <div style={{ fontSize: '10px', color: 'var(--dim)', marginBottom: '8px' }}>Revenue breakdown</div>
                   <div style={{ display: 'flex', height: '10px', borderRadius: '6px', overflow: 'hidden', gap: '2px' }}>
                     <div style={{ flex: summary.amazonCost / summary.grossRevenue, background: 'rgba(150,140,120,0.4)', borderRadius: '4px 0 0 4px', minWidth: summary.amazonCost > 0 ? '4px' : 0 }} title="Amazon Cost" />
@@ -196,7 +196,7 @@ export function FinancialsTab({
           <div style={{ padding: '0 44px 44px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '12px' }}>
               <div>
-                <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--dim)' }}>
+                <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)' }}>
                   Every Sale — {periodLabel}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '4px' }}>
@@ -216,7 +216,7 @@ export function FinancialsTab({
               <div className="card" style={{ overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ background: 'rgba(20,14,6,0.95)', borderBottom: '1px solid rgba(195,158,88,0.11)' }}>
+                    <tr style={{ background: 'rgba(224,247,255,0.74)', borderBottom: '1px solid rgba(14,116,144,0.12)' }}>
                       {[
                         { label: 'Item', left: true },
                         { label: 'Sale Price', left: false },
@@ -226,7 +226,7 @@ export function FinancialsTab({
                         { label: 'ROI', left: false },
                         { label: 'Date', left: false },
                       ].map(h => (
-                        <th key={h.label} style={{ color: 'rgba(100,86,58,0.95)', fontSize: '7.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', padding: '12px 14px', textAlign: h.left ? 'left' : 'center', whiteSpace: 'nowrap' }}>
+                        <th key={h.label} style={{ color: 'var(--plat)', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, padding: '12px 14px', textAlign: h.left ? 'left' : 'center', whiteSpace: 'nowrap' }}>
                           {h.label}
                         </th>
                       ))}
@@ -234,7 +234,7 @@ export function FinancialsTab({
                   </thead>
                   <tbody>
                     {items.map((item, i) => (
-                      <tr key={item.id} style={{ background: i % 2 === 0 ? 'rgba(17,12,7,0.80)' : 'rgba(12,9,4,0.70)', borderBottom: '1px solid rgba(195,158,88,0.06)' }}>
+                      <tr key={item.id} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.78)' : 'rgba(238,250,255,0.72)', borderBottom: '1px solid rgba(14,116,144,0.08)' }}>
                         <td style={{ padding: '12px 14px', maxWidth: '280px' }}>
                           <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</div>
                           <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '2px' }}>
@@ -280,8 +280,8 @@ function HeroCard({ label, value, hint, tone, large }: { label: string; value: s
   return (
     <div className="card" style={{ padding: '28px 24px', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: `linear-gradient(90deg, ${tone}, transparent)` }} />
-      <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--dim)', marginBottom: '14px' }}>{label}</div>
-      <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: large ? '40px' : '32px', fontWeight: 800, color: tone, lineHeight: 1, letterSpacing: '-0.04em', marginBottom: '10px' }}>{value}</div>
+      <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '14px' }}>{label}</div>
+      <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: large ? '40px' : '32px', fontWeight: 800, color: tone, lineHeight: 1, letterSpacing: 0, marginBottom: '10px' }}>{value}</div>
       <div style={{ fontSize: '11px', color: 'var(--dim)', lineHeight: 1.4 }}>{hint}</div>
     </div>
   )
@@ -290,8 +290,8 @@ function HeroCard({ label, value, hint, tone, large }: { label: string; value: s
 function FlowBlock({ label, value, tone, hint, bold }: { label: string; value: string; tone: string; hint: string; bold?: boolean }) {
   return (
     <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)', marginBottom: '8px' }}>{label}</div>
-      <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: bold ? '28px' : '22px', fontWeight: 800, color: tone, lineHeight: 1, letterSpacing: '-0.03em', marginBottom: '6px' }}>{value}</div>
+      <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--dim)', marginBottom: '8px' }}>{label}</div>
+      <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: bold ? '28px' : '22px', fontWeight: 800, color: tone, lineHeight: 1, letterSpacing: 0, marginBottom: '6px' }}>{value}</div>
       <div style={{ fontSize: '10px', color: 'var(--dim)' }}>{hint}</div>
     </div>
   )
@@ -299,7 +299,7 @@ function FlowBlock({ label, value, tone, hint, bold }: { label: string; value: s
 
 function Arrow({ minus, equals }: { minus?: boolean; equals?: boolean }) {
   return (
-    <div style={{ fontSize: '18px', color: 'rgba(195,158,88,0.3)', fontWeight: 300, textAlign: 'center', userSelect: 'none' }}>
+    <div style={{ fontSize: '18px', color: 'rgba(14,116,144,0.28)', fontWeight: 300, textAlign: 'center', userSelect: 'none' }}>
       {minus ? '−' : equals ? '=' : '+'}
     </div>
   )
@@ -308,7 +308,7 @@ function Arrow({ minus, equals }: { minus?: boolean; equals?: boolean }) {
 function StatCard({ label, value, hint, tone = 'var(--txt)' }: { label: string; value: string; hint: string; tone?: string }) {
   return (
     <div className="card" style={{ padding: '20px' }}>
-      <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '10px' }}>{label}</div>
+      <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '10px' }}>{label}</div>
       <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '26px', fontWeight: 800, color: tone, lineHeight: 1, marginBottom: '6px' }}>{value}</div>
       <div style={{ fontSize: '10px', color: 'var(--dim)' }}>{hint}</div>
     </div>
@@ -317,7 +317,7 @@ function StatCard({ label, value, hint, tone = 'var(--txt)' }: { label: string; 
 
 function InfoBanner({ tone, text }: { tone: 'gold' | 'blue' | 'dim'; text: string }) {
   const styles = {
-    gold: { bg: 'rgba(200,162,80,0.07)', border: 'rgba(200,162,80,0.18)', dot: 'var(--gold)' },
+    gold: { bg: 'rgba(14,165,233,0.08)', border: 'rgba(14,165,233,0.22)', dot: 'var(--plat)' },
     blue: { bg: 'rgba(82,151,255,0.07)', border: 'rgba(82,151,255,0.20)', dot: '#74a9ff' },
     dim:  { bg: 'rgba(90,80,55,0.08)',   border: 'rgba(90,80,55,0.18)',   dot: 'var(--dim)' },
   }[tone]

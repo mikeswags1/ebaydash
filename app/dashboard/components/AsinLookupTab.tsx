@@ -80,7 +80,7 @@ function AmazonAsinLookup() {
               onChange={e => setAsin(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10))}
               onKeyDown={e => e.key === 'Enter' ? lookup() : undefined}
               placeholder="e.g. B08N5WRWNW"
-              style={{ flex: 1, fontFamily: 'monospace', fontSize: '16px', letterSpacing: '0.1em' }}
+              style={{ flex: 1, fontFamily: 'monospace', fontSize: '16px', letterSpacing: 0 }}
             />
             <button onClick={lookup} className="btn btn-gold" disabled={loading || asin.length !== 10}>
               {loading ? 'Looking up...' : 'Look Up'}
@@ -104,15 +104,15 @@ function AmazonAsinLookup() {
               <img src={result.imageUrl} alt={result.title} style={{ width: '88px', height: '88px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }} />
             ) : null}
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--grn)', marginBottom: '6px' }}>✓ Product Found</div>
+              <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--grn)', marginBottom: '6px' }}>✓ Product Found</div>
               <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4, marginBottom: '10px' }}>{result.title}</div>
               <div style={{ display: 'flex', gap: '18px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--dim)', marginBottom: '2px' }}>Amazon Price</div>
+                  <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--dim)', marginBottom: '2px' }}>Amazon Price</div>
                   <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '24px', fontWeight: 800, color: 'var(--gld2)' }}>${result.amazonPrice.toFixed(2)}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--dim)', marginBottom: '2px' }}>ASIN</div>
+                  <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--dim)', marginBottom: '2px' }}>ASIN</div>
                   <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--gold)', fontWeight: 600 }}>{result.asin}</div>
                 </div>
                 <div style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, background: result.available ? 'rgba(46,207,118,0.10)' : 'rgba(232,63,80,0.10)', color: result.available ? 'var(--grn)' : 'var(--red)', border: `1px solid ${result.available ? 'rgba(46,207,118,0.25)' : 'rgba(232,63,80,0.25)'}` }}>
@@ -150,7 +150,7 @@ function AmazonAsinLookup() {
                     onChange={e => setLinkItemId(e.target.value.replace(/\D/g, ''))}
                     onKeyDown={e => e.key === 'Enter' ? saveLink() : undefined}
                     placeholder="eBay Item ID (e.g. 387234561234)"
-                    style={{ flex: '1 1 200px', fontFamily: 'monospace', fontSize: '14px', letterSpacing: '0.06em' }}
+                    style={{ flex: '1 1 200px', fontFamily: 'monospace', fontSize: '14px', letterSpacing: 0 }}
                   />
                   <button onClick={saveLink} className="btn btn-gold btn-sm" disabled={linking || !linkItemId.trim()}>
                     {linking ? 'Saving...' : 'Save Link'}
@@ -217,7 +217,7 @@ export function AsinLookupTab({
 
       {/* Header */}
       <div style={{ padding: '40px 44px 28px' }}>
-        <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>
           StackPilot / Fulfillment
         </div>
         <div style={{ fontFamily: 'var(--serif)', fontSize: '36px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
@@ -231,7 +231,7 @@ export function AsinLookupTab({
 
       {/* How it works */}
       <div style={{ padding: '0 44px 28px' }}>
-        <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--dim)', marginBottom: '12px' }}>
+        <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--dim)', marginBottom: '12px' }}>
           How It Works
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '12px' }}>
@@ -269,7 +269,7 @@ export function AsinLookupTab({
               onChange={e => onAsinInputChange(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase())}
               onKeyDown={e => e.key === 'Enter' ? onLookup() : undefined}
               placeholder="e.g. 387234561234 or B08N5WRWNW"
-              style={{ flex: 1, fontFamily: 'monospace', fontSize: '16px', letterSpacing: '0.08em' }}
+              style={{ flex: 1, fontFamily: 'monospace', fontSize: '16px', letterSpacing: 0 }}
             />
             <button onClick={onLookup} className="btn btn-gold" disabled={asinLoading || !asinInput.trim()}>
               {asinLoading ? 'Searching...' : 'Find Product'}
@@ -293,7 +293,7 @@ export function AsinLookupTab({
         {asinResult ? (
           <>
             <div className="card" style={{ padding: '28px 32px', marginBottom: '16px' }}>
-              <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--grn)', marginBottom: '14px' }}>
+              <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--grn)', marginBottom: '14px' }}>
                 ✓ Amazon Source Found
               </div>
               <div style={{ display: 'flex', gap: '18px', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap' }}>
@@ -309,7 +309,7 @@ export function AsinLookupTab({
                   ) : null}
                   <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
                     <div>
-                      <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--dim)', marginBottom: '2px' }}>Your Cost</div>
+                      <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--dim)', marginBottom: '2px' }}>Your Cost</div>
                       <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '26px', fontWeight: 800, color: 'var(--gld2)' }}>
                         ${asinResult.amazonPrice.toFixed(2)}
                       </div>
@@ -361,7 +361,7 @@ export function AsinLookupTab({
                               value={manualAsin}
                               onChange={e => onManualAsinChange(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10))}
                               placeholder="Exact ASIN"
-                              style={{ flex: '1 1 160px', fontFamily: 'monospace', fontSize: '13px', letterSpacing: '0.08em' }}
+                              style={{ flex: '1 1 160px', fontFamily: 'monospace', fontSize: '13px', letterSpacing: 0 }}
                             />
                             <button onClick={onSaveManualMapping} className="btn btn-ghost btn-sm" disabled={manualSaving || manualAsin.length !== 10}>
                               Save Exact ASIN
@@ -402,7 +402,7 @@ export function AsinLookupTab({
                 value={manualAsin}
                 onChange={e => onManualAsinChange(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10))}
                 placeholder="Paste ASIN (e.g. B08N5WRWNW)"
-                style={{ flex: '1 1 200px', fontFamily: 'monospace', fontSize: '15px', letterSpacing: '0.08em' }}
+                style={{ flex: '1 1 200px', fontFamily: 'monospace', fontSize: '15px', letterSpacing: 0 }}
               />
               <button
                 onClick={onSaveManualMapping}
@@ -425,7 +425,7 @@ export function AsinLookupTab({
           <div className="card" style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
               <div>
-                <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)' }}>
+                <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--dim)' }}>
                   Recent Orders — Quick Access
                 </div>
                 <div style={{ fontSize: '10px', color: 'var(--dim)', marginTop: '3px' }}>
@@ -504,7 +504,7 @@ export function AsinLookupTab({
         {/* Divider */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', margin: '8px 0 20px' }}>
           <div style={{ flex: 1, height: '1px', background: 'rgba(195,158,88,0.10)' }} />
-          <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)' }}>
+          <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--dim)' }}>
             Or look up any Amazon product
           </div>
           <div style={{ flex: 1, height: '1px', background: 'rgba(195,158,88,0.10)' }} />

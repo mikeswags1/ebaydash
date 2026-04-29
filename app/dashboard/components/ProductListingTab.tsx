@@ -54,7 +54,7 @@ export function ProductListingTab({
 
       {/* Header */}
       <div style={{ padding: '40px 44px 28px' }}>
-        <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--plat)', marginBottom: '8px' }}>
           StackPilot / Strategy
         </div>
         <div style={{ fontFamily: 'var(--serif)', fontSize: '36px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
@@ -71,13 +71,13 @@ export function ProductListingTab({
 
         {/* Active niche banner */}
         {niche ? (
-          <div style={{ marginBottom: '24px', padding: '16px 22px', borderRadius: '14px', background: 'linear-gradient(135deg,rgba(200,162,80,0.12),rgba(220,185,100,0.04))', border: '1px solid rgba(200,162,80,0.24)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ marginBottom: '24px', padding: '16px 22px', borderRadius: '14px', background: 'linear-gradient(135deg,rgba(186,230,253,0.72),rgba(240,253,250,0.62))', border: '1px solid rgba(14,165,233,0.24)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(200,162,80,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(14,165,233,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
                 {NICHE_GROUPS.find(g => g.items.includes(niche))?.emoji || '🛒'}
               </div>
               <div>
-                <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: '3px' }}>Active Niche</div>
+                <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '3px' }}>Active Niche</div>
                 <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 600, color: 'var(--gld2)' }}>{niche}</div>
               </div>
             </div>
@@ -95,7 +95,7 @@ export function ProductListingTab({
                 <div key={group.group}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
                     <span style={{ fontSize: '14px' }}>{group.emoji}</span>
-                    <span style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--dim)' }}>{group.group}</span>
+                    <span style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)' }}>{group.group}</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {group.items.map(item => (
@@ -110,14 +110,14 @@ export function ProductListingTab({
                           fontSize: '12px',
                           fontFamily: 'inherit',
                           cursor: 'pointer',
-                          border: '1px solid rgba(195,158,88,0.10)',
-                          background: 'rgba(255,255,255,0.02)',
+                          border: '1px solid rgba(14,116,144,0.12)',
+                          background: 'rgba(255,255,255,0.56)',
                           color: 'var(--sil)',
                           transition: 'all 0.15s',
                           fontWeight: 500,
                         }}
-                        onMouseEnter={e => { (e.target as HTMLButtonElement).style.background = 'rgba(200,162,80,0.08)'; (e.target as HTMLButtonElement).style.borderColor = 'rgba(200,162,80,0.22)'; (e.target as HTMLButtonElement).style.color = 'var(--gld2)' }}
-                        onMouseLeave={e => { (e.target as HTMLButtonElement).style.background = 'rgba(255,255,255,0.02)'; (e.target as HTMLButtonElement).style.borderColor = 'rgba(195,158,88,0.10)'; (e.target as HTMLButtonElement).style.color = 'var(--sil)' }}
+                        onMouseEnter={e => { (e.target as HTMLButtonElement).style.background = 'rgba(14,165,233,0.10)'; (e.target as HTMLButtonElement).style.borderColor = 'rgba(14,165,233,0.24)'; (e.target as HTMLButtonElement).style.color = 'var(--plat)' }}
+                        onMouseLeave={e => { (e.target as HTMLButtonElement).style.background = 'rgba(255,255,255,0.56)'; (e.target as HTMLButtonElement).style.borderColor = 'rgba(14,116,144,0.12)'; (e.target as HTMLButtonElement).style.color = 'var(--sil)' }}
                       >
                         {item}
                       </button>
@@ -162,7 +162,7 @@ export function ProductListingTab({
                 </button>
               ) : null}
               {isListing ? (
-                <div style={{ padding: '13px 18px', borderRadius: '10px', background: 'rgba(200,162,80,0.08)', border: '1px solid rgba(200,162,80,0.2)', fontSize: '12px', color: 'var(--gold)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 140px' }}>
+                <div style={{ padding: '13px 18px', borderRadius: '10px', background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.22)', fontSize: '12px', color: 'var(--plat)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 140px' }}>
                   <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--gold)', animation: 'glow-pulse 1.2s ease infinite' }} />
                   Listing {listAllProgress!.done + 1} of {listAllProgress!.total}...
                 </div>
@@ -256,7 +256,7 @@ export function FinderResults({
       {/* Results toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         <div>
-          <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--dim)' }}>
+          <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)' }}>
             {results.length} products found — {niche}
           </div>
           <div style={{ fontSize: '10px', color: 'var(--dim)', marginTop: '3px' }}>
@@ -270,7 +270,7 @@ export function FinderResults({
             </button>
           ) : null}
           {isListing ? (
-            <div style={{ fontSize: '11px', color: 'var(--gold)', padding: '5px 12px', borderRadius: '8px', background: 'rgba(200,162,80,0.08)', border: '1px solid rgba(200,162,80,0.2)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--plat)', padding: '5px 12px', borderRadius: '8px', background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.22)', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--gold)', animation: 'glow-pulse 1.2s ease infinite' }} />
               {listAllProgress!.done + 1}/{listAllProgress!.total}
             </div>
@@ -284,7 +284,7 @@ export function FinderResults({
             <button
               key={opt}
               onClick={() => onViewChange(opt)}
-              style={{ padding: '5px 12px', borderRadius: '8px', fontSize: '10px', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.08em', border: view === opt ? '1px solid rgba(200,162,80,0.35)' : '1px solid rgba(195,158,88,0.12)', background: view === opt ? 'rgba(200,162,80,0.12)' : 'transparent', color: view === opt ? 'var(--gld2)' : 'var(--dim)' }}
+              style={{ padding: '5px 12px', borderRadius: '8px', fontSize: '10px', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 0, border: view === opt ? '1px solid rgba(14,165,233,0.35)' : '1px solid rgba(14,116,144,0.14)', background: view === opt ? 'rgba(14,165,233,0.12)' : 'rgba(255,255,255,0.56)', color: view === opt ? 'var(--plat)' : 'var(--sil)' }}
             >
               {opt === 'cards' ? '⊞' : '☰'} {opt}
             </button>
@@ -302,9 +302,9 @@ export function FinderResults({
         <div className="card" style={{ overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'rgba(20,14,6,0.95)', borderBottom: '1px solid rgba(195,158,88,0.11)' }}>
+              <tr style={{ background: 'rgba(224,247,255,0.74)', borderBottom: '1px solid rgba(14,116,144,0.12)' }}>
                 {['Product', 'Buy on Amazon', 'Sell on eBay', 'Profit', 'ROI', 'Risk', ''].map(h => (
-                  <th key={h} style={{ color: 'rgba(100,86,58,0.95)', fontSize: '7.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', padding: '12px 14px', textAlign: h === 'Product' ? 'left' : 'center', whiteSpace: 'nowrap' }}>
+                  <th key={h} style={{ color: 'var(--plat)', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, padding: '12px 14px', textAlign: h === 'Product' ? 'left' : 'center', whiteSpace: 'nowrap' }}>
                     {h}
                   </th>
                 ))}
@@ -312,7 +312,7 @@ export function FinderResults({
             </thead>
             <tbody>
               {results.map((product, i) => (
-                <tr key={product.asin} style={{ background: i % 2 === 0 ? 'rgba(17,12,7,0.80)' : 'rgba(12,9,4,0.70)', borderBottom: '1px solid rgba(195,158,88,0.06)' }}>
+                <tr key={product.asin} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.78)' : 'rgba(238,250,255,0.72)', borderBottom: '1px solid rgba(14,116,144,0.08)' }}>
                   <td style={{ padding: '12px 14px', maxWidth: '280px' }}>
                     <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.title}</div>
                     <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '2px' }}>{product.asin}</div>
@@ -338,7 +338,7 @@ export function FinderResults({
 }
 
 function ProductCard({ product, onOpenListModal }: { product: FinderProduct; onOpenListModal: (p: FinderProduct) => void }) {
-  const accentColor = product.risk === 'LOW' ? 'rgba(46,207,118,0.6)' : product.risk === 'MEDIUM' ? 'rgba(200,162,80,0.6)' : 'rgba(232,63,80,0.5)'
+  const accentColor = product.risk === 'LOW' ? 'rgba(46,207,118,0.6)' : product.risk === 'MEDIUM' ? 'rgba(14,165,233,0.6)' : 'rgba(232,63,80,0.5)'
 
   return (
     <div className="card" style={{ padding: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -349,9 +349,9 @@ function ProductCard({ product, onOpenListModal }: { product: FinderProduct; onO
         {/* Image + title */}
         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '14px' }}>
           {product.imageUrl ? (
-            <img src={product.imageUrl} alt={product.title} style={{ width: '54px', height: '54px', objectFit: 'contain', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', flexShrink: 0 }} />
+            <img src={product.imageUrl} alt={product.title} style={{ width: '54px', height: '54px', objectFit: 'contain', borderRadius: '8px', background: 'rgba(255,255,255,0.78)', border: '1px solid rgba(14,116,144,0.10)', flexShrink: 0 }} />
           ) : (
-            <div style={{ width: '54px', height: '54px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>📦</div>
+            <div style={{ width: '54px', height: '54px', borderRadius: '8px', background: 'rgba(255,255,255,0.78)', border: '1px solid rgba(14,116,144,0.10)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>📦</div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4, marginBottom: '4px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.title}</div>
@@ -361,20 +361,20 @@ function ProductCard({ product, onOpenListModal }: { product: FinderProduct; onO
 
         {/* Key numbers */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
-          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(0,0,0,0.22)' }}>
-            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '4px' }}>Buy on Amazon</div>
+          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(226,247,255,0.62)', border: '1px solid rgba(12,132,167,0.10)' }}>
+            <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '4px' }}>Buy on Amazon</div>
             <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '16px', fontWeight: 800, color: 'var(--txt)' }}>${product.amazonPrice.toFixed(2)}</div>
           </div>
-          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(0,0,0,0.22)' }}>
-            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '4px' }}>Sell on eBay</div>
+          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(226,247,255,0.62)', border: '1px solid rgba(12,132,167,0.10)' }}>
+            <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '4px' }}>Sell on eBay</div>
             <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '16px', fontWeight: 800, color: 'var(--gld2)' }}>${product.ebayPrice.toFixed(2)}</div>
           </div>
-          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(46,207,118,0.07)', border: '1px solid rgba(46,207,118,0.14)' }}>
-            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '4px' }}>Your Profit</div>
+          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(232,255,246,0.70)', border: '1px solid rgba(15,159,116,0.16)' }}>
+            <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '4px' }}>Your Profit</div>
             <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '18px', fontWeight: 800, color: 'var(--grn)' }}>${product.profit.toFixed(2)}</div>
           </div>
-          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(46,207,118,0.07)', border: '1px solid rgba(46,207,118,0.14)' }}>
-            <div style={{ fontSize: '7px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--dim)', marginBottom: '4px' }}>ROI</div>
+          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(232,255,246,0.70)', border: '1px solid rgba(15,159,116,0.16)' }}>
+            <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '4px' }}>ROI</div>
             <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '18px', fontWeight: 800, color: product.roi >= 50 ? 'var(--grn)' : 'var(--gold)' }}>{product.roi}%</div>
           </div>
         </div>
@@ -398,8 +398,8 @@ function RiskBadge({ risk }: { risk: string }) {
   const isLow = risk === 'LOW'
   const isMed = risk === 'MEDIUM'
   const tone = isLow ? 'var(--grn)' : isMed ? 'var(--gold)' : 'var(--red)'
-  const bg = isLow ? 'rgba(46,207,118,0.10)' : isMed ? 'rgba(200,162,80,0.10)' : 'rgba(232,63,80,0.10)'
-  const border = isLow ? 'rgba(46,207,118,0.25)' : isMed ? 'rgba(200,162,80,0.25)' : 'rgba(232,63,80,0.25)'
+  const bg = isLow ? 'rgba(46,207,118,0.10)' : isMed ? 'rgba(14,165,233,0.10)' : 'rgba(232,63,80,0.10)'
+  const border = isLow ? 'rgba(46,207,118,0.25)' : isMed ? 'rgba(14,165,233,0.25)' : 'rgba(232,63,80,0.25)'
   const label = isLow ? '✓ Low Risk' : isMed ? '~ Medium' : '⚠ High Risk'
 
   return (

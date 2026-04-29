@@ -593,14 +593,15 @@ export default function Dashboard() {
     setBanner((prev) => (prev?.tone === 'error' ? null : prev))
 
     try {
-      const data = await fetchFinderProducts('', true, { mode: 'continuous', limit: FINDER_STOCK_TARGET })
+      const shouldForceRefresh = Boolean(continuousFinderState.results?.length)
+      const data = await fetchFinderProducts('', shouldForceRefresh, { mode: 'continuous', limit: FINDER_STOCK_TARGET })
       setContinuousFinderState((prev) => ({ ...prev, results: tagFinderProducts(data.results || [], 'continuous') }))
     } catch (error) {
       setContinuousFinderState((prev) => ({ ...prev, results: [], error: getErrorMessage(error, 'Continuous product search failed.') }))
     } finally {
       setContinuousFinderState((prev) => ({ ...prev, loading: false }))
     }
-  }, [])
+  }, [continuousFinderState.results])
 
   useEffect(() => {
     if (tab === 'continuous' && !continuousFinderState.results && !continuousFinderState.loading && !continuousFinderState.error) {

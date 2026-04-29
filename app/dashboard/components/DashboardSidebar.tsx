@@ -51,7 +51,7 @@ export function DashboardSidebar({
           style={{
             fontSize: '8px',
             fontWeight: 600,
-            letterSpacing: '0.22em',
+            letterSpacing: 0,
             textTransform: 'uppercase',
             color: 'rgba(148,212,255,0.6)',
             marginTop: '6px',
@@ -90,7 +90,7 @@ export function DashboardSidebar({
               fontSize: '10px',
               fontWeight: 700,
               textTransform: 'uppercase',
-              letterSpacing: '0.14em',
+              letterSpacing: 0,
               color: connected ? '#34d399' : 'rgba(148,212,255,0.5)',
             }}
           >
@@ -119,7 +119,7 @@ export function DashboardSidebar({
                   fontSize: '7px',
                   fontWeight: 700,
                   textTransform: 'uppercase',
-                  letterSpacing: '0.16em',
+                  letterSpacing: 0,
                   color: 'rgba(148,212,255,0.5)',
                   marginBottom: '2px',
                 }}
@@ -183,7 +183,7 @@ export function DashboardSidebar({
                 background: tab === item.id ? 'rgba(56,189,248,0.18)' : 'rgba(255,255,255,0.05)',
                 fontSize: '9px',
                 fontWeight: 700,
-                letterSpacing: '0.08em',
+                letterSpacing: 0,
               }}
             >
               {item.label.match(/^\p{Emoji}/u)?.[0] ?? item.label.slice(0, 2).toUpperCase()}
