@@ -180,6 +180,43 @@ export interface PerformanceData {
   products: PerformanceProduct[]
 }
 
+export interface ProductSourceHealth {
+  generatedAt: string
+  status: 'healthy' | 'watch' | 'attention'
+  warnings: string[]
+  sourceEngine: {
+    totalProducts: number
+    niches: number
+    staleProducts: number
+    missingImages: number
+    highRiskProducts: number
+    averageScore: number
+    newestSeenAt: string | null
+  }
+  cache: {
+    totalNiches: number
+    readyNiches: number
+    staleNiches: number
+    totalProducts: number
+  }
+  continuous: {
+    products: number
+    version: number
+    cachedAt: string | null
+  }
+  topNiches: Array<{
+    name: string
+    count: number
+    averageScore: number
+    maxScore: number
+    newestSeenAt: string | null
+  }>
+  providers: {
+    rapidApiConfigured: boolean
+    liveProviderChecks: string
+  }
+}
+
 export interface ListProgress {
   done: number
   total: number

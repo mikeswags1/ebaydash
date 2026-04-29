@@ -18,6 +18,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-04-29 | Codex | Added Product Source Health visibility in Settings so source-engine depth, niche cache readiness, Continuous Listing stock, warnings, and top source niches are visible from the dashboard | `app/api/product-source/health/route.ts`, `app/dashboard/components/SettingsTab.tsx`, `app/dashboard/page.tsx`, `app/dashboard/api.ts`, `app/dashboard/types.ts` |
 | 2026-04-29 | Codex | Added the first StackPilot-owned Product Source Engine: scored product-source table, cache seeding, Product Finder fast path, and cron/setup integration | `lib/product-source-engine.ts`, `app/api/scripts/product-finder/route.ts`, `app/api/cron/refresh-products/route.ts`, `app/api/setup-db/route.ts` |
 | 2026-04-29 | Codex | Warmed the live Continuous Listing cache to 160 products and added automatic continuous-cache rebuilds to the product refresh cron so RapidAPI 429s do not leave the queue empty | `app/api/cron/refresh-products/route.ts` |
 | 2026-04-29 | Codex | Removed Product Finder browser aborts and hot-path DB/schema/cache delays so Continuous Listing can return instead of timing out; added product-finder runtime count/duration logs | `app/api/scripts/product-finder/route.ts`, `app/dashboard/api.ts` |

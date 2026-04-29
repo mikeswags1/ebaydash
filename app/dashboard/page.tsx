@@ -15,7 +15,7 @@ import { ProductListingTab } from './components/ProductListingTab'
 import { ContinuousListingTab } from './components/ContinuousListingTab'
 import { SettingsTab } from './components/SettingsTab'
 import { SellOnEbayModal } from './components/SellOnEbayModal'
-import type { BannerState, EbayCredentialsSummary, FinancialItem, FinancialSummary, FinderProduct, ListProgress, OrderAsinMap, PerformanceData, ScriptMessage, Tab } from './types'
+import type { BannerState, EbayCredentialsSummary, FinancialItem, FinancialSummary, FinderProduct, ListProgress, OrderAsinMap, PerformanceData, ProductSourceHealth, ScriptMessage, Tab } from './types'
 import type { AsinResult, EbayOrder, ListResult } from './types'
 import {
   disconnectEbay,
@@ -26,6 +26,7 @@ import {
   fetchFinderProducts,
   fetchOrderAsinMap,
   fetchOrders,
+  fetchProductSourceHealth,
   fetchUserNiche,
   getErrorMessage,
   isReconnectError,
@@ -65,6 +66,12 @@ type FinancialState = {
 type PerformanceState = {
   loading: boolean
   data: PerformanceData | null
+  error: string | null
+}
+
+type ProductSourceHealthState = {
+  loading: boolean
+  data: ProductSourceHealth | null
   error: string | null
 }
 
@@ -149,6 +156,11 @@ export default function Dashboard() {
     error: null,
   })
   const [performanceState, setPerformanceState] = useState<PerformanceState>({
+    loading: false,
+    data: null,
+    error: null,
+  })
+  const [sourceHealthState, setSourceHealthState] = useState<ProductSourceHealthState>({
     loading: false,
     data: null,
     error: null,
@@ -362,6 +374,25 @@ export default function Dashboard() {
     }
   }, [])
 
+  const loadProductSourceHealth = useCallback(async () => {
+    setSourceHealthState((prev) => ({ ...prev, loading: true, error: null }))
+
+    try {
+      const data = await fetchProductSourceHealth()
+      setSourceHealthState({
+        loading: false,
+        data,
+        error: null,
+      })
+    } catch (error) {
+      setSourceHealthState((prev) => ({
+        ...prev,
+        loading: false,
+        error: getErrorMessage(error, 'Unable to load product source health.'),
+      }))
+    }
+  }, [])
+
   const loadDashboardBootstrap = useCallback(async () => {
     const results = await Promise.allSettled([
       fetchEbayCredentials(),
@@ -435,6 +466,11 @@ export default function Dashboard() {
         data: null,
         error: null,
       }))
+      setSourceHealthState((prev) => ({
+        ...prev,
+        data: null,
+        error: null,
+      }))
       setBanner({ tone: 'success', text: 'eBay disconnected. Connect it again to refresh your token.' })
     } catch (error) {
       setBanner({ tone: 'error', text: getErrorMessage(error, 'Unable to disconnect eBay.') })
@@ -456,6 +492,12 @@ export default function Dashboard() {
       void loadPerformance()
     }
   }, [loadPerformance, performanceState.data, performanceState.error, performanceState.loading, status, tab])
+
+  useEffect(() => {
+    if (status === 'authenticated' && tab === 'settings' && !sourceHealthState.data && !sourceHealthState.loading && !sourceHealthState.error) {
+      void loadProductSourceHealth()
+    }
+  }, [loadProductSourceHealth, sourceHealthState.data, sourceHealthState.error, sourceHealthState.loading, status, tab])
 
   const handleSaveNiche = useCallback(async (value: string) => {
     setNicheState((prev) => ({ ...prev, value, saving: true }))
@@ -910,6 +952,7 @@ export default function Dashboard() {
             void loadOrders()
             void loadFinancials()
             if (tab === 'performance') void loadPerformance()
+            if (tab === 'settings') void loadProductSourceHealth()
           }}
         />
 
@@ -1015,10 +1058,15 @@ export default function Dashboard() {
                 void loadOrders()
                 void loadFinancials()
                 void loadPerformance()
+                void loadProductSourceHealth()
               }}
               onDisconnectEbay={() => void handleDisconnectEbay()}
               disconnectingEbay={disconnectingEbay}
               onOpenProductTab={() => setTab('product')}
+              sourceHealth={sourceHealthState.data}
+              sourceHealthLoading={sourceHealthState.loading}
+              sourceHealthError={sourceHealthState.error}
+              onRefreshSourceHealth={() => void loadProductSourceHealth()}
             />
           ) : null}
         </div>
