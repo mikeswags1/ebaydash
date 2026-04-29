@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
+import { ensureProductSourceTables } from '@/lib/product-source-engine'
 
 export async function GET() {
   try {
@@ -56,6 +57,7 @@ export async function GET() {
     await sql`ALTER TABLE ebay_credentials ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMP`.catch(() => {})
     await sql`ALTER TABLE ebay_credentials ADD COLUMN IF NOT EXISTS refresh_token TEXT`.catch(() => {})
     await ensureListedAsinsFinancialColumns()
+    await ensureProductSourceTables()
     return NextResponse.json({ success: true, message: 'Database tables ready' })
   } catch (e) {
     console.error(e)

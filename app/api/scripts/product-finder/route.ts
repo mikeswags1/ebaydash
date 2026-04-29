@@ -7,6 +7,7 @@ import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice, isHealthyListing } from '@/lib/listing-pricing'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
+import { loadProductSourceProducts, upsertProductSourceItems } from '@/lib/product-source-engine'
 
 export const maxDuration = 60
 
@@ -634,6 +635,16 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  const sourceEngineProducts = await withTimeout(
+    loadProductSourceProducts({ niche: continuousMode ? undefined : niche, limit: continuousMode ? 180 : 120 }),
+    continuousMode ? 700 : 1200,
+    []
+  )
+  const sourceEngineAvailable = getAvailableProducts(sourceEngineProducts)
+  if (sourceEngineAvailable.length >= targetCount && (!forceRefresh || sourceEngineProducts.length > targetCount)) {
+    return respondWithProducts(sourceEngineProducts, continuousMode ? 'source-engine' : 'source-engine-niche')
+  }
+
   // ── Check cache ──────────────────────────────────────────────────────────────
   let cacheRow: { results: Product[]; cached_at: Date; version?: number } | null = null
   try {
@@ -649,6 +660,11 @@ export async function GET(req: NextRequest) {
   const cachedProducts = continuousMode
     ? [...(cacheRow?.results || []), ...continuousNicheCacheProducts]
     : (cacheRow?.results || [])
+  const stockedProducts = [...sourceEngineProducts, ...cachedProducts]
+  const stockedAvailable = getAvailableProducts(stockedProducts)
+  if (stockedAvailable.length >= targetCount && (!forceRefresh || stockedProducts.length > targetCount)) {
+    return respondWithProducts(stockedProducts, continuousMode ? 'source-engine-cache' : 'source-engine-cache-niche')
+  }
   const cachedAvailable = getAvailableProducts(cachedProducts)
 
   if (continuousMode && cachedAvailable.length >= targetCount && (!forceRefresh || cachedProducts.length > targetCount)) {
@@ -806,9 +822,19 @@ export async function GET(req: NextRequest) {
     } catch { /* non-fatal */ }
   }
 
+  const ingestProductsToSourceEngine = (productsToIngest = results, provider = 'finder') =>
+    upsertProductSourceItems(productsToIngest.map((product) => ({
+      ...product,
+      sourceNiche: product.sourceNiche || (continuousMode ? undefined : niche) || undefined,
+      sourceProvider: provider,
+    }))).catch(() => 0)
+
   const scheduleCacheSave = (productsToSave = results) => {
     const snapshot = rankProducts([...productsToSave], false)
-    after(() => saveResultsToCache(snapshot))
+    after(async () => {
+      await saveResultsToCache(snapshot)
+      await ingestProductsToSourceEngine(snapshot)
+    })
   }
 
   const fetchRapidProducts = async (
@@ -920,6 +946,7 @@ export async function GET(req: NextRequest) {
       results.splice(0, results.length, ...rankProducts([...filteredEnriched, ...remainder], false))
 
       await saveResultsToCache()
+      after(() => ingestProductsToSourceEngine([...results]))
     }
   }
 
@@ -937,7 +964,10 @@ export async function GET(req: NextRequest) {
     if (results.length > 0) {
       results.splice(0, results.length, ...rankProducts(results, false))
       if (continuousMode) scheduleCacheSave()
-      else await saveResultsToCache()
+      else {
+        await saveResultsToCache()
+        after(() => ingestProductsToSourceEngine([...results]))
+      }
       return respondWithProducts(results, 'scrape')
     }
 
@@ -968,6 +998,7 @@ export async function GET(req: NextRequest) {
     mergeFallbackProducts()
     results.splice(0, results.length, ...rankProducts(results, false))
     await saveResultsToCache()
+    after(() => ingestProductsToSourceEngine([...results]))
   }
 
   return respondWithProducts(results, 'live')

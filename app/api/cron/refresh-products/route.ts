@@ -3,6 +3,7 @@ import { apiError, apiOk } from '@/lib/api-response'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { queryRows, sql } from '@/lib/db'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
+import { ensureProductSourceTables, rebuildProductSourceFromCache } from '@/lib/product-source-engine'
 
 export const maxDuration = 300
 
@@ -285,12 +286,21 @@ export async function GET(req: NextRequest) {
   await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ`.catch(() => {})
   await sql`CREATE TABLE IF NOT EXISTS product_cache (niche TEXT PRIMARY KEY, results JSONB NOT NULL, cached_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), version INTEGER NOT NULL DEFAULT 1)`.catch(() => {})
   await sql`ALTER TABLE product_cache ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1`.catch(() => {})
+  await ensureProductSourceTables().catch(() => {})
 
   const startedAt = Date.now()
   const report: Record<string, unknown> = {}
   const rollingRefresh = req.nextUrl.searchParams.get('rolling') === '1'
+  const sourceOnly = req.nextUrl.searchParams.get('sourceOnly') === '1'
   const fullRefresh = req.nextUrl.searchParams.get('full') === '1' || !rollingRefresh
   const now = new Date()
+
+  if (sourceOnly) {
+    report.sourceProducts = await rebuildProductSourceFromCache()
+    report.continuousProducts = await refreshContinuousCache()
+    report.durationMs = Date.now() - startedAt
+    return apiOk({ success: true, ...report })
+  }
 
   // 1. Sync eBay listing statuses for all users
   const shouldSyncUsers = fullRefresh || (now.getUTCMinutes() === 0 && now.getUTCHours() % 4 === 0)
@@ -344,6 +354,7 @@ export async function GET(req: NextRequest) {
   report.nichesRefreshed = refreshed
   report.nichesAttempted = niches
   report.quotaHit = quotaHit
+  report.sourceProducts = await rebuildProductSourceFromCache()
   report.continuousProducts = await refreshContinuousCache()
 
   report.durationMs = Date.now() - startedAt

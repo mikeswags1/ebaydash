@@ -18,6 +18,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-04-29 | Codex | Added the first StackPilot-owned Product Source Engine: scored product-source table, cache seeding, Product Finder fast path, and cron/setup integration | `lib/product-source-engine.ts`, `app/api/scripts/product-finder/route.ts`, `app/api/cron/refresh-products/route.ts`, `app/api/setup-db/route.ts` |
 | 2026-04-29 | Codex | Warmed the live Continuous Listing cache to 160 products and added automatic continuous-cache rebuilds to the product refresh cron so RapidAPI 429s do not leave the queue empty | `app/api/cron/refresh-products/route.ts` |
 | 2026-04-29 | Codex | Removed Product Finder browser aborts and hot-path DB/schema/cache delays so Continuous Listing can return instead of timing out; added product-finder runtime count/duration logs | `app/api/scripts/product-finder/route.ts`, `app/dashboard/api.ts` |
 | 2026-04-29 | Codex | Fixed Product Listing and Continuous Listing queue stocking with broader niche queries, strict-plus-backup product sourcing, tighter continuous cache rules, and safer request timeouts | `app/api/scripts/product-finder/route.ts`, `app/dashboard/api.ts`, `lib/amazon-scrape.ts` |
