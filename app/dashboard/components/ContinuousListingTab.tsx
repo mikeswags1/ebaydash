@@ -25,6 +25,8 @@ export function ContinuousListingTab({
   listAllProgress: ListProgress | null
   connected: boolean
 }) {
+  const hasResults = Boolean(finderResults?.length)
+
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
       <SectionIntro eyebrow="StackPilot / Queue" title="Continuous Listing" />
@@ -49,7 +51,7 @@ export function ContinuousListingTab({
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '14px', marginBottom: '24px' }}>
           <button className="btn btn-gold" disabled={finderLoading} onClick={onFindProducts} style={{ padding: '14px', fontSize: '13px' }}>
-            {finderLoading ? 'Building Queue...' : finderResults?.length ? 'Refresh Queue' : 'Load 30 Products'}
+            {finderLoading ? (hasResults ? 'Shuffling...' : 'Building Queue...') : hasResults ? 'Shuffle Queue' : 'Load 30 Products'}
           </button>
           {finderResults && finderResults.length > 0 ? (
             <button
@@ -69,10 +71,16 @@ export function ContinuousListingTab({
           </div>
         ) : null}
 
-        {finderLoading ? (
+        {finderLoading && hasResults ? (
+          <div style={{ marginBottom: '18px', padding: '12px 16px', borderRadius: '12px', background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.18)', fontSize: '12px', color: 'var(--sil)', lineHeight: 1.5 }}>
+            Refreshing the queue. You can keep reviewing the products already shown.
+          </div>
+        ) : null}
+
+        {finderLoading && !hasResults ? (
           <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
             <div style={{ fontSize: '13px', color: 'var(--dim)', marginBottom: '8px' }}>Building a fresh product queue...</div>
-            <div style={{ fontSize: '11px', color: 'var(--dim)', opacity: 0.6 }}>Checking price, demand, margin, and listing risk signals.</div>
+            <div style={{ fontSize: '11px', color: 'var(--dim)', opacity: 0.8 }}>Pulling a fast randomized batch from the warm product pool.</div>
           </div>
         ) : null}
 

@@ -71,7 +71,7 @@ export function ProductListingTab({
 
         {/* Active niche banner */}
         {niche ? (
-          <div style={{ marginBottom: '24px', padding: '16px 22px', borderRadius: '14px', background: 'linear-gradient(135deg,rgba(186,230,253,0.72),rgba(240,253,250,0.62))', border: '1px solid rgba(14,165,233,0.24)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ marginBottom: '24px', padding: '16px 22px', borderRadius: '14px', background: 'linear-gradient(135deg,rgba(14,165,233,0.14),rgba(20,184,166,0.08))', border: '1px solid rgba(125,211,252,0.20)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(14,165,233,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
                 {NICHE_GROUPS.find(g => g.items.includes(niche))?.emoji || '🛒'}
@@ -111,13 +111,13 @@ export function ProductListingTab({
                           fontFamily: 'inherit',
                           cursor: 'pointer',
                           border: '1px solid rgba(14,116,144,0.12)',
-                          background: 'rgba(255,255,255,0.56)',
+                          background: 'rgba(14,27,44,0.72)',
                           color: 'var(--sil)',
                           transition: 'all 0.15s',
                           fontWeight: 500,
                         }}
                         onMouseEnter={e => { (e.target as HTMLButtonElement).style.background = 'rgba(14,165,233,0.10)'; (e.target as HTMLButtonElement).style.borderColor = 'rgba(14,165,233,0.24)'; (e.target as HTMLButtonElement).style.color = 'var(--plat)' }}
-                        onMouseLeave={e => { (e.target as HTMLButtonElement).style.background = 'rgba(255,255,255,0.56)'; (e.target as HTMLButtonElement).style.borderColor = 'rgba(14,116,144,0.12)'; (e.target as HTMLButtonElement).style.color = 'var(--sil)' }}
+                        onMouseLeave={e => { (e.target as HTMLButtonElement).style.background = 'rgba(14,27,44,0.72)'; (e.target as HTMLButtonElement).style.borderColor = 'rgba(14,116,144,0.12)'; (e.target as HTMLButtonElement).style.color = 'var(--sil)' }}
                       >
                         {item}
                       </button>
@@ -284,7 +284,7 @@ export function FinderResults({
             <button
               key={opt}
               onClick={() => onViewChange(opt)}
-              style={{ padding: '5px 12px', borderRadius: '8px', fontSize: '10px', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 0, border: view === opt ? '1px solid rgba(14,165,233,0.35)' : '1px solid rgba(14,116,144,0.14)', background: view === opt ? 'rgba(14,165,233,0.12)' : 'rgba(255,255,255,0.56)', color: view === opt ? 'var(--plat)' : 'var(--sil)' }}
+              style={{ padding: '5px 12px', borderRadius: '8px', fontSize: '10px', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: 0, border: view === opt ? '1px solid rgba(14,165,233,0.35)' : '1px solid rgba(125,211,252,0.14)', background: view === opt ? 'rgba(14,165,233,0.14)' : 'rgba(14,27,44,0.72)', color: view === opt ? 'var(--plat)' : 'var(--sil)' }}
             >
               {opt === 'cards' ? '⊞' : '☰'} {opt}
             </button>
@@ -302,7 +302,7 @@ export function FinderResults({
         <div className="card" style={{ overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'rgba(224,247,255,0.74)', borderBottom: '1px solid rgba(14,116,144,0.12)' }}>
+              <tr style={{ background: 'rgba(15,35,56,0.92)', borderBottom: '1px solid rgba(125,211,252,0.12)' }}>
                 {['Product', 'Buy on Amazon', 'Sell on eBay', 'Profit', 'ROI', 'Risk', ''].map(h => (
                   <th key={h} style={{ color: 'var(--plat)', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, padding: '12px 14px', textAlign: h === 'Product' ? 'left' : 'center', whiteSpace: 'nowrap' }}>
                     {h}
@@ -312,7 +312,7 @@ export function FinderResults({
             </thead>
             <tbody>
               {results.map((product, i) => (
-                <tr key={product.asin} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.78)' : 'rgba(238,250,255,0.72)', borderBottom: '1px solid rgba(14,116,144,0.08)' }}>
+                <tr key={product.asin} style={{ background: i % 2 === 0 ? 'rgba(14,27,44,0.88)' : 'rgba(11,22,36,0.88)', borderBottom: '1px solid rgba(125,211,252,0.08)' }}>
                   <td style={{ padding: '12px 14px', maxWidth: '280px' }}>
                     <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.title}</div>
                     <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '2px' }}>{product.asin}</div>
@@ -349,9 +349,9 @@ function ProductCard({ product, onOpenListModal }: { product: FinderProduct; onO
         {/* Image + title */}
         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '14px' }}>
           {product.imageUrl ? (
-            <img src={product.imageUrl} alt={product.title} style={{ width: '54px', height: '54px', objectFit: 'contain', borderRadius: '8px', background: 'rgba(255,255,255,0.78)', border: '1px solid rgba(14,116,144,0.10)', flexShrink: 0 }} />
+            <img src={product.imageUrl} alt={product.title} style={{ width: '54px', height: '54px', objectFit: 'contain', borderRadius: '8px', background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(125,211,252,0.12)', flexShrink: 0 }} />
           ) : (
-            <div style={{ width: '54px', height: '54px', borderRadius: '8px', background: 'rgba(255,255,255,0.78)', border: '1px solid rgba(14,116,144,0.10)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>📦</div>
+            <div style={{ width: '54px', height: '54px', borderRadius: '8px', background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(125,211,252,0.12)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>📦</div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4, marginBottom: '4px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.title}</div>
@@ -361,19 +361,19 @@ function ProductCard({ product, onOpenListModal }: { product: FinderProduct; onO
 
         {/* Key numbers */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
-          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(226,247,255,0.62)', border: '1px solid rgba(12,132,167,0.10)' }}>
+          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(125,211,252,0.08)', border: '1px solid rgba(125,211,252,0.12)' }}>
             <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '4px' }}>Buy on Amazon</div>
             <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '16px', fontWeight: 800, color: 'var(--txt)' }}>${product.amazonPrice.toFixed(2)}</div>
           </div>
-          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(226,247,255,0.62)', border: '1px solid rgba(12,132,167,0.10)' }}>
+          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(125,211,252,0.08)', border: '1px solid rgba(125,211,252,0.12)' }}>
             <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '4px' }}>Sell on eBay</div>
             <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '16px', fontWeight: 800, color: 'var(--gld2)' }}>${product.ebayPrice.toFixed(2)}</div>
           </div>
-          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(232,255,246,0.70)', border: '1px solid rgba(15,159,116,0.16)' }}>
+          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.16)' }}>
             <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '4px' }}>Your Profit</div>
             <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '18px', fontWeight: 800, color: 'var(--grn)' }}>${product.profit.toFixed(2)}</div>
           </div>
-          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(232,255,246,0.70)', border: '1px solid rgba(15,159,116,0.16)' }}>
+          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.16)' }}>
             <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '4px' }}>ROI</div>
             <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '18px', fontWeight: 800, color: product.roi >= 50 ? 'var(--grn)' : 'var(--gold)' }}>{product.roi}%</div>
           </div>

@@ -144,7 +144,7 @@ export function PerformanceTab({
               <div className="card" style={{ overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ background: 'rgba(224,247,255,0.74)', borderBottom: '1px solid rgba(14,116,144,0.12)' }}>
+                    <tr style={{ background: 'rgba(15,35,56,0.92)', borderBottom: '1px solid rgba(125,211,252,0.12)' }}>
                       {[
                         { label: 'Category', hint: null },
                         { label: 'Status', hint: null },
@@ -164,7 +164,7 @@ export function PerformanceTab({
                   </thead>
                   <tbody>
                     {allNiches.map((niche, i) => (
-                      <tr key={niche.name} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.78)' : 'rgba(238,250,255,0.72)', borderBottom: '1px solid rgba(14,116,144,0.08)' }}>
+                      <tr key={niche.name} style={{ background: i % 2 === 0 ? 'rgba(14,27,44,0.88)' : 'rgba(11,22,36,0.88)', borderBottom: '1px solid rgba(125,211,252,0.08)' }}>
                         <td style={{ padding: '12px 14px', maxWidth: '220px' }}>
                           <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{niche.name}</div>
                           <div style={{ fontSize: '9px', color: 'var(--dim)', marginTop: '2px' }}>{niche.activeListings} active listing{niche.activeListings !== 1 ? 's' : ''}</div>
@@ -198,7 +198,7 @@ export function PerformanceTab({
               <div className="card" style={{ overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ background: 'rgba(224,247,255,0.74)', borderBottom: '1px solid rgba(14,116,144,0.12)' }}>
+                    <tr style={{ background: 'rgba(15,35,56,0.92)', borderBottom: '1px solid rgba(125,211,252,0.12)' }}>
                       {['Product', 'Category', 'Sold', 'Profit', 'ROI', 'Watchers', 'Status'].map(h => (
                         <th key={h} style={{ color: 'var(--plat)', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, padding: '12px 14px', textAlign: h === 'Product' ? 'left' : 'center', whiteSpace: 'nowrap' }}>
                           {h}
@@ -208,7 +208,7 @@ export function PerformanceTab({
                   </thead>
                   <tbody>
                     {topProducts.map((p, i) => (
-                      <tr key={p.listingId || p.asin || p.title} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.78)' : 'rgba(238,250,255,0.72)', borderBottom: '1px solid rgba(14,116,144,0.08)' }}>
+                      <tr key={p.listingId || p.asin || p.title} style={{ background: i % 2 === 0 ? 'rgba(14,27,44,0.88)' : 'rgba(11,22,36,0.88)', borderBottom: '1px solid rgba(125,211,252,0.08)' }}>
                         <td style={{ padding: '12px 14px', maxWidth: '280px' }}>
                           <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
                           <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '2px' }}>{p.asin || p.listingId || '—'}</div>
@@ -266,11 +266,11 @@ function ActionCard({
         <button onClick={onAction} className="btn btn-ghost btn-sm" style={{ fontSize: '10px', whiteSpace: 'nowrap' }}>{actionLabel}</button>
       </div>
       {items.length === 0 ? (
-        <div style={{ fontSize: '11px', color: 'var(--sil)', padding: '14px', borderRadius: '8px', background: 'rgba(226,247,255,0.52)', lineHeight: 1.6 }}>{empty}</div>
+        <div style={{ fontSize: '11px', color: 'var(--sil)', padding: '14px', borderRadius: '8px', background: 'rgba(125,211,252,0.08)', lineHeight: 1.6 }}>{empty}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {items.map(niche => (
-            <div key={niche.name} style={{ padding: '12px 14px', borderRadius: '10px', background: 'rgba(226,247,255,0.52)' }}>
+            <div key={niche.name} style={{ padding: '12px 14px', borderRadius: '10px', background: 'rgba(125,211,252,0.08)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--txt)' }}>{niche.name}</div>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: tone === 'green' ? 'var(--grn)' : 'var(--red)' }}>

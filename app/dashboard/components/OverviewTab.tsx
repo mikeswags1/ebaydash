@@ -39,7 +39,7 @@ export function OverviewTab({
 
       {/* Connect prompt */}
       {!connected ? (
-        <div style={{ margin: '0 44px 32px', padding: '28px 32px', borderRadius: '14px', background: 'rgba(226,247,255,0.70)', border: '1px solid rgba(14,165,233,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ margin: '0 44px 32px', padding: '28px 32px', borderRadius: '14px', background: 'rgba(14,27,44,0.78)', border: '1px solid rgba(125,211,252,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--txt)', marginBottom: '5px' }}>
               Connect your eBay account to get started

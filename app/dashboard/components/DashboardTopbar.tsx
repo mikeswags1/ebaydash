@@ -51,9 +51,9 @@ export function DashboardTopbar({
       className="dashboard-topbar"
       style={{
         height: '56px',
-        background: 'rgba(240,250,255,0.92)',
+        background: 'rgba(8,17,31,0.84)',
         backdropFilter: 'blur(24px)',
-        borderBottom: '1px solid rgba(14,116,144,0.12)',
+        borderBottom: '1px solid rgba(125,211,252,0.14)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -61,7 +61,7 @@ export function DashboardTopbar({
         position: 'sticky',
         top: 0,
         zIndex: 200,
-        boxShadow: '0 1px 22px rgba(14,116,144,0.12)',
+        boxShadow: '0 1px 22px rgba(0,0,0,0.22)',
       }}
     >
       <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plat)', letterSpacing: 0, textTransform: 'uppercase' }}>

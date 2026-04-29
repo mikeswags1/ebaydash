@@ -589,7 +589,7 @@ export default function Dashboard() {
   }, [nicheState.value])
 
   const handleFindContinuousProducts = useCallback(async () => {
-    setContinuousFinderState((prev) => ({ ...prev, loading: true, error: null, results: null, listAllProgress: null }))
+    setContinuousFinderState((prev) => ({ ...prev, loading: true, error: null, results: prev.results, listAllProgress: null }))
     setBanner((prev) => (prev?.tone === 'error' ? null : prev))
 
     try {
@@ -597,7 +597,7 @@ export default function Dashboard() {
       const data = await fetchFinderProducts('', shouldForceRefresh, { mode: 'continuous', limit: FINDER_STOCK_TARGET })
       setContinuousFinderState((prev) => ({ ...prev, results: tagFinderProducts(data.results || [], 'continuous') }))
     } catch (error) {
-      setContinuousFinderState((prev) => ({ ...prev, results: [], error: getErrorMessage(error, 'Continuous product search failed.') }))
+      setContinuousFinderState((prev) => ({ ...prev, results: prev.results || [], error: getErrorMessage(error, 'Continuous product search failed.') }))
     } finally {
       setContinuousFinderState((prev) => ({ ...prev, loading: false }))
     }

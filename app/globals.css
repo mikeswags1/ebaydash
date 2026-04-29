@@ -1,18 +1,18 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#07111d;
-  --s:#0b1a2a;
-  --c:#0d2035;
-  --ch:#102540;
-  --bdr:rgba(56,189,248,0.12);
-  --bdrh:rgba(56,189,248,0.40);
-  --txt:#dbeafe;
-  --sil:#60a5d8;
-  --dim:#2e5a7a;
-  --mute:#0b1a2a;
+  --bg:#08111f;
+  --s:#0d1b2d;
+  --c:#12243a;
+  --ch:#172b44;
+  --bdr:rgba(125,211,252,0.16);
+  --bdrh:rgba(125,211,252,0.36);
+  --txt:#eef7ff;
+  --sil:#9bd3f2;
+  --dim:#7f9db2;
+  --mute:#0f1d2f;
   --gold:#38bdf8;
-  --gld2:#7dd3fc;
-  --plat:#bae6fd;
+  --gld2:#67e8f9;
+  --plat:#dff7ff;
   --grn:#34d399;
   --red:#f87171;
   --ora:#fb923c;
@@ -29,44 +29,27 @@ body{
   overflow-x:hidden;
 }
 
-/* ── ATMOSPHERE — deep sky with horizon glow and drifting light ── */
+/* ── ATMOSPHERE — calm night-sky wash ── */
 body::before{
   content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
   background:
-    radial-gradient(ellipse 100% 45% at 50% 0%,rgba(14,165,233,0.14) 0%,transparent 60%),
-    radial-gradient(ellipse 60% 40% at 0% 30%,rgba(56,189,248,0.07) 0%,transparent 55%),
-    radial-gradient(ellipse 50% 35% at 100% 60%,rgba(52,211,153,0.06) 0%,transparent 55%),
-    radial-gradient(ellipse 80% 30% at 50% 100%,rgba(56,189,248,0.05) 0%,transparent 50%),
-    linear-gradient(180deg,#0a1828 0%,#07111d 40%,#060f1a 100%);
-  animation:sky-breathe 16s ease-in-out infinite alternate;
+    linear-gradient(135deg,rgba(14,165,233,0.14) 0%,rgba(8,17,31,0) 36%),
+    linear-gradient(225deg,rgba(20,184,166,0.10) 0%,rgba(8,17,31,0) 32%),
+    linear-gradient(180deg,#0d1d31 0%,#08111f 46%,#060b14 100%);
 }
 
-/* ── AIRPLANE ── */
 body::after{
-  content:'✈';
+  content:'';
   position:fixed;
-  top:26px;
-  left:-70px;
-  font-size:22px;
+  inset:auto 0 0 0;
+  height:26vh;
   z-index:2;
   pointer-events:none;
-  opacity:0;
-  filter:drop-shadow(0 2px 12px rgba(56,189,248,0.6));
-  animation:plane-fly 22s linear 6s infinite;
+  opacity:0.28;
+  background:linear-gradient(0deg,rgba(20,184,166,0.16),rgba(20,184,166,0));
 }
 
 /* ── KEYFRAMES ── */
-@keyframes sky-breathe{
-  0%  { opacity:0.85; }
-  100%{ opacity:1; }
-}
-@keyframes plane-fly{
-  0%  { left:-70px; top:26px; opacity:0; }
-  5%  { opacity:0.6; }
-  50% { top:18px; }
-  95% { opacity:0.6; }
-  100%{ left:110vw; top:24px; opacity:0; }
-}
 @keyframes glow-pulse{0%,100%{opacity:1}50%{opacity:0.35}}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pop-in{from{opacity:0;transform:scale(0.97)}to{opacity:1;transform:scale(1)}}
@@ -95,7 +78,7 @@ textarea{resize:vertical;min-height:100px}
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
   padding:13px 28px;border-radius:12px;cursor:pointer;font-family:inherit;
-  font-size:13px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;
+  font-size:13px;font-weight:700;letter-spacing:0;text-transform:uppercase;
   transition:all 0.2s;border:1px solid transparent;white-space:nowrap;
   text-decoration:none;
 }
@@ -107,7 +90,6 @@ textarea{resize:vertical;min-height:100px}
   background:rgba(56,189,248,0.18);
   border-color:rgba(56,189,248,0.52);color:#7dd3fc;
   box-shadow:0 4px 20px rgba(56,189,248,0.18);
-  transform:translateY(-1px);
 }
 .btn-solid{
   background:linear-gradient(135deg,#0ea5e9,#0284c7);
@@ -116,7 +98,6 @@ textarea{resize:vertical;min-height:100px}
 .btn-solid:hover{
   background:linear-gradient(135deg,#38bdf8,#0ea5e9);
   box-shadow:0 6px 24px rgba(14,165,233,0.38);
-  transform:translateY(-2px);
 }
 .btn-ghost{
   background:transparent;color:var(--sil);border-color:rgba(56,189,248,0.15);
@@ -129,17 +110,16 @@ textarea{resize:vertical;min-height:100px}
 
 /* ── CARDS ── */
 .card{
-  background:linear-gradient(145deg,rgba(13,32,53,0.95),rgba(10,24,42,0.98));
-  border:1px solid rgba(56,189,248,0.10);
-  border-radius:18px;
+  background:linear-gradient(145deg,rgba(18,32,50,0.94),rgba(11,22,36,0.98));
+  border:1px solid rgba(125,211,252,0.14);
+  border-radius:14px;
   position:relative;overflow:hidden;
-  box-shadow:0 4px 24px rgba(0,0,0,0.40),inset 0 1px 0 rgba(56,189,248,0.06);
+  box-shadow:0 18px 45px rgba(0,0,0,0.26),inset 0 1px 0 rgba(125,211,252,0.06);
   transition:transform 0.22s ease,box-shadow 0.22s ease,border-color 0.22s ease;
 }
 .card:hover{
-  transform:translateY(-2px);
-  border-color:rgba(56,189,248,0.18);
-  box-shadow:0 8px 36px rgba(0,0,0,0.50),0 0 0 1px rgba(56,189,248,0.08);
+  border-color:rgba(125,211,252,0.24);
+  box-shadow:0 22px 52px rgba(0,0,0,0.30),0 0 0 1px rgba(125,211,252,0.06);
 }
 .card::before{
   content:'';position:absolute;top:0;left:0;right:0;height:1px;

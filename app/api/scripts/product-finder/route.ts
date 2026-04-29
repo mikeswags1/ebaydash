@@ -18,8 +18,9 @@ const TARGET_STOCK = 30
 const MAX_POOL_SIZE = 160
 const CONTINUOUS_CACHE_KEY = '__continuous_listing__'
 const CONTINUOUS_QUERY_LIMIT = 28
-const CONTINUOUS_LIVE_FETCH_BUDGET_MS = 18_000
+const CONTINUOUS_LIVE_FETCH_BUDGET_MS = 8_000
 const NICHE_LIVE_FETCH_BUDGET_MS = 16_000
+const CONTINUOUS_MIN_FAST_RETURN = 24
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -584,8 +585,12 @@ export async function GET(req: NextRequest) {
     : (cacheRow?.results || [])
   const cachedAvailable = getAvailableProducts(cachedProducts)
 
-  if (continuousMode && !forceRefresh && cachedAvailable.length >= targetCount) {
-    return respondWithProducts(cachedProducts, 'cache')
+  if (continuousMode && cachedAvailable.length >= targetCount && (!forceRefresh || cachedProducts.length > targetCount)) {
+    return respondWithProducts(cachedProducts, forceRefresh ? 'cache-reshuffle' : 'cache')
+  }
+
+  if (continuousMode && forceRefresh && cachedAvailable.length >= CONTINUOUS_MIN_FAST_RETURN) {
+    return respondWithProducts(cachedProducts, 'cache-reshuffle')
   }
 
   if (cacheIsFresh && !forceRefresh) {
@@ -617,11 +622,12 @@ export async function GET(req: NextRequest) {
     ? buildContinuousQueryEntries(nicheWeights, distributionSeed)
     : [...(NICHE_QUERIES[niche] || [`${niche} bestseller`]), `${niche} bestseller`, `${niche} high demand`, `${niche} trending`]
         .map((query) => ({ sourceNiche: niche, query }))
+  const liveQueryEntries = continuousMode ? queryEntries.slice(0, 10) : queryEntries
   const results: Product[] = []
   const seenAsins = new Set<string>()
   let apiQuotaExceeded = false
-  const apiPoolTarget = continuousMode ? Math.min(MAX_POOL_SIZE, Math.max(targetCount * 2, targetCount + 30)) : Math.min(MAX_POOL_SIZE, Math.max(targetCount * 3, targetCount + 24))
-  const apiPages = continuousMode ? [1, 2] : [1, 2]
+  const apiPoolTarget = continuousMode ? Math.min(MAX_POOL_SIZE, targetCount + 18) : Math.min(MAX_POOL_SIZE, Math.max(targetCount * 3, targetCount + 24))
+  const apiPages = continuousMode ? [1] : [1, 2]
 
   const processProducts = (products: Record<string, unknown>[]) => {
     for (const p of products) {
@@ -693,14 +699,14 @@ export async function GET(req: NextRequest) {
     } catch { /* non-fatal */ }
   }
 
-  for (const { query, sourceNiche } of queryEntries) {
+  for (const { query, sourceNiche } of liveQueryEntries) {
     if (isOutOfLiveFetchTime() || results.length >= apiPoolTarget || apiQuotaExceeded) break
     for (const page of apiPages) {
       if (isOutOfLiveFetchTime() || results.length >= apiPoolTarget) break
       try {
         const res = await fetch(
           `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(query)}&country=US&category_id=aps&page=${page}`,
-          { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey }, signal: AbortSignal.timeout(6000) }
+          { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey }, signal: AbortSignal.timeout(continuousMode ? 3500 : 6000) }
         )
         if (res.status === 429 || res.status === 403) { apiQuotaExceeded = true; break }
         const data = await res.json()
@@ -715,61 +721,70 @@ export async function GET(req: NextRequest) {
   // ── Save fresh results to cache ──────────────────────────────────────────────
   if (results.length > 0) {
     results.splice(0, results.length, ...rankProducts(results, false))
-    const enrichmentCount = continuousMode ? Math.min(12, targetCount) : targetCount
+    if (continuousMode) {
+      await saveResultsToCache()
+    } else {
+      const enrichmentCount = targetCount
 
-    const enriched = await Promise.all(
-      results.slice(0, enrichmentCount).map(async (product) => {
-        const validated = await fetchAmazonProductByAsin({
-          asin: product.asin,
-          fallbackImage: product.imageUrl,
-          fallbackTitle: product.title,
-          fallbackPrice: product.amazonPrice,
-          strictAsin: true,
-        }).catch(() => null)
+      const enriched = await Promise.all(
+        results.slice(0, enrichmentCount).map(async (product) => {
+          const validated = await fetchAmazonProductByAsin({
+            asin: product.asin,
+            fallbackImage: product.imageUrl,
+            fallbackTitle: product.title,
+            fallbackPrice: product.amazonPrice,
+            strictAsin: true,
+          }).catch(() => null)
 
-        if (!validated) return product
-        const titleScore = getTitleScore(product.title, validated.title)
-        const sameBrand =
-          product.title.split(/\s+/)[0]?.toLowerCase() &&
-          validated.title.split(/\s+/)[0]?.toLowerCase() &&
-          product.title.split(/\s+/)[0].toLowerCase() === validated.title.split(/\s+/)[0].toLowerCase()
+          if (!validated) return product
+          const titleScore = getTitleScore(product.title, validated.title)
+          const sameBrand =
+            product.title.split(/\s+/)[0]?.toLowerCase() &&
+            validated.title.split(/\s+/)[0]?.toLowerCase() &&
+            product.title.split(/\s+/)[0].toLowerCase() === validated.title.split(/\s+/)[0].toLowerCase()
 
-        if (titleScore < 0.42 && !sameBrand) {
-          return null
-        }
+          if (titleScore < 0.42 && !sameBrand) {
+            return null
+          }
 
-        return {
-          ...product,
-          title: validated.title || product.title,
-          amazonPrice: validated.amazonPrice || product.amazonPrice,
-          imageUrl: validated.imageUrl || product.imageUrl,
-          images: validated.images,
-          features: validated.features,
-          description: validated.description,
-          specs: validated.specs,
-        }
-      })
-    )
+          return {
+            ...product,
+            title: validated.title || product.title,
+            amazonPrice: validated.amazonPrice || product.amazonPrice,
+            imageUrl: validated.imageUrl || product.imageUrl,
+            images: validated.images,
+            features: validated.features,
+            description: validated.description,
+            specs: validated.specs,
+          }
+        })
+      )
 
-    const filteredEnriched = dedupeProducts(enriched.filter((product): product is Product => Boolean(product)))
-    const droppedSourceAsins = new Set(
-      results
-        .slice(0, enrichmentCount)
-        .map((product) => product.asin)
-        .filter((asin) => !filteredEnriched.some((product) => product.asin === asin))
-    )
-    const remainder = results.slice(enrichmentCount).filter((product) => !droppedSourceAsins.has(product.asin))
-    results.splice(0, results.length, ...rankProducts([...filteredEnriched, ...remainder], false))
+      const filteredEnriched = dedupeProducts(enriched.filter((product): product is Product => Boolean(product)))
+      const droppedSourceAsins = new Set(
+        results
+          .slice(0, enrichmentCount)
+          .map((product) => product.asin)
+          .filter((asin) => !filteredEnriched.some((product) => product.asin === asin))
+      )
+      const remainder = results.slice(enrichmentCount).filter((product) => !droppedSourceAsins.has(product.asin))
+      results.splice(0, results.length, ...rankProducts([...filteredEnriched, ...remainder], false))
 
-    await saveResultsToCache()
+      await saveResultsToCache()
+    }
   }
 
   // ── API failed — try direct Amazon scrape, then fall back to cache ──────────
   if (apiQuotaExceeded && results.length === 0) {
     mergeCachedProducts()
+    if (continuousMode && getAvailableProducts(results).length > 0) {
+      return respondWithProducts(results, 'cache')
+    }
 
     // No cache at all — scrape Amazon search directly (free, no quota)
-    await addScrapedProducts(queryEntries, continuousMode ? 24 : 6)
+    if (!continuousMode) {
+      await addScrapedProducts(queryEntries, 6)
+    }
 
     if (results.length > 0) {
       results.splice(0, results.length, ...rankProducts(results, false))
@@ -788,8 +803,14 @@ export async function GET(req: NextRequest) {
     mergeCachedProducts()
   }
 
-  if (getAvailableProducts(results).length < targetCount) {
-    await addScrapedProducts(queryEntries, continuousMode ? 24 : 6)
+  if (continuousMode && getAvailableProducts(results).length > 0) {
+    results.splice(0, results.length, ...rankProducts(results, false))
+    await saveResultsToCache()
+    return respondWithProducts(results, getAvailableProducts(results).length >= targetCount ? 'live' : 'live-partial')
+  }
+
+  if (!continuousMode && getAvailableProducts(results).length < targetCount) {
+    await addScrapedProducts(queryEntries, 6)
     results.splice(0, results.length, ...rankProducts(results, false))
     await saveResultsToCache()
   }

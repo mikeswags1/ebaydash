@@ -69,7 +69,7 @@ export function FinancialsTab({
                 padding: '7px 16px',
                 borderRadius: '22px',
                 border: period === p.value ? '1px solid rgba(14,165,233,0.45)' : '1px solid rgba(14,116,144,0.14)',
-                background: period === p.value ? 'rgba(14,165,233,0.12)' : 'rgba(255,255,255,0.50)',
+                background: period === p.value ? 'rgba(14,165,233,0.14)' : 'rgba(14,27,44,0.72)',
                 color: period === p.value ? 'var(--plat)' : 'var(--sil)',
                 cursor: 'pointer',
                 transition: 'all 0.15s',
@@ -216,7 +216,7 @@ export function FinancialsTab({
               <div className="card" style={{ overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ background: 'rgba(224,247,255,0.74)', borderBottom: '1px solid rgba(14,116,144,0.12)' }}>
+                    <tr style={{ background: 'rgba(15,35,56,0.92)', borderBottom: '1px solid rgba(125,211,252,0.12)' }}>
                       {[
                         { label: 'Item', left: true },
                         { label: 'Sale Price', left: false },
@@ -234,7 +234,7 @@ export function FinancialsTab({
                   </thead>
                   <tbody>
                     {items.map((item, i) => (
-                      <tr key={item.id} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.78)' : 'rgba(238,250,255,0.72)', borderBottom: '1px solid rgba(14,116,144,0.08)' }}>
+                      <tr key={item.id} style={{ background: i % 2 === 0 ? 'rgba(14,27,44,0.88)' : 'rgba(11,22,36,0.88)', borderBottom: '1px solid rgba(125,211,252,0.08)' }}>
                         <td style={{ padding: '12px 14px', maxWidth: '280px' }}>
                           <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</div>
                           <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '2px' }}>

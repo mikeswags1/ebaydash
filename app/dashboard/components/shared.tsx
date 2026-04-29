@@ -52,7 +52,7 @@ export function OrderTable({ orders }: { orders: EbayOrder[] }) {
     <div className="card" style={{ overflow: 'hidden' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
-          <tr style={{ background: 'rgba(224,247,255,0.72)', borderBottom: '1px solid rgba(14,116,144,0.12)' }}>
+          <tr style={{ background: 'rgba(15,35,56,0.92)', borderBottom: '1px solid rgba(125,211,252,0.12)' }}>
             {['Item', 'Buyer', 'Total', 'Status', 'Date'].map((heading) => (
               <th
                 key={heading}
@@ -80,8 +80,8 @@ export function OrderTable({ orders }: { orders: EbayOrder[] }) {
               <tr
                 key={order.orderId}
                 style={{
-                  background: index % 2 === 0 ? 'rgba(255,255,255,0.74)' : 'rgba(238,250,255,0.72)',
-                  borderBottom: '1px solid rgba(14,116,144,0.08)',
+                  background: index % 2 === 0 ? 'rgba(14,27,44,0.88)' : 'rgba(11,22,36,0.88)',
+                  borderBottom: '1px solid rgba(125,211,252,0.08)',
                   transition: 'background 0.15s',
                 }}
               >
@@ -200,7 +200,7 @@ export function EmptyState({
         textAlign: 'center',
         borderRadius: '20px',
         border: '1px solid var(--bdr)',
-        background: 'rgba(255,255,255,0.72)',
+        background: 'rgba(14,27,44,0.74)',
         ...style,
       }}
     >

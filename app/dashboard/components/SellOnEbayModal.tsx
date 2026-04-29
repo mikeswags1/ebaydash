@@ -51,9 +51,9 @@ export function SellOnEbayModal({
           width: '100%',
           maxWidth: '520px',
           borderRadius: '14px',
-          background: 'linear-gradient(160deg,rgba(255,255,255,0.96) 0%,rgba(235,249,255,0.96) 100%)',
-          border: '1px solid rgba(14,165,233,0.22)',
-          boxShadow: '0 40px 120px rgba(5,80,120,0.28)',
+          background: 'linear-gradient(160deg,rgba(18,32,50,0.98) 0%,rgba(11,22,36,0.98) 100%)',
+          border: '1px solid rgba(125,211,252,0.18)',
+          boxShadow: '0 40px 120px rgba(0,0,0,0.42)',
           padding: '36px',
           animation: 'fadein 0.18s ease',
         }}
@@ -75,7 +75,7 @@ export function SellOnEbayModal({
         ) : (
           <>
             <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', marginBottom: '24px' }}>
-              {product.imageUrl ? <img src={product.imageUrl} alt={product.title} style={{ width: '64px', height: '64px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.78)', border: '1px solid rgba(14,116,144,0.10)', flexShrink: 0 }} /> : null}
+              {product.imageUrl ? <img src={product.imageUrl} alt={product.title} style={{ width: '64px', height: '64px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(125,211,252,0.12)', flexShrink: 0 }} /> : null}
               <div>
                 <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)', marginBottom: '6px' }}>Sell on eBay</div>
                 <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4 }}>{product.title.slice(0, 90)}</div>
@@ -84,11 +84,11 @@ export function SellOnEbayModal({
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
-              <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(226,247,255,0.62)', border: '1px solid rgba(12,132,167,0.10)' }}>
+              <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(125,211,252,0.08)', border: '1px solid rgba(125,211,252,0.12)' }}>
                 <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '6px' }}>Amazon Cost</div>
                 <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '22px', fontWeight: 800, color: 'var(--txt)' }}>${product.amazonPrice.toFixed(2)}</div>
               </div>
-              <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(226,247,255,0.62)', border: '1px solid rgba(14,165,233,0.22)' }}>
+              <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(125,211,252,0.08)', border: '1px solid rgba(14,165,233,0.22)' }}>
                 <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '4px' }}>Your eBay Price</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ color: 'var(--gold)', fontSize: '18px', fontWeight: 700 }}>$</span>
@@ -156,7 +156,7 @@ export function SellOnEbayModal({
 
 function PreviewStat({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
-    <div style={{ padding: '12px 14px', borderRadius: '10px', background: 'rgba(226,247,255,0.52)', border: '1px solid rgba(14,116,144,0.10)' }}>
+    <div style={{ padding: '12px 14px', borderRadius: '10px', background: 'rgba(125,211,252,0.08)', border: '1px solid rgba(125,211,252,0.12)' }}>
       <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--sil)', marginBottom: '6px' }}>{label}</div>
       <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: '18px', fontWeight: 800, color: tone }}>{value}</div>
     </div>
