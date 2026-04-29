@@ -27,15 +27,15 @@ export function DashboardSidebar({
         position: 'sticky',
         top: 0,
         height: '100vh',
-        background: 'linear-gradient(170deg,rgba(14,10,5,1) 0%,rgba(10,7,3,1) 55%,rgba(7,5,2,1) 100%)',
-        borderRight: '1px solid rgba(195,158,88,0.16)',
+        background: 'linear-gradient(170deg,#0c2d4a 0%,#083249 45%,#062840 100%)',
+        borderRight: '1px solid rgba(56,189,248,0.18)',
         display: 'flex',
         flexDirection: 'column',
-        boxShadow: '6px 0 90px rgba(0,0,0,0.97)',
+        boxShadow: '6px 0 40px rgba(14,165,233,0.15)',
       }}
     >
-      <div className="dashboard-brand" style={{ padding: '32px 24px 28px', borderBottom: '1px solid rgba(195,158,88,0.10)' }}>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1 }}>
+      <div className="dashboard-brand" style={{ padding: '32px 24px 28px', borderBottom: '1px solid rgba(56,189,248,0.12)' }}>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 700, color: '#e0f2fe', lineHeight: 1 }}>
           Stack
           <span
             style={{
@@ -53,16 +53,16 @@ export function DashboardSidebar({
             fontWeight: 600,
             letterSpacing: '0.22em',
             textTransform: 'uppercase',
-            color: 'var(--dim)',
+            color: 'rgba(148,212,255,0.6)',
             marginTop: '6px',
-            opacity: 0.7,
+            opacity: 0.85,
           }}
         >
           Operations Dashboard
         </div>
       </div>
 
-      <div className="dashboard-status" style={{ padding: '14px 20px', borderBottom: '1px solid rgba(195,158,88,0.08)' }}>
+      <div className="dashboard-status" style={{ padding: '14px 20px', borderBottom: '1px solid rgba(56,189,248,0.10)' }}>
         <div
           style={{
             display: 'flex',
@@ -70,8 +70,8 @@ export function DashboardSidebar({
             gap: '8px',
             padding: '9px 14px',
             borderRadius: '10px',
-            background: connected ? 'rgba(46,207,118,0.06)' : 'rgba(90,80,55,0.08)',
-            border: `1px solid ${connected ? 'rgba(46,207,118,0.18)' : 'rgba(90,80,55,0.18)'}`,
+            background: connected ? 'rgba(16,185,129,0.10)' : 'rgba(255,255,255,0.05)',
+            border: `1px solid ${connected ? 'rgba(16,185,129,0.28)' : 'rgba(255,255,255,0.10)'}`,
           }}
         >
           <div
@@ -80,8 +80,8 @@ export function DashboardSidebar({
               height: '5px',
               borderRadius: '50%',
               flexShrink: 0,
-              background: connected ? 'var(--grn)' : 'var(--dim)',
-              boxShadow: connected ? '0 0 8px var(--grn)' : 'none',
+              background: connected ? '#34d399' : 'rgba(148,212,255,0.4)',
+              boxShadow: connected ? '0 0 8px #34d399' : 'none',
               animation: connected ? 'glow-pulse 2.4s ease infinite' : 'none',
             }}
           />
@@ -91,7 +91,7 @@ export function DashboardSidebar({
               fontWeight: 700,
               textTransform: 'uppercase',
               letterSpacing: '0.14em',
-              color: connected ? 'var(--grn)' : 'var(--dim)',
+              color: connected ? '#34d399' : 'rgba(148,212,255,0.5)',
             }}
           >
             {connected ? 'eBay Connected' : 'eBay Not Connected'}
@@ -100,7 +100,7 @@ export function DashboardSidebar({
       </div>
 
       {niche ? (
-        <div className="dashboard-niche" style={{ padding: '10px 20px', borderBottom: '1px solid rgba(195,158,88,0.08)' }}>
+        <div className="dashboard-niche" style={{ padding: '10px 20px', borderBottom: '1px solid rgba(56,189,248,0.10)' }}>
           <div
             style={{
               display: 'flex',
@@ -108,11 +108,11 @@ export function DashboardSidebar({
               gap: '8px',
               padding: '8px 12px',
               borderRadius: '8px',
-              background: 'rgba(200,162,80,0.06)',
-              border: '1px solid rgba(200,162,80,0.14)',
+              background: 'rgba(56,189,248,0.08)',
+              border: '1px solid rgba(56,189,248,0.18)',
             }}
           >
-            <span style={{ fontSize: '11px', color: 'var(--gold)' }}>NK</span>
+            <span style={{ fontSize: '11px', color: '#7dd3fc' }}>NK</span>
             <div>
               <div
                 style={{
@@ -120,13 +120,13 @@ export function DashboardSidebar({
                   fontWeight: 700,
                   textTransform: 'uppercase',
                   letterSpacing: '0.16em',
-                  color: 'var(--dim)',
+                  color: 'rgba(148,212,255,0.5)',
                   marginBottom: '2px',
                 }}
               >
                 Niche
               </div>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--gold)' }}>{niche}</div>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: '#7dd3fc' }}>{niche}</div>
             </div>
           </div>
         </div>
@@ -144,9 +144,9 @@ export function DashboardSidebar({
               padding: '12px 14px',
               borderRadius: '12px',
               cursor: 'pointer',
-              border: tab === item.id ? '1px solid rgba(200,162,80,0.30)' : '1px solid transparent',
-              background: tab === item.id ? 'linear-gradient(135deg,rgba(200,162,80,0.14),rgba(220,185,100,0.05))' : 'none',
-              color: tab === item.id ? 'var(--gld2)' : 'var(--dim)',
+              border: tab === item.id ? '1px solid rgba(56,189,248,0.35)' : '1px solid transparent',
+              background: tab === item.id ? 'linear-gradient(135deg,rgba(56,189,248,0.18),rgba(14,165,233,0.08))' : 'none',
+              color: tab === item.id ? '#7dd3fc' : 'rgba(148,212,255,0.55)',
               fontSize: '13px',
               fontWeight: 500,
               fontFamily: 'inherit',
@@ -166,9 +166,9 @@ export function DashboardSidebar({
                   transform: 'translateY(-50%)',
                   width: '3px',
                   height: '55%',
-                  background: 'linear-gradient(180deg,var(--gld2),var(--gold))',
+                  background: 'linear-gradient(180deg,#38bdf8,#0ea5e9)',
                   borderRadius: '0 3px 3px 0',
-                  boxShadow: '0 0 10px rgba(200,162,80,0.5)',
+                  boxShadow: '0 0 10px rgba(56,189,248,0.6)',
                 }}
               />
             ) : null}
@@ -180,7 +180,7 @@ export function DashboardSidebar({
                 borderRadius: '8px',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: tab === item.id ? 'rgba(200,162,80,0.15)' : 'rgba(255,255,255,0.03)',
+                background: tab === item.id ? 'rgba(56,189,248,0.18)' : 'rgba(255,255,255,0.05)',
                 fontSize: '9px',
                 fontWeight: 700,
                 letterSpacing: '0.08em',
@@ -209,9 +209,9 @@ export function DashboardSidebar({
         ))}
       </nav>
 
-      <div className="dashboard-user" style={{ padding: '16px 20px', borderTop: '1px solid rgba(195,158,88,0.10)' }}>
-        <div style={{ fontSize: '11px', color: 'var(--sil)', marginBottom: '10px', fontWeight: 500 }}>{userLabel}</div>
-        <button onClick={onSignOut} className="btn btn-ghost btn-sm btn-full" style={{ fontSize: '11px' }}>
+      <div className="dashboard-user" style={{ padding: '16px 20px', borderTop: '1px solid rgba(56,189,248,0.12)' }}>
+        <div style={{ fontSize: '11px', color: 'rgba(148,212,255,0.65)', marginBottom: '10px', fontWeight: 500 }}>{userLabel}</div>
+        <button onClick={onSignOut} className="btn btn-ghost btn-sm btn-full" style={{ fontSize: '11px', color: 'rgba(148,212,255,0.6)', borderColor: 'rgba(56,189,248,0.18)' }}>
           Sign Out
         </button>
       </div>
