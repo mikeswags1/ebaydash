@@ -27,7 +27,7 @@ export function DashboardSidebar({
         position: 'sticky',
         top: 0,
         height: '100vh',
-        background: 'linear-gradient(170deg,#0c2d4a 0%,#083249 45%,#062840 100%)',
+        background: 'linear-gradient(170deg,#0a2540 0%,#0b3556 35%,#083046 65%,#062038 100%)',
         borderRight: '1px solid rgba(56,189,248,0.18)',
         display: 'flex',
         flexDirection: 'column',
