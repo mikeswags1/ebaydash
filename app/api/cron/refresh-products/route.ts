@@ -11,6 +11,8 @@ const EBAY_FEE = 0.15
 const MIN_PROFIT = 6
 const MAX_COST = 300
 const CACHE_VERSION = 5
+const CONTINUOUS_CACHE_KEY = '__continuous_listing__'
+const MAX_CONTINUOUS_POOL_SIZE = 160
 const SCHEDULED_NICHE_BATCH_SIZE = 8
 
 const REJECT_KEYWORDS = [
@@ -181,6 +183,53 @@ async function refreshNicheScrape(niche: string): Promise<number> {
   return results.length
 }
 
+async function refreshContinuousCache(): Promise<number> {
+  try {
+    const rows = await queryRows<{ niche: string; results: Array<Record<string, unknown>> }>`
+      SELECT niche, results
+      FROM product_cache
+      WHERE niche <> ${CONTINUOUS_CACHE_KEY}
+      ORDER BY cached_at DESC
+      LIMIT 40
+    `
+    const seen = new Set<string>()
+    const products: Array<Record<string, unknown>> = []
+
+    for (const row of rows) {
+      const rowProducts = Array.isArray(row.results) ? row.results : []
+      for (const product of rowProducts) {
+        const asin = String(product.asin || '').toUpperCase()
+        if (!asin || seen.has(asin)) continue
+        seen.add(asin)
+        products.push({ ...product, asin, sourceNiche: product.sourceNiche || row.niche })
+        if (products.length >= MAX_CONTINUOUS_POOL_SIZE) break
+      }
+      if (products.length >= MAX_CONTINUOUS_POOL_SIZE) break
+    }
+
+    if (products.length === 0) return 0
+    products.sort((a, b) => {
+      const score = (product: Record<string, unknown>) => {
+        const profit = Number(product.profit) || 0
+        const roi = Number(product.roi) || 0
+        const rating = Number(product._rating) || 3.8
+        const reviews = Number(product._numRatings) || 0
+        return profit * Math.max(0.35, roi / 55) * Math.max(0.7, rating / 4.5) * Math.log10(reviews + 20)
+      }
+      return score(b) - score(a)
+    })
+
+    await sql`
+      INSERT INTO product_cache (niche, results, version)
+      VALUES (${CONTINUOUS_CACHE_KEY}, ${JSON.stringify(products)}, ${CACHE_VERSION})
+      ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()
+    `
+    return products.length
+  } catch {
+    return 0
+  }
+}
+
 // ── Sync one user's eBay listings — mark ended/sold listings in DB ────────────
 async function syncUserListings(userId: number) {
   const credentials = await getValidEbayAccessToken(String(userId))
@@ -295,6 +344,7 @@ export async function GET(req: NextRequest) {
   report.nichesRefreshed = refreshed
   report.nichesAttempted = niches
   report.quotaHit = quotaHit
+  report.continuousProducts = await refreshContinuousCache()
 
   report.durationMs = Date.now() - startedAt
   return apiOk({ success: true, ...report })
