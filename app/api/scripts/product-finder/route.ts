@@ -528,7 +528,8 @@ export async function GET(req: NextRequest) {
   const userId = String(session.user.id)
   const requestSeed = forceRefresh ? `${Date.now()}:${Math.random()}` : String(getRotationBucket())
   const distributionSeed = `${userId}:${continuousMode ? 'continuous' : niche}:${requestSeed}`
-  const nicheWeights = continuousMode ? await getUserNicheWeights(userId) : new Map<string, number>()
+  // Defer niche weights until after cache check — avoids eBay API call when cache is warm
+  let nicheWeights = new Map<string, number>()
 
   // ── Load user's already-listed ASINs (to filter duplicates) ─────────────────
   // Only block ASINs that are currently active on eBay (ended_at IS NULL)
@@ -588,10 +589,14 @@ export async function GET(req: NextRequest) {
   }
 
   if (cacheIsFresh && !forceRefresh) {
-    // Serve from cache — filter out already-listed ASINs for this user
     if (cachedAvailable.length >= targetCount) {
       return respondWithProducts(cachedProducts, 'cache')
     }
+  }
+
+  // Cache miss — now load niche weights (requires eBay API) before live fetch
+  if (continuousMode) {
+    nicheWeights = await getUserNicheWeights(userId)
   }
 
   // ── Fetch fresh data from API ────────────────────────────────────────────────

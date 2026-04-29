@@ -27,11 +27,11 @@ export function DashboardSidebar({
         position: 'sticky',
         top: 0,
         height: '100vh',
-        background: 'linear-gradient(170deg,#0a2540 0%,#0b3556 35%,#083046 65%,#062038 100%)',
-        borderRight: '1px solid rgba(56,189,248,0.18)',
+        background: 'linear-gradient(180deg,#081624 0%,#070f1a 50%,#060c16 100%)',
+        borderRight: '1px solid rgba(56,189,248,0.10)',
         display: 'flex',
         flexDirection: 'column',
-        boxShadow: '6px 0 40px rgba(14,165,233,0.15)',
+        boxShadow: '1px 0 0 rgba(56,189,248,0.06), 8px 0 32px rgba(0,0,0,0.5)',
       }}
     >
       <div className="dashboard-brand" style={{ padding: '32px 24px 28px', borderBottom: '1px solid rgba(56,189,248,0.12)' }}>
