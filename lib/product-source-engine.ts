@@ -205,25 +205,65 @@ export async function upsertProductSourceItems(inputs: SourceProductInput[]) {
   if (normalized.length === 0) return 0
   await ensureProductSourceTables()
 
-  for (const product of normalized) {
+  const rows = normalized.map((product) => ({
+    asin: product.asin,
+    title: product.title,
+    source_niche: product.sourceNiche || null,
+    source_provider: product.sourceProvider,
+    source_query: product.sourceQuery || null,
+    amazon_price: product.amazonPrice.toFixed(2),
+    ebay_price: product.ebayPrice.toFixed(2),
+    profit: product.profit.toFixed(2),
+    roi: product.roi.toFixed(2),
+    image_url: product.imageUrl || null,
+    risk: product.risk,
+    sales_volume: product.salesVolume || null,
+    rating: product._rating || null,
+    review_count: product._numRatings || null,
+    total_score: product.qualityScore || 0,
+    raw: {
+      images: product.images || [],
+      features: product.features || [],
+      description: product.description || '',
+      specs: product.specs || [],
+      sourceQuery: product.sourceQuery || null,
+      raw: product.raw,
+    },
+  }))
+
+  const chunkSize = 500
+  for (let index = 0; index < rows.length; index += chunkSize) {
+    const chunk = rows.slice(index, index + chunkSize)
     await sql`
+      WITH input AS (
+        SELECT *
+        FROM jsonb_to_recordset(${JSON.stringify(chunk)}::jsonb) AS product(
+          asin TEXT,
+          title TEXT,
+          source_niche TEXT,
+          source_provider TEXT,
+          source_query TEXT,
+          amazon_price NUMERIC,
+          ebay_price NUMERIC,
+          profit NUMERIC,
+          roi NUMERIC,
+          image_url TEXT,
+          risk TEXT,
+          sales_volume TEXT,
+          rating NUMERIC,
+          review_count INTEGER,
+          total_score NUMERIC,
+          raw JSONB
+        )
+      )
       INSERT INTO product_source_items (
         asin, title, source_niche, source_provider, source_query, amazon_price, ebay_price,
         profit, roi, image_url, risk, sales_volume, rating, review_count, total_score, raw
       )
-      VALUES (
-        ${product.asin}, ${product.title}, ${product.sourceNiche || null}, ${product.sourceProvider}, ${product.sourceQuery || null},
-        ${product.amazonPrice.toFixed(2)}, ${product.ebayPrice.toFixed(2)}, ${product.profit.toFixed(2)}, ${product.roi.toFixed(2)},
-        ${product.imageUrl || null}, ${product.risk}, ${product.salesVolume || null}, ${product._rating || null},
-        ${product._numRatings || null}, ${product.qualityScore || 0}, ${JSON.stringify({
-          images: product.images || [],
-          features: product.features || [],
-          description: product.description || '',
-          specs: product.specs || [],
-          sourceQuery: product.sourceQuery || null,
-          raw: product.raw,
-        })}
-      )
+      SELECT
+        asin, title, source_niche, source_provider, source_query, amazon_price, ebay_price,
+        profit, roi, image_url, risk, sales_volume, rating, review_count, total_score, raw
+      FROM input
       ON CONFLICT (asin) DO UPDATE SET
         title = EXCLUDED.title,
         source_niche = COALESCE(EXCLUDED.source_niche, product_source_items.source_niche),
