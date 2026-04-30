@@ -3,7 +3,7 @@ import { apiError, apiOk } from '@/lib/api-response'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { queryRows, sql } from '@/lib/db'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
-import { ensureProductSourceTables, rebuildProductSourceFromCache } from '@/lib/product-source-engine'
+import { ensureProductSourceTables, rebuildProductSourceFromCache, repriceProductSourceItems } from '@/lib/product-source-engine'
 import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 
@@ -389,6 +389,7 @@ export async function GET(req: NextRequest) {
   const now = new Date()
 
   if (sourceOnly) {
+    report.repriced = await repriceProductSourceItems()
     report.sourceProducts = await rebuildProductSourceFromCache()
     report.continuousProducts = await refreshContinuousCache()
     report.durationMs = Date.now() - startedAt

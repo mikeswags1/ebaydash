@@ -21,7 +21,7 @@ export function OverviewTab({
     <div style={{ animation: 'fadein 0.22s ease' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 44px 32px' }}>
+      <div style={{ padding: `40px var(--xpad) 32px` }}>
         <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--plat)', marginBottom: '8px' }}>
           StackPilot / Operations
         </div>
@@ -39,7 +39,7 @@ export function OverviewTab({
 
       {/* Connect prompt */}
       {!connected ? (
-        <div style={{ margin: '0 44px 32px', padding: '28px 32px', borderRadius: '14px', background: 'rgba(14,27,44,0.78)', border: '1px solid rgba(125,211,252,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ margin: `0 var(--xpad) 32px`, padding: '28px 32px', borderRadius: '14px', background: 'rgba(14,27,44,0.78)', border: '1px solid rgba(125,211,252,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--txt)', marginBottom: '5px' }}>
               Connect your eBay account to get started
@@ -56,7 +56,7 @@ export function OverviewTab({
 
       {/* Needs attention banner */}
       {connected && awaitingCount > 0 ? (
-        <div style={{ margin: '0 44px 28px', padding: '16px 20px', borderRadius: '14px', background: 'rgba(232,63,80,0.07)', border: '1px solid rgba(232,63,80,0.22)', display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ margin: `0 var(--xpad) 28px`, padding: '16px 20px', borderRadius: '14px', background: 'rgba(232,63,80,0.07)', border: '1px solid rgba(232,63,80,0.22)', display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--red)', flexShrink: 0, boxShadow: '0 0 8px var(--red)' }} />
           <div>
             <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--red)', marginBottom: '2px' }}>
@@ -70,7 +70,7 @@ export function OverviewTab({
       ) : null}
 
       {/* Metric cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '16px', padding: '0 44px 32px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '16px', padding: `0 var(--xpad) 32px` }}>
         <MetricCard
           label="Needs to Ship"
           value={awaitingCount.toString()}
@@ -94,7 +94,7 @@ export function OverviewTab({
 
       {/* Recent orders */}
       {connected && recentOrders.length > 0 ? (
-        <div style={{ padding: '0 44px 44px' }}>
+        <div style={{ padding: `0 var(--xpad) 44px` }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
             <div>
               <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)' }}>
@@ -146,7 +146,7 @@ export function OverviewTab({
           </div>
         </div>
       ) : connected && orders.length === 0 ? (
-        <div style={{ padding: '0 44px 44px' }}>
+        <div style={{ padding: `0 var(--xpad) 44px` }}>
           <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
             <div style={{ fontSize: '32px', marginBottom: '12px' }}>🛒</div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--txt)', marginBottom: '6px' }}>No orders yet</div>

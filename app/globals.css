@@ -1,5 +1,6 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
+  --xpad:44px;
   --bg:#08111f;
   --s:#0d1b2d;
   --c:#12243a;
@@ -133,6 +134,7 @@ textarea{resize:vertical;min-height:100px}
 ::-webkit-scrollbar-thumb:hover{background:rgba(56,189,248,0.35)}
 
 @media (max-width: 760px){
+  :root{--xpad:18px}
   html{scroll-behavior:auto}
   body{font-size:14px}
   .dashboard-shell{display:block!important;min-height:100svh!important}

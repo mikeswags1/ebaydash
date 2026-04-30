@@ -323,8 +323,41 @@ export async function rebuildProductSourceFromCache(limit = 250) {
   return upsertProductSourceItems(products)
 }
 
+export async function repriceProductSourceItems(limit = 2500) {
+  await ensureProductSourceTables()
+  const rows = await queryRows<ProductSourceRow>`
+    SELECT asin, title, source_niche, amazon_price, ebay_price, profit, roi, image_url, risk,
+           sales_volume, rating, review_count, total_score, raw
+    FROM product_source_items
+    WHERE active = TRUE
+    ORDER BY last_seen_at DESC
+    LIMIT ${limit}
+  `
+  const products: SourceProductInput[] = rows.map((row) => {
+    const raw = row.raw || {}
+    return {
+      asin: row.asin,
+      title: row.title,
+      amazonPrice: parseNumber(row.amazon_price),
+      imageUrl: row.image_url || undefined,
+      images: Array.isArray(raw.images) ? raw.images as string[] : undefined,
+      features: Array.isArray(raw.features) ? raw.features as string[] : undefined,
+      description: typeof raw.description === 'string' ? raw.description : undefined,
+      specs: Array.isArray(raw.specs) ? raw.specs as Array<[string, string]> : undefined,
+      sourceNiche: row.source_niche || undefined,
+      sourceProvider: 'repricer',
+      raw,
+      salesVolume: row.sales_volume || undefined,
+      _rating: parseNumber(row.rating),
+      _numRatings: Math.round(parseNumber(row.review_count)),
+    }
+  })
+  return upsertProductSourceItems(products)
+}
+
 export async function loadProductSourceProducts(options: { niche?: string | null; limit?: number } = {}) {
   const limit = Math.max(1, Math.min(900, options.limit || 120))
+  const rowLimit = Math.min(2500, Math.max(limit, limit * 3))
   try {
     const niche = options.niche?.trim()
     const rows = niche
@@ -336,7 +369,7 @@ export async function loadProductSourceProducts(options: { niche?: string | null
             AND source_niche = ${niche}
             AND last_seen_at > NOW() - INTERVAL '21 days'
           ORDER BY total_score DESC, last_seen_at DESC
-          LIMIT ${limit}
+          LIMIT ${rowLimit}
         `
       : await queryRows<ProductSourceRow>`
           SELECT asin, title, source_niche, amazon_price, ebay_price, profit, roi, image_url, risk,
@@ -345,9 +378,12 @@ export async function loadProductSourceProducts(options: { niche?: string | null
           WHERE active = TRUE
             AND last_seen_at > NOW() - INTERVAL '21 days'
           ORDER BY total_score DESC, last_seen_at DESC
-          LIMIT ${limit}
+          LIMIT ${rowLimit}
         `
-    return rows.map(rowToProduct)
+    return rows
+      .map(rowToProduct)
+      .sort((a, b) => (b.qualityScore || 0) - (a.qualityScore || 0))
+      .slice(0, limit)
   } catch {
     return []
   }
