@@ -1,5 +1,5 @@
 import type { BannerState, FinderProduct } from './types'
-import { EBAY_DEFAULT_FEE_RATE, getRecommendedEbayPrice as getSharedRecommendedEbayPrice } from '@/lib/listing-pricing'
+import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice as getSharedRecommendedEbayPrice } from '@/lib/listing-pricing'
 
 export function parseDashboardSearchMessage(search: string): BannerState | null {
   const params = new URLSearchParams(search)
@@ -37,16 +37,13 @@ export function getGrossRevenue(totalOrders: Array<{ pricingSummary?: { total?: 
 export function getListingPreview(ebayPrice: string, amazonPrice: number, shippingCost: string, feeRate: number) {
   const parsedEbayPrice = parseFloat(ebayPrice) || 0
   const parsedShippingCost = parseFloat(shippingCost) || 0
-  const ebayFee = parsedEbayPrice * feeRate
-  const profit = parsedEbayPrice - amazonPrice - ebayFee - parsedShippingCost
-  const roi = amazonPrice > 0 ? (profit / amazonPrice) * 100 : 0
-  const margin = parsedEbayPrice > 0 ? (profit / parsedEbayPrice) * 100 : 0
+  const metrics = getListingMetrics(amazonPrice + parsedShippingCost, parsedEbayPrice, feeRate)
 
   return {
-    ebayFee,
-    profit,
-    roi,
-    margin,
+    ebayFee: metrics.fees,
+    profit: metrics.profit,
+    roi: metrics.roi,
+    margin: metrics.margin,
   }
 }
 

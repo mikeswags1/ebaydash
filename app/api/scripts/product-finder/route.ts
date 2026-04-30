@@ -452,8 +452,11 @@ async function getUserNicheWeights(userId: string, options: { includeSoldSignals
       const amazonPrice = parsePrice(row.amazon_price)
       const ebayPrice = parsePrice(row.ebay_price)
       const feeRate = Number(row.ebay_fee_rate) || EBAY_DEFAULT_FEE_RATE
-      const estimatedProfit = amazonPrice > 0 && ebayPrice > 0 ? ebayPrice - amazonPrice - ebayPrice * feeRate : 0
-      const margin = ebayPrice > 0 ? estimatedProfit / ebayPrice : 0
+      const metrics = amazonPrice > 0 && ebayPrice > 0
+        ? getListingMetrics(amazonPrice, ebayPrice, feeRate)
+        : { profit: 0, margin: 0 }
+      const estimatedProfit = metrics.profit
+      const margin = metrics.margin / 100
       const activeSignal = row.ended_at ? 0.65 : 1
       const rowScore = activeSignal + Math.max(0, estimatedProfit) / 18 + Math.max(0, margin) * 2.4
       addNicheScore(sourceNiche, rowScore, 1)

@@ -105,12 +105,10 @@ function normalizeProduct(input: SourceProductInput): (SourceEngineProduct & { s
   const amazonPrice = parseNumber(input.amazonPrice)
   if (!asin || !title || amazonPrice <= 0) return null
 
-  const ebayPrice = input.ebayPrice && input.ebayPrice > 0
-    ? parseNumber(input.ebayPrice)
-    : getRecommendedEbayPrice(amazonPrice, EBAY_DEFAULT_FEE_RATE)
+  const ebayPrice = getRecommendedEbayPrice(amazonPrice, EBAY_DEFAULT_FEE_RATE)
   const metrics = getListingMetrics(amazonPrice, ebayPrice, EBAY_DEFAULT_FEE_RATE)
-  const profit = input.profit !== undefined ? parseNumber(input.profit) : metrics.profit
-  const roi = input.roi !== undefined ? parseNumber(input.roi) : metrics.roi
+  const profit = metrics.profit
+  const roi = metrics.roi
   const risk = input.risk || getRisk(amazonPrice, roi)
   const product: SourceEngineProduct & { sourceProvider: string; sourceQuery?: string; raw: Record<string, unknown> } = {
     asin,

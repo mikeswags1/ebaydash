@@ -5,11 +5,11 @@ import { queryRows, sql } from '@/lib/db'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 import { ensureProductSourceTables, rebuildProductSourceFromCache } from '@/lib/product-source-engine'
 import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
+import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 
 export const maxDuration = 300
 
 // ── Shared helpers (mirrored from product-finder) ────────────────────────────
-const EBAY_FEE = 0.15
 const MIN_PROFIT = 6
 const MAX_COST = 300
 const CACHE_VERSION = 5
@@ -32,15 +32,8 @@ const REJECT_KEYWORDS = [
 ]
 
 function calcMetrics(amazonPrice: number) {
-  const targetProfit = amazonPrice < 15  ? 7
-    : amazonPrice < 40  ? 12
-    : amazonPrice < 100 ? 20
-    : amazonPrice * 0.12
-  const rawEbayPrice = (amazonPrice + targetProfit) / (1 - EBAY_FEE)
-  const ebayPrice = Math.ceil(rawEbayPrice) - 0.01
-  const fees   = parseFloat((ebayPrice * EBAY_FEE).toFixed(2))
-  const profit = parseFloat((ebayPrice - amazonPrice - fees).toFixed(2))
-  const roi    = parseFloat(((profit / amazonPrice) * 100).toFixed(0))
+  const ebayPrice = getRecommendedEbayPrice(amazonPrice, EBAY_DEFAULT_FEE_RATE)
+  const { profit, roi } = getListingMetrics(amazonPrice, ebayPrice, EBAY_DEFAULT_FEE_RATE)
   return { ebayPrice, profit, roi }
 }
 

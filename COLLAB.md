@@ -18,6 +18,8 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-04-30 | Codex | Rebuilt pricing into a shared dynamic engine with cost-band ROI targets, eBay fee/fixed-fee/buffer math, psychological endings, competitor-aware publish pricing, and unified dashboard/source/cron/finder calculations | `lib/listing-pricing.ts`, `app/api/ebay/list-product/route.ts`, `app/api/cron/refresh-products/route.ts`, `app/api/scripts/product-finder/route.ts`, `lib/product-source-engine.ts`, `app/dashboard/utils.ts`, `app/dashboard/constants.ts` |
+| 2026-04-30 | Codex | Added shared listing policy guard for Product Finder, Continuous Listing, source-engine intake, and final eBay publish; added deep catalog refresh mode for larger product-source warmups | `lib/listing-policy.ts`, `app/api/scripts/product-finder/route.ts`, `app/api/cron/refresh-products/route.ts`, `lib/product-source-engine.ts`, `app/api/ebay/list-product/route.ts` |
 | 2026-04-29 | Claude | Removed Amazon Seller connection card from Settings + removed `fetchAmazonCredentials` from bootstrap + removed "Unable to load Amazon connection status" banner | `SettingsTab.tsx`, `page.tsx` |
 | 2026-04-29 | Codex | Added Product Source Health visibility in Settings so source-engine depth, niche cache readiness, Continuous Listing stock, warnings, and top source niches are visible from the dashboard | `app/api/product-source/health/route.ts`, `app/dashboard/components/SettingsTab.tsx`, `app/dashboard/page.tsx`, `app/dashboard/api.ts`, `app/dashboard/types.ts` |
 | 2026-04-29 | Codex | Added the first StackPilot-owned Product Source Engine: scored product-source table, cache seeding, Product Finder fast path, and cron/setup integration | `lib/product-source-engine.ts`, `app/api/scripts/product-finder/route.ts`, `app/api/cron/refresh-products/route.ts`, `app/api/setup-db/route.ts` |
@@ -52,19 +54,32 @@ _Clear this section when done._
 - **Brand name**: All UI is `StackPilot`. Vercel project = `stackpilot-app`. URL = `stackpilot-app.vercel.app`.
 - **`NEXTAUTH_URL`** in Vercel = `https://stackpilot-app.vercel.app` — matches eBay Dev Console.
 - **Product Finder distribution**: Per-user seeded ranking, large shared pool, performance signals. Do not revert.
-- **Fee rates**: `constants.ts` = 13.25% (display). `listing-pricing.ts` = 15% (conservative pricing). Split is intentional.
+- **Fee rates/pricing**: Use the shared `lib/listing-pricing.ts` engine everywhere. Do not reintroduce separate dashboard/source/listing fee math.
 - **Performance tab**: Consider parallelizing — `fetchOrders`, DB query, and `fetchActiveListingMetrics` can all run in `Promise.all`. Traffic chunks can also be parallel. Orders can be date-filtered to last 90 days. This cuts load time roughly in half.
 - **Overview greeting**: Mike wants "Good morning, [FirstName] 👋" using `session.user.name` split on space. Pass as `userName` prop to OverviewTab.
 
 ---
 
+## 🏁 Project Status — Final Stretch
+
+Dashboard is functionally complete. Core flows confirmed working:
+- eBay OAuth connected, orders syncing
+- Continuous Listing queue stocked (160 products, version 5)
+- Product Source Health visible in Settings
+- Performance tab parallelized — fast load
+- Amazon connection fully removed
+- Mobile layout responsive via `--xpad` CSS variable
+- `stackpilot-app.vercel.app` is canonical URL
+
+**Remaining before ship:** Scripts tab cleanup (Mike is reviewing), category fallback fix (see flags), personalized greeting on Overview.
+
 ## 📋 Queued Tasks from Mike
 
 | Priority | Task | Notes |
 |----------|------|-------|
-| 🔴 HIGH | Fix NICHE_FALLBACK_LEAF_CATEGORY in `list-product/route.ts` | All `29223` fallbacks need real category IDs — see flags above for the full mapping |
-| 🟡 MED | Parallelize Performance tab API calls | See flags above for details |
-| 🟡 MED | Add personalized greeting to Overview tab | "Good morning, Mike 👋" — see flags above |
+| 🔴 HIGH | Scripts tab — Mike is reviewing what to change | Awaiting direction |
+| 🔴 HIGH | Fix NICHE_FALLBACK_LEAF_CATEGORY in `list-product/route.ts` | All `29223` fallbacks need real IDs — see flags for full mapping |
+| 🟡 MED | Add personalized greeting to Overview tab | "Good morning, Mike 👋" using `session.user.name` split on space, passed as `userName` prop |
 
 ---
 
@@ -73,6 +88,6 @@ _Clear this section when done._
 - **Category selection chain**: Taxonomy REST API → ASIN Browse API → Legacy Trading API → NICHE_FALLBACK_LEAF_CATEGORY → `29223`
 - **Image chain**: `validatedAmazon.images` + `fetchedAmazon.images` + `imageUrl` merged → deduplicated → badge stamped on first image → EPS upload
 - **Shipping**: FedEx2Day, ExpeditedService=true, FreeShipping=true, DispatchTimeMax=0
-- **Pricing**: `lib/listing-pricing.ts` — tiered profit targets, 15% fee rate, `.99` rounding
-- **Fee rate discrepancy**: `constants.ts` uses 13.25% (display only), `listing-pricing.ts` uses 15% (actual calculation). Align before changing either.
+- **Pricing**: `lib/listing-pricing.ts` — dynamic cost-band ROI targets, eBay variable fee + fixed fee + operating buffer, psychological endings, and competitor-aware final publish price.
+- **Fee rate source**: `constants.ts`, finder, cron, source engine, and final eBay publish all import the shared pricing engine. Keep them aligned.
 - **Amazon badges stripped**: `sanitizeContent()` + title `cleanTitle` both strip Amazon Choice, Overall Pick, Best Seller, etc.

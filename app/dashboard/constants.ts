@@ -1,4 +1,5 @@
 import type { Tab } from './types'
+import { EBAY_DEFAULT_FEE_RATE } from '@/lib/listing-pricing'
 
 export const NAV_ITEMS: Array<{ id: Tab; label: string; badge?: 'orders' }> = [
   { id: 'overview', label: '🏠 Overview' },
@@ -12,4 +13,4 @@ export const NAV_ITEMS: Array<{ id: Tab; label: string; badge?: 'orders' }> = [
   { id: 'settings', label: '⚙️ Settings' },
 ]
 
-export const EBAY_FEE_RATE = 0.1325
+export const EBAY_FEE_RATE = EBAY_DEFAULT_FEE_RATE

@@ -7,7 +7,7 @@ import { sql } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
-import { getRecommendedEbayPrice } from '@/lib/listing-pricing'
+import { EBAY_DEFAULT_FEE_RATE, getPricingRecommendation, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 import { getListingPolicyBlockReason, getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 
 // ── VeRO Protection ──────────────────────────────────────────────────────────
@@ -314,6 +314,64 @@ function getCategoryTitleScore(query: string, candidate: string) {
   const queryCoverage = overlap / queryWords.size
   const candidateCoverage = overlap / candidateWords.size
   return (queryCoverage * 0.7) + (candidateCoverage * 0.3)
+}
+
+function parsePriceValue(value: unknown) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  const parsed = parseFloat(String(value || '').replace(/[^0-9.]/g, ''))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+async function getComparableEbayPrices(title: string, token: string, amazonPrice: number) {
+  const query = title
+    .split(/\s+/)
+    .slice(0, 9)
+    .join(' ')
+    .trim()
+  if (!query) return { prices: [] as number[], count: 0 }
+
+  try {
+    const url = new URL('https://api.ebay.com/buy/browse/v1/item_summary/search')
+    url.searchParams.set('q', query)
+    url.searchParams.set('limit', '24')
+    url.searchParams.set('filter', 'buyingOptions:{FIXED_PRICE},conditions:{NEW}')
+
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(4500),
+    })
+    if (!res.ok) return { prices: [] as number[], count: 0 }
+
+    const data = await res.json() as {
+      itemSummaries?: Array<{
+        title?: string
+        price?: { value?: string }
+        shippingOptions?: Array<{ shippingCost?: { value?: string } }>
+      }>
+    }
+    const prices: number[] = []
+
+    for (const item of data.itemSummaries || []) {
+      const score = getCategoryTitleScore(title, String(item.title || ''))
+      if (score < 0.38) continue
+
+      const itemPrice = parsePriceValue(item.price?.value)
+      const shipping = parsePriceValue(item.shippingOptions?.[0]?.shippingCost?.value)
+      const landedPrice = itemPrice + shipping
+      if (landedPrice <= 0) continue
+      if (landedPrice < Math.max(3, amazonPrice * 0.65)) continue
+      if (landedPrice > Math.max(amazonPrice * 5, amazonPrice + 80)) continue
+      prices.push(Number(landedPrice.toFixed(2)))
+    }
+
+    return { prices: Array.from(new Set(prices)).sort((a, b) => a - b), count: prices.length }
+  } catch {
+    return { prices: [] as number[], count: 0 }
+  }
 }
 
 // Use categories from real active eBay listings with similar titles.
@@ -1163,8 +1221,30 @@ export async function POST(req: NextRequest) {
     : cleanTitle.slice(0, 80).replace(/\s+\S*$/, '').trim()
 
   const nicheCategoryId = NICHE_CATEGORY[niche] || '177'
-  const floorPrice = getRecommendedEbayPrice(listingAmazonPrice)
-  const finalEbayPrice = Math.max(parsedEbayPrice, floorPrice)
+  const comparableMarket = await getComparableEbayPrices(safeTitle, credentials.accessToken, listingAmazonPrice)
+  const baseAutoPrice = getRecommendedEbayPrice(listingAmazonPrice, EBAY_DEFAULT_FEE_RATE)
+  const pricingRecommendation = getPricingRecommendation({
+    amazonPrice: listingAmazonPrice,
+    feeRate: EBAY_DEFAULT_FEE_RATE,
+    competitorPrices: comparableMarket.prices,
+    competitorCount: comparableMarket.count,
+  })
+  const priceLooksAutomatic =
+    Math.abs(parsedEbayPrice - baseAutoPrice) <= Math.max(0.06, baseAutoPrice * 0.01) ||
+    Math.abs(parsedEbayPrice - pricingRecommendation.targetPrice) <= Math.max(0.06, pricingRecommendation.targetPrice * 0.01) ||
+    Math.abs(parsedEbayPrice - pricingRecommendation.price) <= Math.max(0.06, pricingRecommendation.price * 0.01)
+
+  if (!pricingRecommendation.viable && pricingRecommendation.confidence === 'high' && priceLooksAutomatic) {
+    return apiError('Comparable eBay listings are priced below the minimum profitable price for this Amazon cost. Skip this item or manually choose a strategy.', {
+      status: 400,
+      code: 'PRICING_NOT_VIABLE',
+      details: { pricing: pricingRecommendation },
+    })
+  }
+
+  const finalEbayPrice = priceLooksAutomatic
+    ? pricingRecommendation.price
+    : Math.max(parsedEbayPrice, pricingRecommendation.minimumViablePrice)
   const price = finalEbayPrice.toFixed(2)
   const fallbackSpecificsXml = (NICHE_SPECIFICS[niche] || [])
     .map(([n, v]) => `\n      <NameValueList><Name>${n}</Name><Value>${v}</Value></NameValueList>`)
@@ -1711,7 +1791,7 @@ export async function POST(req: NextRequest) {
   await ensureListedAsinsFinancialColumns()
   await sql`
     INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate, amazon_image_url, amazon_images, amazon_snapshot, niche, category_id)
-    VALUES (${session.user.id}, ${asin}, ${listingTitle.slice(0, 200)}, ${listingId}, ${listingAmazonPrice.toFixed(2)}, ${price}, ${0.1325}, ${primarySourceImage}, ${JSON.stringify(filteredImages)}, ${JSON.stringify({
+    VALUES (${session.user.id}, ${asin}, ${listingTitle.slice(0, 200)}, ${listingId}, ${listingAmazonPrice.toFixed(2)}, ${price}, ${EBAY_DEFAULT_FEE_RATE}, ${primarySourceImage}, ${JSON.stringify(filteredImages)}, ${JSON.stringify({
       asin,
       title: listingTitle,
       amazonPrice: listingAmazonPrice,
@@ -1720,6 +1800,7 @@ export async function POST(req: NextRequest) {
       features: amazon.features,
       description: amazon.description,
       specs: amazon.specs,
+      pricing: pricingRecommendation,
       available: validatedAmazon.available,
       source: validatedAmazon.source,
       amazonUrl: `https://www.amazon.com/dp/${asin}`,
@@ -1729,7 +1810,7 @@ export async function POST(req: NextRequest) {
       title = ${listingTitle.slice(0, 200)},
       amazon_price = ${listingAmazonPrice.toFixed(2)},
       ebay_price = ${price},
-      ebay_fee_rate = ${0.1325},
+      ebay_fee_rate = ${EBAY_DEFAULT_FEE_RATE},
       amazon_image_url = ${primarySourceImage},
       amazon_images = ${JSON.stringify(filteredImages)},
       amazon_snapshot = ${JSON.stringify({
@@ -1741,6 +1822,7 @@ export async function POST(req: NextRequest) {
         features: amazon.features,
         description: amazon.description,
         specs: amazon.specs,
+        pricing: pricingRecommendation,
         available: validatedAmazon.available,
         source: validatedAmazon.source,
         amazonUrl: `https://www.amazon.com/dp/${asin}`,
