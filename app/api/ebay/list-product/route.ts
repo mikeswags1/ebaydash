@@ -764,7 +764,7 @@ async function fetchAmazonDetails(
     'Simple setup, ready to use straight out of the box',
     'Compact, lightweight design — easy to store and carry',
     'Makes an excellent gift for any occasion',
-    'Ships fast via USPS Priority Mail — arrives in 2-3 business days',
+    'Ships fast with free tracked shipping — estimated 2-4 business days',
     '30-day hassle-free returns — your satisfaction is 100% guaranteed',
   ]
 
@@ -1251,13 +1251,9 @@ export async function POST(req: NextRequest) {
     Math.abs(parsedEbayPrice - pricingRecommendation.targetPrice) <= Math.max(0.06, pricingRecommendation.targetPrice * 0.01) ||
     Math.abs(parsedEbayPrice - pricingRecommendation.price) <= Math.max(0.06, pricingRecommendation.price * 0.01)
 
-  if (!pricingRecommendation.viable && pricingRecommendation.confidence === 'high' && priceLooksAutomatic) {
-    return apiError('Comparable eBay listings are priced below the minimum profitable price for this Amazon cost. Skip this item or manually choose a strategy.', {
-      status: 400,
-      code: 'PRICING_NOT_VIABLE',
-      details: { pricing: pricingRecommendation },
-    })
-  }
+  const pricingWarning = !pricingRecommendation.viable && pricingRecommendation.confidence === 'high'
+    ? 'Comparable eBay prices are below the minimum profitable price, so StackPilot used the minimum profitable price instead of blocking the listing.'
+    : null
 
   const finalEbayPrice = priceLooksAutomatic
     ? pricingRecommendation.price
@@ -1818,6 +1814,7 @@ export async function POST(req: NextRequest) {
       description: amazon.description,
       specs: amazon.specs,
       pricing: pricingRecommendation,
+      pricingWarning,
       available: validatedAmazon.available,
       source: validatedAmazon.source,
       amazonUrl: `https://www.amazon.com/dp/${asin}`,
@@ -1840,6 +1837,7 @@ export async function POST(req: NextRequest) {
         description: amazon.description,
         specs: amazon.specs,
         pricing: pricingRecommendation,
+        pricingWarning,
         available: validatedAmazon.available,
         source: validatedAmazon.source,
         amazonUrl: `https://www.amazon.com/dp/${asin}`,
