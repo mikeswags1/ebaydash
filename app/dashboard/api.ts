@@ -151,6 +151,8 @@ export async function publishProduct(input: {
   description?: string
   specs?: Array<[string, string]>
   niche: string | null
+  trusted?: boolean
+  categoryId?: string
 }) {
   return requestJson<ListResult>('/api/ebay/list-product', {
     method: 'POST',

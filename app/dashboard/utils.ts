@@ -55,39 +55,55 @@ export async function listProductsInBatches(args: {
   products: FinderProduct[]
   publish: (product: FinderProduct) => Promise<{ asin?: string; reconnectRequired?: boolean }>
   onProgress: (progress: { done: number; total: number; errors: number }) => void
+  concurrency?: number
 }) {
-  const { products, publish, onProgress } = args
+  const { products, publish, onProgress, concurrency = 5 } = args
   const total = products.length
   const listedAsins: string[] = []
   let errors = 0
+  let done = 0
   let reconnectRequired = false
 
-  for (let index = 0; index < total; index += 3) {
+  const publishWithRetry = async (product: FinderProduct) => {
+    const result = await publish(product)
+    // One automatic retry for transient network failures (empty result = unknown error)
+    if (!result.asin && !result.reconnectRequired) {
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      return publish(product)
+    }
+    return result
+  }
+
+  for (let index = 0; index < total; index += concurrency) {
     if (reconnectRequired) break
 
-    onProgress({ done: index, total, errors })
-    const batch = products.slice(index, index + 3)
-    const results = await Promise.all(batch.map((product) => publish(product)))
+    onProgress({ done, total, errors })
+    const batch = products.slice(index, index + concurrency)
 
-    results.forEach((result) => {
+    // allSettled: one failure never kills its batchmates
+    const settled = await Promise.allSettled(batch.map((product) => publishWithRetry(product)))
+
+    for (const outcome of settled) {
+      if (outcome.status === 'rejected') {
+        errors += 1
+        done += 1
+        continue
+      }
+      const result = outcome.value
       if (result.reconnectRequired) {
         reconnectRequired = true
-        return
+        break
       }
-
       if (result.asin) {
         listedAsins.push(result.asin)
       } else {
         errors += 1
       }
-    })
+      done += 1
+    }
   }
 
   onProgress({ done: total, total, errors })
 
-  return {
-    listedAsins,
-    errors,
-    reconnectRequired,
-  }
+  return { listedAsins, errors, reconnectRequired }
 }

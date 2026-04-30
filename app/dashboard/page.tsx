@@ -636,7 +636,7 @@ export default function Dashboard() {
   }, [continuousFinderState.error, continuousFinderState.loading, continuousFinderState.results, handleFindContinuousProducts, tab])
 
   const publishFinderProduct = useCallback(
-    async (product: FinderProduct) => {
+    async (product: FinderProduct, opts?: { trusted?: boolean; categoryId?: string }) => {
       const productNiche = product.sourceMode === 'continuous' ? product.sourceNiche || null : nicheState.value
 
       try {
@@ -651,6 +651,8 @@ export default function Dashboard() {
           description: product.description,
           specs: product.specs,
           niche: productNiche,
+          trusted: opts?.trusted,
+          categoryId: opts?.categoryId,
         })
 
         return { asin: data.listingId ? product.asin : undefined }
@@ -730,7 +732,7 @@ export default function Dashboard() {
 
     const result = await listProductsInBatches({
       products,
-      publish: publishFinderProduct,
+      publish: (product) => publishFinderProduct(product, { trusted: true }),
       onProgress: (progress) => {
         setFinderState((prev) => ({ ...prev, listAllProgress: progress }))
       },
@@ -771,7 +773,7 @@ export default function Dashboard() {
 
     const result = await listProductsInBatches({
       products,
-      publish: publishFinderProduct,
+      publish: (product) => publishFinderProduct(product, { trusted: true }),
       onProgress: (progress) => {
         setContinuousFinderState((prev) => ({ ...prev, listAllProgress: progress }))
       },

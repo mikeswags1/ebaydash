@@ -1171,6 +1171,8 @@ export async function POST(req: NextRequest) {
     description: inputDescription,
     specs,
     niche,
+    trusted,
+    categoryId: providedCategoryId,
   } = await req.json()
   if (!asin || !title || ebayPrice === undefined || ebayPrice === null) {
     return apiError('ASIN, title, and eBay price are required.', { status: 400, code: 'INVALID_LISTING_INPUT' })
@@ -1200,21 +1202,38 @@ export async function POST(req: NextRequest) {
 
   const appId = process.env.EBAY_APP_ID || ''
 
-  const fallbackAmazonPrice = Number.isFinite(Number(amazonPrice))
-    ? Number(amazonPrice)
-    : undefined
-  const validatedAmazon = await fetchAmazonProductByAsin({
-    asin,
-    fallbackImage: imageUrl,
-    fallbackTitle: title,
-    fallbackPrice: fallbackAmazonPrice,
-    strictAsin: true,
-  })
-  if (!validatedAmazon) {
-    return apiError('ASIN validation failed because the ASIN is invalid or could not be recovered.', {
-      status: 400,
-      code: 'ASIN_VALIDATION_FAILED',
+  const fallbackAmazonPrice = Number.isFinite(Number(amazonPrice)) ? Number(amazonPrice) : undefined
+
+  let validatedAmazon: NonNullable<Awaited<ReturnType<typeof fetchAmazonProductByAsin>>>
+  if (trusted && fallbackAmazonPrice && title && (imageUrl || (Array.isArray(images) && images.length > 0))) {
+    // Fast-path: product came from finder queue and is already validated — skip Amazon re-fetch
+    validatedAmazon = {
+      asin,
+      title,
+      amazonPrice: fallbackAmazonPrice,
+      imageUrl: imageUrl || (Array.isArray(images) ? images[0] : undefined),
+      images: Array.isArray(images) ? images : imageUrl ? [imageUrl] : [],
+      features: Array.isArray(features) ? features : [],
+      description: typeof inputDescription === 'string' ? inputDescription : '',
+      specs: Array.isArray(specs) ? specs : [],
+      available: true,
+      source: 'cache' as const,
+    }
+  } else {
+    const fetched = await fetchAmazonProductByAsin({
+      asin,
+      fallbackImage: imageUrl,
+      fallbackTitle: title,
+      fallbackPrice: fallbackAmazonPrice,
+      strictAsin: true,
     })
+    if (!fetched) {
+      return apiError('ASIN validation failed because the ASIN is invalid or could not be recovered.', {
+        status: 400,
+        code: 'ASIN_VALIDATION_FAILED',
+      })
+    }
+    validatedAmazon = fetched
   }
 
   const listingTitle = chooseBestListingTitle([validatedAmazon.title, title]) || title
@@ -1246,7 +1265,12 @@ export async function POST(req: NextRequest) {
   }
 
   const nicheCategoryId = NICHE_CATEGORY[niche] || '177'
-  const comparableMarket = await getComparableEbayPrices(safeTitle, credentials.accessToken, listingAmazonPrice)
+
+  // Trusted/bulk mode: skip competitor lookup — use provided price directly (already priced by the engine)
+  const comparableMarket = trusted
+    ? { prices: [], count: 0 }
+    : await getComparableEbayPrices(safeTitle, credentials.accessToken, listingAmazonPrice)
+
   const baseAutoPrice = getRecommendedEbayPrice(listingAmazonPrice, EBAY_DEFAULT_FEE_RATE)
   const pricingRecommendation = getPricingRecommendation({
     amazonPrice: listingAmazonPrice,
@@ -1263,9 +1287,11 @@ export async function POST(req: NextRequest) {
     ? 'Comparable eBay prices are below the minimum profitable price, so StackPilot used the minimum profitable price instead of blocking the listing.'
     : null
 
-  const finalEbayPrice = priceLooksAutomatic
-    ? pricingRecommendation.price
-    : Math.max(parsedEbayPrice, pricingRecommendation.minimumViablePrice)
+  const finalEbayPrice = trusted
+    ? Math.max(parsedEbayPrice, pricingRecommendation.minimumViablePrice)
+    : priceLooksAutomatic
+      ? pricingRecommendation.price
+      : Math.max(parsedEbayPrice, pricingRecommendation.minimumViablePrice)
   const price = finalEbayPrice.toFixed(2)
   const fallbackSpecificsXml = (NICHE_SPECIFICS[niche] || [])
     .map(([n, v]) => `\n      <NameValueList><Name>${n}</Name><Value>${v}</Value></NameValueList>`)
@@ -1403,19 +1429,17 @@ export async function POST(req: NextRequest) {
     ? `<PictureDetails><GalleryType>Gallery</GalleryType>${usablePictureList.map(u => `<PictureURL>${xmlEncodeUrl(u)}</PictureURL>`).join('')}</PictureDetails>`
     : ''
 
-  // Run category sources in parallel — no added latency:
-  // 1. ASIN Browse lookup — exact product signal from real listings when available
-  // 2. Comparable listing lookup — categories real sellers use for similar titles
-  // 3. Taxonomy REST API — semantic fallback
-  // 4. Legacy Trading API — keyword fallback only
+  // If a pre-computed categoryId was passed (bulk mode), skip all API lookups
   const cleanAsin = String(asin).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)
   const titleQuery = safeTitle.split(' ').slice(0, 6).join(' ')
-  const [asinCategory, comparableCategory, taxonomyIds, legacySuggestions] = await Promise.all([
-    getCategoryByAsin(cleanAsin, credentials.accessToken),
-    getCategoryByComparableListings(safeTitle, credentials.accessToken),
-    getTaxonomyCategoryIds(safeTitle, credentials.accessToken),
-    getSuggestedCategoryIds(titleQuery, appId, credentials.accessToken),
-  ])
+  const [asinCategory, comparableCategory, taxonomyIds, legacySuggestions] = providedCategoryId
+    ? [providedCategoryId, null, [providedCategoryId], []]
+    : await Promise.all([
+        getCategoryByAsin(cleanAsin, credentials.accessToken),
+        getCategoryByComparableListings(safeTitle, credentials.accessToken),
+        getTaxonomyCategoryIds(safeTitle, credentials.accessToken),
+        getSuggestedCategoryIds(titleQuery, appId, credentials.accessToken),
+      ])
 
   // Niche map as absolute last resort
   const nicheFallback = NICHE_FALLBACK_LEAF_CATEGORY[niche || ''] || nicheCategoryId
