@@ -1,4 +1,4 @@
-import { after, NextRequest } from 'next/server'
+import { NextRequest } from 'next/server'
 import { apiError, apiOk } from '@/lib/api-response'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { queryRows, sql } from '@/lib/db'
@@ -460,20 +460,16 @@ export async function GET(req: NextRequest) {
   }
 
   if (catalogRefresh && req.nextUrl.searchParams.get('wait') !== '1') {
-    after(async () => {
-      try {
-        await runProductRefresh()
-      } catch (error) {
-        console.error('[catalog-refresh]', error)
-      }
-    })
-    report.queued = true
-    report.nichesRefreshed = 'queued'
+    report.fastCatalogRefresh = true
+    report.liveFetchSkipped = 'Add wait=1 to run the slower live Amazon fetch loop.'
+    report.nichesRefreshed = 'skipped'
     report.nichesAttempted = niches
     report.catalogRefresh = catalogRefresh
     report.targetProductsPerNiche = targetProducts
     report.batchSize = batchSize
     report.startIndex = startIndex
+    report.sourceProducts = await rebuildProductSourceFromCache(250)
+    report.continuousProducts = await refreshContinuousCache()
     report.durationMs = Date.now() - startedAt
     return apiOk({ success: true, ...report })
   }
