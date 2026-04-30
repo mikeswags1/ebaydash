@@ -104,8 +104,8 @@ export async function GET(_req: NextRequest) {
   const continuousCount = toNumber(continuous.count)
 
   const warnings: string[] = []
-  if (sourceTotal < 900) warnings.push('Source engine pool is below the preferred 900-product floor.')
-  if (continuousCount < 30) warnings.push('Continuous Listing pool has fewer than 30 products ready.')
+  if (sourceTotal < 5000) warnings.push('Source engine pool is below the public-launch target of 5,000 products.')
+  if (continuousCount < 90) warnings.push('Continuous Listing pool has fewer than 90 products ready.')
   if (totalNiches > 0 && readyNiches < Math.max(1, Math.floor(totalNiches * 0.7))) warnings.push('Several niche caches are below 30 products.')
   if (toNumber(source.stale) > sourceTotal * 0.45) warnings.push('A large share of source products are older than 7 days.')
   if (toNumber(source.missing_images) > sourceTotal * 0.1) warnings.push('More than 10% of source products are missing images.')

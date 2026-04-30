@@ -1,5 +1,6 @@
 import { queryRows, sql } from '@/lib/db'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice } from '@/lib/listing-pricing'
+import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 
 export type SourceEngineProduct = {
   asin: string
@@ -132,6 +133,13 @@ function normalizeProduct(input: SourceProductInput): (SourceEngineProduct & { s
     sourceQuery: input.sourceQuery,
     raw: compactJson(input.raw),
   }
+  const policyFlags = getListingPolicyFlags({
+    title: product.title,
+    description: product.description,
+    niche: product.sourceNiche,
+  })
+  if (hasBlockedListingPolicyFlag(policyFlags)) return null
+
   product.qualityScore = scoreProduct(product)
   return product
 }
@@ -241,7 +249,7 @@ export async function upsertProductSourceItems(inputs: SourceProductInput[]) {
   return normalized.length
 }
 
-export async function rebuildProductSourceFromCache(limit = 80) {
+export async function rebuildProductSourceFromCache(limit = 250) {
   await ensureProductSourceTables()
   const rows = await queryRows<ProductCacheRow>`
     SELECT niche, results
@@ -265,7 +273,7 @@ export async function rebuildProductSourceFromCache(limit = 80) {
 }
 
 export async function loadProductSourceProducts(options: { niche?: string | null; limit?: number } = {}) {
-  const limit = Math.max(1, Math.min(240, options.limit || 90))
+  const limit = Math.max(1, Math.min(900, options.limit || 120))
   try {
     const niche = options.niche?.trim()
     const rows = niche

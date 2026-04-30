@@ -8,6 +8,7 @@ import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
 import { getRecommendedEbayPrice } from '@/lib/listing-pricing'
+import { getListingPolicyBlockReason, getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 
 // ── VeRO Protection ──────────────────────────────────────────────────────────
 const VERO_BRANDS = [
@@ -571,6 +572,11 @@ function dedupeImageUrls(values: Array<string | undefined | null>) {
   return unique
 }
 
+function getSpecValue(specs: Array<[string, string]>, pattern: RegExp) {
+  const match = specs.find(([key, value]) => pattern.test(key) && value.length > 1)
+  return match ? sanitizeContent(match[1]).slice(0, 120) : ''
+}
+
 function inferBrandFromProduct(title: string, specs: Array<[string, string]>) {
   const brandSpec = specs.find(([key]) => /brand/i.test(key))
   if (brandSpec?.[1]) return sanitizeContent(brandSpec[1]).slice(0, 80)
@@ -662,6 +668,32 @@ function buildItemSpecificsXml(title: string, specs: Array<[string, string]>, fa
   return Array.from(nameMap.entries())
     .map(([name, value]) => `\n      <NameValueList><Name>${name}</Name><Value>${value}</Value></NameValueList>`)
     .join('')
+}
+
+function buildOriginalFeatureBullets(title: string, specs: Array<[string, string]>, niche: string | null) {
+  const type = inferTypeFromProduct(title, niche, specs)
+  const brand = inferBrandFromProduct(title, specs)
+  const bullets: string[] = [
+    `Practical ${type.toLowerCase()} for everyday use.`,
+  ]
+
+  const compatibleBrand = getSpecValue(specs, /compatible brand|compatible model|compatibility/i)
+  const material = getSpecValue(specs, /material|fabric|finish/i)
+  const color = getSpecValue(specs, /color|colour/i)
+  const size = getSpecValue(specs, /size|dimensions|length|width|height/i)
+  const connectivity = getSpecValue(specs, /connectivity|interface/i)
+  const powerSource = getSpecValue(specs, /power source|battery/i)
+
+  if (brand && brand.toLowerCase() !== 'generic') bullets.push(`Brand shown in item specifics: ${brand}.`)
+  if (compatibleBrand) bullets.push(`Compatibility: ${compatibleBrand}.`)
+  if (material) bullets.push(`Material or finish: ${material}.`)
+  if (color) bullets.push(`Color or style: ${color}.`)
+  if (size) bullets.push(`Size or dimensions: ${size}.`)
+  if (connectivity) bullets.push(`Connectivity or interface: ${connectivity}.`)
+  if (powerSource) bullets.push(`Power source: ${powerSource}.`)
+  bullets.push('Review the photos and item specifics for exact details before purchase.')
+
+  return Array.from(new Set(bullets)).slice(0, 8)
 }
 
 
@@ -832,20 +864,13 @@ function buildDescription(title: string, features: string[], about: string, imag
 
   const uniqueImages = dedupeImageUrls(images)
   const relevantSpecs = pickRelevantSpecs(specs)
-  const normalizedFeatures = Array.from(
-    new Set(
-      features
-        .map((feature) => sanitizeContent(feature))
-        .filter(Boolean)
-    )
-  ).slice(0, 10)
+  const normalizedFeatures = buildOriginalFeatureBullets(displayTitle, relevantSpecs, null)
   const specBullets = relevantSpecs
     .filter(([key]) => !/brand/i.test(key))
     .slice(0, 6)
     .map(([key, value]) => `${titleCaseLabel(key)}: ${value}`)
   const finalBullets = Array.from(new Set([...normalizedFeatures, ...specBullets])).slice(0, 10)
-  const cleanAbout = sanitizeDescriptionText(about)
-  const descriptionParagraphs = toParagraphs(cleanAbout)
+  const descriptionParagraphs: string[] = []
   const detailParagraphs = descriptionParagraphs.slice(0, 2)
   const inferredBrand = inferBrandFromProduct(displayTitle, relevantSpecs)
   const topSpecsSentence = relevantSpecs
@@ -1080,10 +1105,12 @@ export async function POST(req: NextRequest) {
     return apiError('Enter a valid eBay price before publishing.', { status: 400, code: 'INVALID_LISTING_PRICE' })
   }
 
-  if (isVero(title)) {
-    return apiError('This product cannot be listed because it appears to match an eBay VeRO brand.', {
+  const initialPolicyFlags = getListingPolicyFlags({ title, description: inputDescription, niche })
+  if (hasBlockedListingPolicyFlag(initialPolicyFlags)) {
+    return apiError(getListingPolicyBlockReason(initialPolicyFlags), {
       status: 400,
-      code: 'VERO_BLOCKED',
+      code: 'LISTING_POLICY_BLOCKED',
+      details: { flags: initialPolicyFlags },
     })
   }
 
@@ -1180,6 +1207,19 @@ export async function POST(req: NextRequest) {
     _apiError: fetchedAmazon._apiError,
   }
   amazon.specs = dedupeSpecEntries(amazon.specs)
+  const validatedPolicyFlags = getListingPolicyFlags({
+    title: listingTitle,
+    description: amazon.description,
+    niche,
+  })
+  if (hasBlockedListingPolicyFlag(validatedPolicyFlags)) {
+    return apiError(getListingPolicyBlockReason(validatedPolicyFlags), {
+      status: 400,
+      code: 'LISTING_POLICY_BLOCKED',
+      details: { flags: validatedPolicyFlags },
+    })
+  }
+
   const itemSpecificsXml = buildItemSpecificsXml(listingTitle, amazon.specs, fallbackSpecificsXml, niche)
 
   const host = req.headers.get('host') || ''

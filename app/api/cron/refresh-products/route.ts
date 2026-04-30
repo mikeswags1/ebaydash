@@ -4,6 +4,7 @@ import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { queryRows, sql } from '@/lib/db'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 import { ensureProductSourceTables, rebuildProductSourceFromCache } from '@/lib/product-source-engine'
+import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 
 export const maxDuration = 300
 
@@ -51,8 +52,7 @@ function parsePrice(v: unknown): number {
 }
 
 function isRejected(title: string) {
-  const t = title.toLowerCase()
-  return REJECT_KEYWORDS.some(k => t.includes(k))
+  return hasBlockedListingPolicyFlag(getListingPolicyFlags({ title }))
 }
 
 const NICHE_QUERIES: Record<string, string[]> = {
@@ -277,7 +277,9 @@ async function refreshContinuousCache(): Promise<number> {
       const rowProducts = Array.isArray(row.results) ? row.results : []
       for (const product of rowProducts) {
         const asin = String(product.asin || '').toUpperCase()
+        const title = String(product.title || '')
         if (!asin || seen.has(asin)) continue
+        if (!title || isRejected(title)) continue
         seen.add(asin)
         products.push({ ...product, asin, sourceNiche: product.sourceNiche || row.niche })
         if (products.length >= MAX_CONTINUOUS_POOL_SIZE) break
@@ -369,7 +371,10 @@ export async function GET(req: NextRequest) {
   const report: Record<string, unknown> = {}
   const rollingRefresh = req.nextUrl.searchParams.get('rolling') === '1'
   const sourceOnly = req.nextUrl.searchParams.get('sourceOnly') === '1'
+  const catalogRefresh = req.nextUrl.searchParams.get('catalog') === '1' || req.nextUrl.searchParams.get('deep') === '1'
   const fullRefresh = req.nextUrl.searchParams.get('full') === '1' || !rollingRefresh
+  const requestedBatchSize = Number(req.nextUrl.searchParams.get('batch') || '')
+  const requestedStartIndex = Number(req.nextUrl.searchParams.get('start') || '')
   const now = new Date()
 
   if (sourceOnly) {
@@ -398,16 +403,27 @@ export async function GET(req: NextRequest) {
   // 2. Refresh product cache for all niches
   const rapidKey = process.env.RAPIDAPI_KEY
   const allNiches = Object.keys(NICHE_QUERIES)
-  const batchSize = fullRefresh ? allNiches.length : SCHEDULED_NICHE_BATCH_SIZE
-  const rotation = Math.floor(Date.now() / (15 * 60 * 1000))
-  const startIndex = fullRefresh ? 0 : (rotation * batchSize) % allNiches.length
+  const targetProducts = catalogRefresh ? CATALOG_NICHE_TARGET : STANDARD_NICHE_TARGET
+  const defaultBatchSize = catalogRefresh ? CATALOG_NICHE_BATCH_SIZE : (fullRefresh ? allNiches.length : SCHEDULED_NICHE_BATCH_SIZE)
+  const batchSize = Math.max(1, Math.min(allNiches.length, Number.isFinite(requestedBatchSize) && requestedBatchSize > 0 ? Math.floor(requestedBatchSize) : defaultBatchSize))
+  const rotationMinutes = catalogRefresh ? 60 : 15
+  const rotation = Math.floor(Date.now() / (rotationMinutes * 60 * 1000))
+  const startIndex = Number.isFinite(requestedStartIndex) && requestedStartIndex >= 0
+    ? Math.floor(requestedStartIndex) % allNiches.length
+    : fullRefresh && !catalogRefresh ? 0 : (rotation * batchSize) % allNiches.length
   const niches = Array.from({ length: Math.min(batchSize, allNiches.length) }, (_, index) => allNiches[(startIndex + index) % allNiches.length])
+  const rapidOptions = catalogRefresh
+    ? { target: targetProducts, queryLimit: 12, pages: [1, 2], timeoutMs: 6500 }
+    : { target: targetProducts, queryLimit: 4, pages: [1], timeoutMs: 8000 }
+  const scrapeOptions = catalogRefresh
+    ? { target: targetProducts, queryLimit: 6, pages: [1, 2], timeoutMs: 4500 }
+    : { target: targetProducts, queryLimit: 3, pages: [1], timeoutMs: 6000 }
   let refreshed = 0, quotaHit = false
 
   if (rapidKey) {
     for (const niche of niches) {
       if (quotaHit || Date.now() - startedAt > 200_000) break
-      const count = await refreshNiche(niche, rapidKey)
+      const count = await refreshNiche(niche, rapidKey, rapidOptions)
       if (count === -1) { quotaHit = true; break }
       if (count > 0) refreshed++
       await new Promise(r => setTimeout(r, 200))
@@ -421,7 +437,7 @@ export async function GET(req: NextRequest) {
     for (const niche of niches) {
       if (Date.now() - startedAt > 270_000) break
       try {
-        const count = await refreshNicheScrape(niche)
+        const count = await refreshNicheScrape(niche, scrapeOptions)
         if (count > 0) refreshed++
       } catch { /* skip */ }
       await new Promise(r => setTimeout(r, 500))
@@ -430,8 +446,12 @@ export async function GET(req: NextRequest) {
 
   report.nichesRefreshed = refreshed
   report.nichesAttempted = niches
+  report.catalogRefresh = catalogRefresh
+  report.targetProductsPerNiche = targetProducts
+  report.batchSize = batchSize
+  report.startIndex = startIndex
   report.quotaHit = quotaHit
-  report.sourceProducts = await rebuildProductSourceFromCache()
+  report.sourceProducts = await rebuildProductSourceFromCache(catalogRefresh ? 250 : 120)
   report.continuousProducts = await refreshContinuousCache()
 
   report.durationMs = Date.now() - startedAt

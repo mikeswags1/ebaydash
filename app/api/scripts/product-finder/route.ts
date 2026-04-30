@@ -8,6 +8,7 @@ import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice, isHealthyListing } from '@/lib/listing-pricing'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { loadProductSourceProducts, upsertProductSourceItems } from '@/lib/product-source-engine'
+import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 
 export const maxDuration = 60
 
@@ -143,8 +144,7 @@ function calcMetrics(amazonPrice: number) {
 }
 
 function isRejected(title: string) {
-  const t = title.toLowerCase()
-  return REJECT_KEYWORDS.some(k => t.includes(k))
+  return hasBlockedListingPolicyFlag(getListingPolicyFlags({ title }))
 }
 
 function parsePrice(v: unknown): number {
@@ -606,7 +606,10 @@ export async function GET(req: NextRequest) {
     listedTitles.some((listedTitle) => getTitleScore(listedTitle, title) >= 0.82)
 
   const shouldBlockProduct = (product: Pick<Product, 'asin' | 'title'>) =>
-    listedAsins.has(product.asin.toUpperCase()) || excludeAsins.has(product.asin.toUpperCase()) || matchesActiveListing(product.title)
+    listedAsins.has(product.asin.toUpperCase()) ||
+    excludeAsins.has(product.asin.toUpperCase()) ||
+    matchesActiveListing(product.title) ||
+    isRejected(product.title)
 
   const getAvailableProducts = (products: Product[]) =>
     rankProducts(products.filter((product) => !shouldBlockProduct(product)), {
@@ -636,7 +639,7 @@ export async function GET(req: NextRequest) {
   }
 
   const sourceEngineProducts = await withTimeout(
-    loadProductSourceProducts({ niche: continuousMode ? undefined : niche, limit: continuousMode ? 180 : 120 }),
+    loadProductSourceProducts({ niche: continuousMode ? undefined : niche, limit: continuousMode ? 360 : 180 }),
     continuousMode ? 700 : 1200,
     []
   )
