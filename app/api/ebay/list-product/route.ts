@@ -9,6 +9,7 @@ import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
 import { EBAY_DEFAULT_FEE_RATE, getPricingRecommendation, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 import { getListingPolicyBlockReason, getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
+import { chooseBestListingTitle, isWeakListingTitle } from '@/lib/listing-quality'
 
 // ── VeRO Protection ──────────────────────────────────────────────────────────
 const VERO_BRANDS = [
@@ -1216,7 +1217,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  const listingTitle = validatedAmazon.title || title
+  const listingTitle = chooseBestListingTitle([validatedAmazon.title, title]) || title
   const listingAmazonPrice = validatedAmazon.amazonPrice
 
   const cleanTitle = listingTitle
@@ -1236,6 +1237,13 @@ export async function POST(req: NextRequest) {
   const safeTitle = cleanTitle.length <= 80
     ? cleanTitle
     : cleanTitle.slice(0, 80).replace(/\s+\S*$/, '').trim()
+
+  if (isWeakListingTitle(safeTitle)) {
+    return apiError(
+      `"${safeTitle}" is a brand-only or unrecognizable title — it would make a poor eBay listing. Edit the title before publishing, or try a different ASIN.`,
+      { status: 400, code: 'WEAK_LISTING_TITLE' }
+    )
+  }
 
   const nicheCategoryId = NICHE_CATEGORY[niche] || '177'
   const comparableMarket = await getComparableEbayPrices(safeTitle, credentials.accessToken, listingAmazonPrice)
@@ -1338,6 +1346,13 @@ export async function POST(req: NextRequest) {
   const filteredImages = dedupeImageUrls(allImages)
     .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
     .slice(0, 6)
+
+  if (filteredImages.length === 0) {
+    return apiError(
+      'No product images could be found for this ASIN. eBay requires at least one photo — try a different ASIN or check that this product is still available on Amazon.',
+      { status: 400, code: 'NO_LISTING_IMAGES' }
+    )
+  }
 
   const fallbackListingImage = `${siteUrl}/api/image/fallback?asin=${encodeURIComponent(asin)}&title=${encodeURIComponent(listingTitle)}`
   const primarySourceImage = filteredImages[0] || validatedAmazon.imageUrl || fallbackListingImage

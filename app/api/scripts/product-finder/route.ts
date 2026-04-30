@@ -9,6 +9,7 @@ import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice, isHe
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { loadProductSourceProducts, upsertProductSourceItems } from '@/lib/product-source-engine'
 import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
+import { isWeakListingTitle } from '@/lib/listing-quality'
 
 export const maxDuration = 60
 
@@ -624,7 +625,8 @@ export async function GET(req: NextRequest) {
     listedAsins.has(product.asin.toUpperCase()) ||
     excludeAsins.has(product.asin.toUpperCase()) ||
     matchesActiveListing(product.title) ||
-    isRejected(product.title)
+    isRejected(product.title) ||
+    isWeakListingTitle(product.title)
 
   const getAvailableProducts = (products: Product[]) =>
     rankProducts(products.filter((product) => !shouldBlockProduct(product)), {
