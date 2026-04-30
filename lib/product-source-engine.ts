@@ -205,7 +205,16 @@ export async function upsertProductSourceItems(inputs: SourceProductInput[]) {
   if (normalized.length === 0) return 0
   await ensureProductSourceTables()
 
-  const rows = normalized.map((product) => ({
+  const uniqueProductsByAsin = new Map<string, NonNullable<ReturnType<typeof normalizeProduct>>>()
+  for (const product of normalized) {
+    const current = uniqueProductsByAsin.get(product.asin)
+    if (!current || (product.qualityScore || 0) > (current.qualityScore || 0)) {
+      uniqueProductsByAsin.set(product.asin, product)
+    }
+  }
+
+  const uniqueProducts = Array.from(uniqueProductsByAsin.values())
+  const rows = uniqueProducts.map((product) => ({
     asin: product.asin,
     title: product.title,
     source_niche: product.sourceNiche || null,
@@ -286,7 +295,7 @@ export async function upsertProductSourceItems(inputs: SourceProductInput[]) {
     `
   }
 
-  return normalized.length
+  return uniqueProducts.length
 }
 
 export async function rebuildProductSourceFromCache(limit = 250) {
