@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server'
+import { after, NextRequest } from 'next/server'
 import { apiError, apiOk } from '@/lib/api-response'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { queryRows, sql } from '@/lib/db'
@@ -418,42 +418,67 @@ export async function GET(req: NextRequest) {
   const scrapeOptions = catalogRefresh
     ? { target: targetProducts, queryLimit: 4, pages: [1, 2], timeoutMs: 3500 }
     : { target: targetProducts, queryLimit: 3, pages: [1], timeoutMs: 6000 }
-  let refreshed = 0, quotaHit = false
+  const runProductRefresh = async () => {
+    let refreshed = 0
+    let quotaHit = false
 
-  if (rapidKey) {
-    for (const niche of niches) {
-      if (quotaHit || Date.now() - startedAt > (catalogRefresh ? 165_000 : 200_000)) break
-      const count = await refreshNiche(niche, rapidKey, rapidOptions)
-      if (count === -1) { quotaHit = true; break }
-      if (count > 0) refreshed++
-      await new Promise(r => setTimeout(r, 200))
-    }
-  } else {
-    quotaHit = true // no key = treat same as quota hit
-  }
-
-  // If quota hit, fill remaining niches via direct Amazon scrape
-  if (quotaHit) {
-    for (const niche of niches) {
-      if (Date.now() - startedAt > (catalogRefresh ? 235_000 : 270_000)) break
-      try {
-        const count = await refreshNicheScrape(niche, scrapeOptions)
+    if (rapidKey) {
+      for (const niche of niches) {
+        if (quotaHit || Date.now() - startedAt > (catalogRefresh ? 165_000 : 200_000)) break
+        const count = await refreshNiche(niche, rapidKey, rapidOptions)
+        if (count === -1) { quotaHit = true; break }
         if (count > 0) refreshed++
-      } catch { /* skip */ }
-      await new Promise(r => setTimeout(r, 500))
+        await new Promise(r => setTimeout(r, 200))
+      }
+    } else {
+      quotaHit = true // no key = treat same as quota hit
+    }
+
+    // If quota hit, fill remaining niches via direct Amazon scrape
+    if (quotaHit) {
+      for (const niche of niches) {
+        if (Date.now() - startedAt > (catalogRefresh ? 235_000 : 270_000)) break
+        try {
+          const count = await refreshNicheScrape(niche, scrapeOptions)
+          if (count > 0) refreshed++
+        } catch { /* skip */ }
+        await new Promise(r => setTimeout(r, 500))
+      }
+    }
+
+    return {
+      nichesRefreshed: refreshed,
+      nichesAttempted: niches,
+      catalogRefresh,
+      targetProductsPerNiche: targetProducts,
+      batchSize,
+      startIndex,
+      quotaHit,
+      sourceProducts: await rebuildProductSourceFromCache(catalogRefresh ? 250 : 120),
+      continuousProducts: await refreshContinuousCache(),
     }
   }
 
-  report.nichesRefreshed = refreshed
-  report.nichesAttempted = niches
-  report.catalogRefresh = catalogRefresh
-  report.targetProductsPerNiche = targetProducts
-  report.batchSize = batchSize
-  report.startIndex = startIndex
-  report.quotaHit = quotaHit
-  report.sourceProducts = await rebuildProductSourceFromCache(catalogRefresh ? 250 : 120)
-  report.continuousProducts = await refreshContinuousCache()
+  if (catalogRefresh && req.nextUrl.searchParams.get('wait') !== '1') {
+    after(async () => {
+      try {
+        await runProductRefresh()
+      } catch (error) {
+        console.error('[catalog-refresh]', error)
+      }
+    })
+    report.queued = true
+    report.nichesRefreshed = 'queued'
+    report.nichesAttempted = niches
+    report.catalogRefresh = catalogRefresh
+    report.targetProductsPerNiche = targetProducts
+    report.batchSize = batchSize
+    report.startIndex = startIndex
+    report.durationMs = Date.now() - startedAt
+    return apiOk({ success: true, ...report })
+  }
 
+  Object.assign(report, await runProductRefresh())
   report.durationMs = Date.now() - startedAt
   return apiOk({ success: true, ...report })
 }
