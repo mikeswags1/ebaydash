@@ -13,8 +13,11 @@ const MIN_PROFIT = 6
 const MAX_COST = 300
 const CACHE_VERSION = 5
 const CONTINUOUS_CACHE_KEY = '__continuous_listing__'
-const MAX_CONTINUOUS_POOL_SIZE = 160
+const MAX_CONTINUOUS_POOL_SIZE = 600
+const STANDARD_NICHE_TARGET = 90
+const CATALOG_NICHE_TARGET = 220
 const SCHEDULED_NICHE_BATCH_SIZE = 8
+const CATALOG_NICHE_BATCH_SIZE = 6
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -95,39 +98,105 @@ const NICHE_QUERIES: Record<string, string[]> = {
   'Sports Memorabilia':     ['sports card display case frame', 'jersey display case shadow box'],
 }
 
+type RefreshOptions = {
+  target?: number
+  queryLimit?: number
+  pages?: number[]
+  timeoutMs?: number
+}
+
+function uniqueQueries(values: string[]) {
+  const seen = new Set<string>()
+  const queries: string[] = []
+
+  for (const value of values) {
+    const query = value.replace(/\s+/g, ' ').trim()
+    const key = query.toLowerCase()
+    if (!query || seen.has(key)) continue
+    seen.add(key)
+    queries.push(query)
+  }
+
+  return queries
+}
+
+function buildCatalogQueries(niche: string) {
+  const baseQueries = NICHE_QUERIES[niche] || [`${niche} bestseller`]
+  const nicheLower = niche.toLowerCase()
+  const accessoriesQuery = nicheLower.includes('accessories') ? `${niche} kit` : `${niche} accessories`
+  const categoryQueries = [
+    `${niche} bestseller`,
+    `${niche} best sellers`,
+    `top rated ${niche}`,
+    `popular ${niche}`,
+    `trending ${niche}`,
+    `high demand ${niche}`,
+    `${niche} deals`,
+    `${niche} under 25`,
+    `${niche} under 50`,
+    `${niche} bundle`,
+    `${niche} pack`,
+    `${niche} replacement`,
+    `${niche} set`,
+    `${niche} organizer`,
+    `${niche} refill`,
+    `${niche} parts`,
+    `${niche} tools`,
+    `${niche} small business`,
+    accessoriesQuery,
+  ]
+  const modifierQueries = baseQueries.flatMap((query) => [
+    query,
+    `${query} best seller`,
+    `${query} top rated`,
+    `${query} pack`,
+    `${query} replacement`,
+  ])
+
+  return uniqueQueries([...baseQueries, ...categoryQueries, ...modifierQueries])
+}
+
 // ── Refresh one niche in the product_cache table ─────────────────────────────
-async function refreshNiche(niche: string, rapidKey: string): Promise<number> {
-  const queries = NICHE_QUERIES[niche] || [`${niche} bestseller`]
+async function refreshNiche(niche: string, rapidKey: string, options: RefreshOptions = {}): Promise<number> {
+  const target = Math.max(30, Math.min(CATALOG_NICHE_TARGET, options.target || STANDARD_NICHE_TARGET))
+  const queries = buildCatalogQueries(niche).slice(0, options.queryLimit || 4)
+  const pages = options.pages?.length ? options.pages : [1]
+  const timeoutMs = options.timeoutMs || 8000
   const results: Record<string, unknown>[] = []
   const seen = new Set<string>()
 
-  for (const query of queries.slice(0, 3)) {
-    if (results.length >= 30) break
+  for (const query of queries) {
+    if (results.length >= target) break
     try {
-      const res = await fetch(
-        `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(query)}&country=US&category_id=aps&page=1`,
-        { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey }, signal: AbortSignal.timeout(8000) }
-      )
-      if (res.status === 429 || res.status === 403) return -1
-      if (!res.ok) break
-      const data = await res.json()
-      if (String(data?.message || '').toLowerCase().match(/limit|quota|exceed/)) return -1
-      const products: Record<string, unknown>[] = data?.data?.products || []
+      for (const page of pages) {
+        if (results.length >= target) break
+        const res = await fetch(
+          `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(query)}&country=US&category_id=aps&page=${page}`,
+          { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey }, signal: AbortSignal.timeout(timeoutMs) }
+        )
+        if (res.status === 429 || res.status === 403) return results.length > 0 ? results.length : -1
+        if (!res.ok) break
+        const data = await res.json()
+        if (String(data?.message || '').toLowerCase().match(/limit|quota|exceed/)) return results.length > 0 ? results.length : -1
+        const products: Record<string, unknown>[] = data?.data?.products || []
 
-      for (const p of products) {
-        const asin  = String(p.asin || '')
-        if (!asin || seen.has(asin)) continue
-        seen.add(asin)
-        const price = parsePrice(p.product_price) || parsePrice(p.product_original_price)
-        const title = String(p.product_title || '')
-        if (!price || price <= 0 || price > MAX_COST || !title || isRejected(title)) continue
-        const { ebayPrice, profit, roi } = calcMetrics(price)
-        if (profit < MIN_PROFIT) continue
-        const risk       = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
-        const salesVol   = String(p.sales_volume || '')
-        const rating     = parseFloat(String(p.product_star_rating || '0')) || 0
-        const numRatings = parseInt(String(p.product_num_ratings || '0').replace(/[^0-9]/g, ''), 10) || 0
-        results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl: String(p.product_photo || ''), risk, salesVolume: salesVol, _rating: rating, _numRatings: numRatings })
+        for (const p of products) {
+          const asin  = String(p.asin || '')
+          if (!asin || seen.has(asin)) continue
+          seen.add(asin)
+          const price = parsePrice(p.product_price) || parsePrice(p.product_original_price)
+          const title = String(p.product_title || '')
+          if (!price || price <= 0 || price > MAX_COST || !title || isRejected(title)) continue
+          const { ebayPrice, profit, roi } = calcMetrics(price)
+          if (profit < MIN_PROFIT) continue
+          const risk       = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
+          const salesVol   = String(p.sales_volume || '')
+          const rating     = parseFloat(String(p.product_star_rating || '0')) || 0
+          const numRatings = parseInt(String(p.product_num_ratings || '0').replace(/[^0-9]/g, ''), 10) || 0
+          results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl: String(p.product_photo || ''), risk, salesVolume: salesVol, sourceNiche: niche, _rating: rating, _numRatings: numRatings })
+          if (results.length >= target) break
+        }
+        if (products.length === 0) break
       }
     } catch { continue }
   }
@@ -142,31 +211,39 @@ async function refreshNiche(niche: string, rapidKey: string): Promise<number> {
   })
 
   try {
-    await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results)}, ${CACHE_VERSION})
+    await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results.slice(0, target))}, ${CACHE_VERSION})
               ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()`
   } catch { return 0 }
   return results.length
 }
 
 // ── Refresh one niche using direct Amazon scraping (no API key needed) ───────
-async function refreshNicheScrape(niche: string): Promise<number> {
-  const queries = (NICHE_QUERIES[niche] || [`${niche} bestseller`]).slice(0, 2)
+async function refreshNicheScrape(niche: string, options: RefreshOptions = {}): Promise<number> {
+  const target = Math.max(30, Math.min(CATALOG_NICHE_TARGET, options.target || STANDARD_NICHE_TARGET))
+  const queries = buildCatalogQueries(niche).slice(0, options.queryLimit || 3)
+  const pages = options.pages?.length ? options.pages : [1]
+  const timeoutMs = options.timeoutMs || 6000
   const results: Record<string, unknown>[] = []
   const seen = new Set<string>()
 
   for (const query of queries) {
-    if (results.length >= 30) break
+    if (results.length >= target) break
     try {
-      const scraped = await scrapeAmazonSearch(query)
-      for (const p of scraped) {
-        if (!p.asin || seen.has(p.asin)) continue
-        seen.add(p.asin)
-        if (!p.price || p.price <= 0 || p.price > MAX_COST || !p.title || isRejected(p.title)) continue
-        const { ebayPrice, profit, roi } = calcMetrics(p.price)
-        if (profit < MIN_PROFIT) continue
-        const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
-        results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
-          imageUrl: p.imageUrl, risk, salesVolume: '', _rating: p.rating, _numRatings: p.reviewCount })
+      for (const page of pages) {
+        if (results.length >= target) break
+        const scraped = await scrapeAmazonSearch(query, page, timeoutMs)
+        for (const p of scraped) {
+          if (!p.asin || seen.has(p.asin)) continue
+          seen.add(p.asin)
+          if (!p.price || p.price <= 0 || p.price > MAX_COST || !p.title || isRejected(p.title)) continue
+          const { ebayPrice, profit, roi } = calcMetrics(p.price)
+          if (profit < MIN_PROFIT) continue
+          const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
+          results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
+            imageUrl: p.imageUrl, risk, salesVolume: '', sourceNiche: niche, _rating: p.rating, _numRatings: p.reviewCount })
+          if (results.length >= target) break
+        }
+        if (scraped.length === 0) break
       }
     } catch { continue }
   }
@@ -178,7 +255,7 @@ async function refreshNicheScrape(niche: string): Promise<number> {
     return s(b) - s(a)
   })
   try {
-    await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results)}, ${CACHE_VERSION})
+    await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results.slice(0, target))}, ${CACHE_VERSION})
               ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()`
   } catch { return 0 }
   return results.length
@@ -191,7 +268,7 @@ async function refreshContinuousCache(): Promise<number> {
       FROM product_cache
       WHERE niche <> ${CONTINUOUS_CACHE_KEY}
       ORDER BY cached_at DESC
-      LIMIT 40
+      LIMIT 120
     `
     const seen = new Set<string>()
     const products: Array<Record<string, unknown>> = []

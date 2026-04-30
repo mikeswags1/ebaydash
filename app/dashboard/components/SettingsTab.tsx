@@ -4,8 +4,6 @@ import type { ProductSourceHealth } from '../types'
 export function SettingsTab({
   connected,
   needsReconnect,
-  amazonConnected,
-  amazonSellerId,
   niche,
   nicheSaved,
   onSync,
@@ -19,8 +17,6 @@ export function SettingsTab({
 }: {
   connected: boolean
   needsReconnect: boolean
-  amazonConnected: boolean
-  amazonSellerId: string | null
   niche: string | null
   nicheSaved: boolean
   onSync: () => void
@@ -79,31 +75,6 @@ export function SettingsTab({
                   Try Basic eBay Connect
                 </a>
               </div>
-            </>
-          )}
-        </div>
-
-        <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
-          {amazonConnected ? (
-            <>
-              <StatusIcon tone="success" label="AM" />
-              <div style={{ fontFamily: 'var(--serif)', fontSize: '24px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px' }}>Amazon Connected</div>
-              <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '8px', lineHeight: 1.7 }}>Your Amazon Seller account is linked. ASIN lookups can use your live catalog data.</div>
-              {amazonSellerId ? <div style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--dim)', marginBottom: '24px' }}>Seller ID: {amazonSellerId}</div> : null}
-              <a href="/api/amazon/connect" className="btn btn-ghost" style={{ fontSize: '12px' }}>
-                Reconnect Amazon
-              </a>
-            </>
-          ) : (
-            <>
-              <StatusIcon tone="warning" label="AM" />
-              <div style={{ fontFamily: 'var(--serif)', fontSize: '24px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px' }}>Connect Amazon Seller Account</div>
-              <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '28px', lineHeight: 1.7 }}>
-                Link Amazon so sourcing and fulfillment flows can rely on better product and seller data.
-              </div>
-              <a href="/api/amazon/connect" className="btn btn-solid" style={{ padding: '14px 36px', fontSize: '14px', display: 'inline-flex' }}>
-                Connect Amazon Account
-              </a>
             </>
           )}
         </div>

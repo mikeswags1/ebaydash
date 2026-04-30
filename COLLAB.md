@@ -18,6 +18,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-04-29 | Claude | Removed Amazon Seller connection card from Settings + removed `fetchAmazonCredentials` from bootstrap + removed "Unable to load Amazon connection status" banner | `SettingsTab.tsx`, `page.tsx` |
 | 2026-04-29 | Codex | Added Product Source Health visibility in Settings so source-engine depth, niche cache readiness, Continuous Listing stock, warnings, and top source niches are visible from the dashboard | `app/api/product-source/health/route.ts`, `app/dashboard/components/SettingsTab.tsx`, `app/dashboard/page.tsx`, `app/dashboard/api.ts`, `app/dashboard/types.ts` |
 | 2026-04-29 | Codex | Added the first StackPilot-owned Product Source Engine: scored product-source table, cache seeding, Product Finder fast path, and cron/setup integration | `lib/product-source-engine.ts`, `app/api/scripts/product-finder/route.ts`, `app/api/cron/refresh-products/route.ts`, `app/api/setup-db/route.ts` |
 | 2026-04-29 | Codex | Warmed the live Continuous Listing cache to 160 products and added automatic continuous-cache rebuilds to the product refresh cron so RapidAPI 429s do not leave the queue empty | `app/api/cron/refresh-products/route.ts` |
@@ -41,23 +42,29 @@ _Clear this section when done._
 
 ## ⚠️ Flags for Other Agent
 
+- **Amazon connection**: REMOVED from Settings UI and page.tsx bootstrap. Do NOT add back — it doesn't work.
+- **Codex = primary coder**: `stackpilot-app.vercel.app` always points to Codex's latest deployment. Claude works in a separate Desktop copy and documents changes here for Codex to merge.
 - **Category system**: Now uses eBay Taxonomy REST API (`/commerce/taxonomy/v1/...`) as primary source. Do NOT revert to `GetSuggestedCategories` as primary — it is kept only as a legacy fallback.
-- **Shipping**: Default service is `FedEx2Day` with `ExpeditedService: true`. Do NOT change back to USPSPriority as default.
-- **Image pipeline**: `fetchedAmazon.images` (scraper) is merged into `validatedGallery` — this was a bug fix, do not remove.
-- **Free shipping stamp**: `public/free-shipping-stamp.png` was replaced with new design — do not overwrite.
-- **Brand name**: All UI references are now `StackPilot`. Vercel project is `stackpilot-app`, URL is `stackpilot-app.vercel.app`.
-- **`NEXTAUTH_URL`** in Vercel is set to `https://stackpilot-app.vercel.app` — matches eBay Dev Console.
-- **Vercel access**: Deployment Protection and password protection are off. `stackpilot-app.vercel.app` is aliased to the latest StackPilot deployment.
-- **Product Finder distribution**: Continuous/product finder queues now use per-user seeded ranking, a larger shared Amazon pool, and user performance/listing signals. Do NOT change back to one shared shuffled top-30 queue.
+- **NICHE_FALLBACK_LEAF_CATEGORY**: All `29223` catch-alls should be replaced with real eBay category IDs. Claude fixed this in Desktop copy — Codex should apply same fix: Coins→11116, Clothing→11450, Jewelry→281, Fishing→1492, Sporting→15273, Medical→51148, Garden→2032, Safety→177742, Vintage→20081, Industrial→12576, Car Parts→6030, Cleaning/Packaging/Janitorial→26677, Fitness/Sporting→15273.
+- **Shipping**: Default is `FedEx2Day` + `ExpeditedService: true`. Do NOT change back to USPSPriority.
+- **Image pipeline**: `fetchedAmazon.images` merged into `validatedGallery` — bug fix, do not remove.
+- **Free shipping stamp**: `public/free-shipping-stamp.png` was replaced — do not overwrite.
+- **Brand name**: All UI is `StackPilot`. Vercel project = `stackpilot-app`. URL = `stackpilot-app.vercel.app`.
+- **`NEXTAUTH_URL`** in Vercel = `https://stackpilot-app.vercel.app` — matches eBay Dev Console.
+- **Product Finder distribution**: Per-user seeded ranking, large shared pool, performance signals. Do not revert.
+- **Fee rates**: `constants.ts` = 13.25% (display). `listing-pricing.ts` = 15% (conservative pricing). Split is intentional.
+- **Performance tab**: Consider parallelizing — `fetchOrders`, DB query, and `fetchActiveListingMetrics` can all run in `Promise.all`. Traffic chunks can also be parallel. Orders can be date-filtered to last 90 days. This cuts load time roughly in half.
+- **Overview greeting**: Mike wants "Good morning, [FirstName] 👋" using `session.user.name` split on space. Pass as `userName` prop to OverviewTab.
 
 ---
 
 ## 📋 Queued Tasks from Mike
-_Add tasks here when Mike requests something that neither agent has started yet._
 
 | Priority | Task | Notes |
 |----------|------|-------|
-| — | — | — |
+| 🔴 HIGH | Fix NICHE_FALLBACK_LEAF_CATEGORY in `list-product/route.ts` | All `29223` fallbacks need real category IDs — see flags above for the full mapping |
+| 🟡 MED | Parallelize Performance tab API calls | See flags above for details |
+| 🟡 MED | Add personalized greeting to Overview tab | "Good morning, Mike 👋" — see flags above |
 
 ---
 

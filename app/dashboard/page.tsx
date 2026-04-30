@@ -21,7 +21,6 @@ import {
   disconnectEbay,
   fetchFinancials,
   fetchPerformance,
-  fetchAmazonCredentials,
   fetchEbayCredentials,
   fetchFinderProducts,
   fetchOrderAsinMap,
@@ -44,8 +43,6 @@ import { isRefundedOrder } from './order-status'
 type ConnectionState = {
   ebayConnected: boolean
   ebayNeedsReconnect: boolean
-  amazonConnected: boolean
-  amazonSellerId: string | null
   syncing: boolean
 }
 
@@ -138,8 +135,6 @@ export default function Dashboard() {
   const [connectionState, setConnectionState] = useState<ConnectionState>({
     ebayConnected: false,
     ebayNeedsReconnect: false,
-    amazonConnected: false,
-    amazonSellerId: null,
     syncing: false,
   })
   const [disconnectingEbay, setDisconnectingEbay] = useState(false)
@@ -397,11 +392,10 @@ export default function Dashboard() {
     const results = await Promise.allSettled([
       fetchEbayCredentials(),
       fetchUserNiche(),
-      fetchAmazonCredentials(),
       fetchOrderAsinMap(),
     ])
 
-    const [ebayResult, nicheResult, amazonResult, orderMapResult] = results
+    const [ebayResult, nicheResult, orderMapResult] = results
 
     if (ebayResult.status === 'fulfilled') {
       const nextState = getEbayConnectionState(ebayResult.value.credentials)
@@ -418,16 +412,6 @@ export default function Dashboard() {
       setNicheState((prev) => ({ ...prev, value: nicheResult.value.niche }))
     } else {
       setBanner((prev) => prev ?? { tone: 'error', text: 'Unable to load your saved niche.' })
-    }
-
-    if (amazonResult.status === 'fulfilled') {
-      setConnectionState((prev) => ({
-        ...prev,
-        amazonConnected: !!amazonResult.value.connected,
-        amazonSellerId: amazonResult.value.sellingPartnerId || null,
-      }))
-    } else {
-      setBanner((prev) => prev ?? { tone: 'error', text: 'Unable to load your Amazon connection status.' })
     }
 
     if (orderMapResult.status === 'fulfilled') {
@@ -1050,8 +1034,6 @@ export default function Dashboard() {
             <SettingsTab
               connected={connectionState.ebayConnected}
               needsReconnect={connectionState.ebayNeedsReconnect}
-              amazonConnected={connectionState.amazonConnected}
-              amazonSellerId={connectionState.amazonSellerId}
               niche={nicheState.value}
               nicheSaved={nicheState.saved}
               onSync={() => {

@@ -177,11 +177,13 @@ async function fetchOrders(base: string, accessToken: string) {
   const limit = 100
   let offset = 0
   let total: number | undefined
+  const since = new Date(Date.now() - PERFORMANCE_DAYS * 24 * 60 * 60 * 1000).toISOString()
 
   while (offset < 1000) {
     const url = new URL(`${base}/sell/fulfillment/v1/order`)
     url.searchParams.set('limit', String(limit))
     url.searchParams.set('offset', String(offset))
+    url.searchParams.set('filter', `creationdate:[${since}..]`)
 
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Language': 'en-US' },
@@ -206,10 +208,7 @@ async function fetchActiveListingMetrics(base: string, accessToken: string) {
   const appId = process.env.EBAY_APP_ID || ''
   if (!appId) return { listings: new Map<string, ActiveListingMetric>(), available: false, error: 'Missing eBay App ID.' }
 
-  const listings = new Map<string, ActiveListingMetric>()
-
-  for (let page = 1; page <= 4; page += 1) {
-    const xml = `<?xml version="1.0" encoding="utf-8"?>
+  const buildXml = (page: number) => `<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <RequesterCredentials><eBayAuthToken>${escapeXml(accessToken)}</eBayAuthToken></RequesterCredentials>
   <ErrorLanguage>en_US</ErrorLanguage>
@@ -225,6 +224,7 @@ async function fetchActiveListingMetrics(base: string, accessToken: string) {
   </ActiveList>
 </GetMyeBaySellingRequest>`
 
+  const fetchPage = async (page: number) => {
     const response = await fetch(`${base.replace('/sell', '')}/ws/api.dll`, {
       method: 'POST',
       headers: {
@@ -234,34 +234,45 @@ async function fetchActiveListingMetrics(base: string, accessToken: string) {
         'X-EBAY-API-APP-NAME': appId,
         'Content-Type': 'text/xml',
       },
-      body: xml,
+      body: buildXml(page),
       signal: AbortSignal.timeout(15000),
     }).catch(() => null)
-
-    if (!response) return { listings, available: listings.size > 0, error: 'Unable to load active listing signals.' }
+    if (!response) return { blocks: [] as string[], failed: true, error: 'Unable to load active listing signals.' as string | null }
     const text = await response.text()
     if (!response.ok || /<Ack>Failure<\/Ack>/i.test(text)) {
-      return { listings, available: listings.size > 0, error: tag(text, 'LongMessage') || `Active listing request failed (${response.status}).` }
+      return { blocks: [] as string[], failed: true, error: tag(text, 'LongMessage') || `Active listing request failed (${response.status}).` as string | null }
     }
+    return { blocks: [...text.matchAll(/<Item>([\s\S]*?)<\/Item>/g)].map((m) => m[1]), failed: false, error: null as string | null }
+  }
 
-    const itemBlocks = [...text.matchAll(/<Item>([\s\S]*?)<\/Item>/g)].map((match) => match[1])
-    for (const block of itemBlocks) {
-      const listingId = tag(block, 'ItemID')
-      if (!listingId) continue
-      listings.set(listingId, {
-        listingId,
-        title: tag(block, 'Title'),
-        watchers: Number(tag(block, 'WatchCount')) || 0,
-        views: Number(tag(block, 'HitCount')) || 0,
-        quantity: Number(tag(block, 'Quantity')) || 0,
-        quantitySold: Number(tag(block, 'QuantitySold')) || 0,
-        price: parseMoney(tag(block, 'CurrentPrice') || tag(block, 'StartPrice')),
-        categoryId: tag(block, 'CategoryID'),
-        categoryName: tag(block, 'CategoryName'),
-      })
+  const page1 = await fetchPage(1)
+  if (page1.failed) return { listings: new Map<string, ActiveListingMetric>(), available: false, error: page1.error }
+
+  let allBlocks = page1.blocks
+  if (page1.blocks.length >= 200) {
+    const [p2, p3, p4] = await Promise.all([fetchPage(2), fetchPage(3), fetchPage(4)])
+    for (const page of [p2, p3, p4]) {
+      if (page.failed || page.blocks.length === 0) break
+      allBlocks = [...allBlocks, ...page.blocks]
+      if (page.blocks.length < 200) break
     }
+  }
 
-    if (itemBlocks.length < 200) break
+  const listings = new Map<string, ActiveListingMetric>()
+  for (const block of allBlocks) {
+    const listingId = tag(block, 'ItemID')
+    if (!listingId) continue
+    listings.set(listingId, {
+      listingId,
+      title: tag(block, 'Title'),
+      watchers: Number(tag(block, 'WatchCount')) || 0,
+      views: Number(tag(block, 'HitCount')) || 0,
+      quantity: Number(tag(block, 'Quantity')) || 0,
+      quantitySold: Number(tag(block, 'QuantitySold')) || 0,
+      price: parseMoney(tag(block, 'CurrentPrice') || tag(block, 'StartPrice')),
+      categoryId: tag(block, 'CategoryID'),
+      categoryName: tag(block, 'CategoryName'),
+    })
   }
 
   return { listings, available: true, error: null as string | null }
@@ -277,18 +288,20 @@ async function fetchTrafficMetrics(base: string, accessToken: string, listingIds
   const chunks: string[][] = []
   for (let index = 0; index < listingIds.length; index += 200) chunks.push(listingIds.slice(index, index + 200))
 
-  for (const chunk of chunks) {
+  const chunkResults = await Promise.all(chunks.map(async (chunk) => {
     const url = new URL(`${base}/sell/analytics/v1/traffic_report`)
     url.searchParams.set('dimension', 'LISTING')
     url.searchParams.set('metric', metricKeys.join(','))
     url.searchParams.set('filter', `marketplace_ids:{EBAY_US},date_range:[${getDateKey(start)}..${getDateKey(end)}],listing_ids:{${chunk.join('|')}}`)
     url.searchParams.set('sort', '-TRANSACTION')
-
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Language': 'en-US' },
       signal: AbortSignal.timeout(12000),
     }).catch(() => null)
+    return response
+  }))
 
+  for (const response of chunkResults) {
     if (!response) return { metrics, available: metrics.size > 0, error: 'Unable to load eBay traffic metrics.' }
     if (response.status === 401) throw new EbayReconnectRequiredError()
     if (!response.ok) {
@@ -375,13 +388,14 @@ export async function GET() {
     await ensureListedAsinsFinancialColumns()
 
     const base = credentials.sandboxMode ? 'https://api.sandbox.ebay.com' : 'https://api.ebay.com'
-    const [orders, listingRows] = await Promise.all([
+    const [orders, listingRows, activeListingResult] = await Promise.all([
       fetchOrders(base, credentials.accessToken),
       queryRows<ListingRow>`
         SELECT asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate, niche, category_id, category_name, listed_at, ended_at
         FROM listed_asins
         WHERE user_id = ${session.user.id}
       `,
+      fetchActiveListingMetrics(base, credentials.accessToken),
     ])
 
     const listingById = new Map(listingRows.filter((row) => row.ebay_listing_id).map((row) => [String(row.ebay_listing_id), row] as const))
@@ -393,8 +407,6 @@ export async function GET() {
       current.push(row)
       listingsByTitle.set(normalized, current)
     }
-
-    const activeListingResult = await fetchActiveListingMetrics(base, credentials.accessToken)
     const allListingIds = Array.from(new Set([
       ...listingRows.map((row) => String(row.ebay_listing_id || '')).filter(Boolean),
       ...Array.from(activeListingResult.listings.keys()),

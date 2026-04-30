@@ -61,8 +61,8 @@ export function PerformanceTab({
         <>
           {/* Traffic note */}
           {data.traffic.error ? (
-            <div style={{ margin: '0 44px 20px', padding: '12px 16px', borderRadius: '10px', background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.18)', color: 'var(--sil)', fontSize: '11px', lineHeight: 1.6 }}>
-              ⚠ {data.traffic.error}
+            <div style={{ margin: '0 44px 16px', padding: '8px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(240,246,252,0.08)', color: 'var(--dim)', fontSize: '10px', lineHeight: 1.5 }}>
+              {data.traffic.error}
             </div>
           ) : null}
 
