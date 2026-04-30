@@ -922,28 +922,45 @@ function buildDescription(title: string, features: string[], about: string, imag
 
   const uniqueImages = dedupeImageUrls(images)
   const relevantSpecs = pickRelevantSpecs(specs)
+  const inferredBrand = inferBrandFromProduct(displayTitle, relevantSpecs)
+  const productType = inferTypeFromProduct(displayTitle, null, relevantSpecs)
   const normalizedFeatures = buildOriginalFeatureBullets(displayTitle, relevantSpecs, null)
+  const sourceFeatureBullets = features
+    .map((value) => sanitizeContent(value))
+    .filter((value) => value.length > 12 && !isGenericFeature(value))
+    .slice(0, 8)
   const specBullets = relevantSpecs
     .filter(([key]) => !/brand/i.test(key))
-    .slice(0, 6)
+    .slice(0, 8)
     .map(([key, value]) => `${titleCaseLabel(key)}: ${value}`)
-  const finalBullets = Array.from(new Set([...normalizedFeatures, ...specBullets])).slice(0, 10)
-  const descriptionParagraphs: string[] = []
-  const detailParagraphs = descriptionParagraphs.slice(0, 2)
-  const inferredBrand = inferBrandFromProduct(displayTitle, relevantSpecs)
+  const finalBullets = Array.from(new Set([...sourceFeatureBullets, ...normalizedFeatures, ...specBullets])).slice(0, 12)
   const topSpecsSentence = relevantSpecs
-    .slice(0, 3)
+    .filter(([key]) => !/brand/i.test(key))
+    .slice(0, 4)
     .map(([key, value]) => `${titleCaseLabel(key)} ${value}`)
     .join(', ')
   const featureSummary = finalBullets
-    .slice(0, 3)
+    .slice(0, 4)
     .map((value) => value.replace(/: /g, ' '))
     .join(', ')
+  const sourceParagraphs = toParagraphs(about)
+    .filter((paragraph) => !isGenericFeature(paragraph))
+    .slice(0, 3)
+  const generatedOverview = `${displayTitle}${inferredBrand ? ` by ${inferredBrand}` : ''} is a new ${productType.toLowerCase()} selected for buyers who want dependable everyday use, clear product details, and fast tracked delivery.`
+  const generatedDetails = topSpecsSentence
+    ? `Important product details include ${topSpecsSentence}. ${featureSummary ? `Key highlights include ${featureSummary}.` : 'Review the photos and item specifics for the exact style, fit, and included components.'}`
+    : featureSummary
+      ? `Key highlights include ${featureSummary}. Review the photos and item specifics for the exact style, fit, and included components.`
+      : 'Review the photos, item specifics, and feature summary below for the exact style, fit, and included components.'
+  const descriptionParagraphs = sourceParagraphs.length > 0
+    ? Array.from(new Set([...sourceParagraphs.slice(0, 2), generatedDetails])).slice(0, 3)
+    : [generatedOverview, generatedDetails]
+  const detailParagraphs = Array.from(new Set([...sourceParagraphs.slice(2), generatedDetails])).slice(0, 2)
   const overviewBlock = descriptionParagraphs.length > 0
     ? descriptionParagraphs
       .map((paragraph) => `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">${paragraph}</p>`)
       .join('\n')
-    : `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">${displayTitle}${inferredBrand ? ` from ${inferredBrand}` : ''} is designed for dependable everyday use. ${featureSummary ? `Key highlights include ${featureSummary}.` : topSpecsSentence ? `Important details include ${topSpecsSentence}.` : 'Review the feature summary and specifications below for the most important product details.'}</p>`
+    : `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">${generatedOverview}</p>`
 
   const heroImages = uniqueImages.slice(0, 2)
   const detailImages = uniqueImages.slice(2, 4)
@@ -1000,9 +1017,9 @@ ${detailImages.map(u => `      <img src="${u}" alt="" style="width:210px;max-wid
   <!-- Shipping -->
   ${sectionHeader('Shipping')}
   <ul style="font-size:14px;line-height:1.9;padding:12px 14px 12px 30px;margin:0;color:#333;">
-    <li><strong>Free & Fast Shipping:</strong> Free USPS Priority Mail on every order. Estimated 2&ndash;4 business days.</li>
+    <li><strong>Free 2&ndash;4 Day Shipping:</strong> Every order includes free expedited tracked shipping.</li>
     <li><strong>Handling:</strong> Ships same day or next business day after cleared payment.</li>
-    <li><strong>Tracking:</strong> Tracking number emailed as soon as your order ships.</li>
+    <li><strong>Tracking:</strong> Tracking is uploaded to eBay as soon as your order ships.</li>
   </ul>
 
   <!-- Return Policy -->

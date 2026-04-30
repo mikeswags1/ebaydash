@@ -7,6 +7,21 @@ export const dynamic = 'force-dynamic'
 
 const STAMP_PATH = path.join(process.cwd(), 'public', 'free-shipping-stamp.png')
 
+async function prepareStampOverlay(stampBuffer: Buffer, width: number) {
+  const input = await sharp(stampBuffer)
+    .ensureAlpha()
+    .trim({ threshold: 18 })
+    .resize({ width })
+    .png()
+    .toBuffer()
+  const metadata = await sharp(input).metadata()
+  return {
+    input,
+    width: metadata.width || width,
+    height: metadata.height || width,
+  }
+}
+
 async function buildFallbackImage(title: string, asin: string) {
   const stampBuffer = await fs.readFile(STAMP_PATH)
   const width = 1400
@@ -34,15 +49,15 @@ async function buildFallbackImage(title: string, asin: string) {
       <rect x="410" y="965" width="140" height="20" rx="10" fill="#d7c18a" />
     </svg>
   `
-  const stampWidth = 300
-  const stamp = await sharp(stampBuffer).resize({ width: stampWidth }).png().toBuffer()
+  const stampWidth = 440
+  const stamp = await prepareStampOverlay(stampBuffer, stampWidth)
 
   return sharp(Buffer.from(svg))
     .composite([
       {
-        input: stamp,
-        top: height - stampWidth - 46,
-        left: width - stampWidth - 34,
+        input: stamp.input,
+        top: height - stamp.height - 42,
+        left: width - stamp.width - 32,
       },
     ])
     .jpeg({ quality: 92 })
@@ -95,18 +110,17 @@ export async function GET(req: NextRequest) {
     const width = metadata.width || 1200
     const height = metadata.height || 1200
 
-    const stampWidth = Math.max(190, Math.min(320, Math.round(width * 0.24)))
-    const stamp = await sharp(stampBuffer)
-      .resize({ width: stampWidth })
-      .png()
-      .toBuffer()
+    const stampWidth = Math.max(260, Math.min(460, Math.round(width * 0.32)))
+    const stamp = await prepareStampOverlay(stampBuffer, stampWidth)
+    const insetX = Math.max(14, Math.round(width * 0.03))
+    const insetY = Math.max(14, Math.round(height * 0.03))
 
     const output = await source
       .composite([
         {
-          input: stamp,
-          top: Math.max(14, height - stampWidth - Math.max(16, Math.round(height * 0.04))),
-          left: Math.max(14, width - stampWidth - Math.max(16, Math.round(width * 0.04))),
+          input: stamp.input,
+          top: Math.max(14, height - stamp.height - insetY),
+          left: Math.max(14, width - stamp.width - insetX),
         },
       ])
       .jpeg({ quality: 92 })
