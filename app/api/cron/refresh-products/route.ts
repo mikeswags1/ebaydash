@@ -12,7 +12,7 @@ export const maxDuration = 300
 // ── Shared helpers (mirrored from product-finder) ────────────────────────────
 const MIN_PROFIT = 6
 const MAX_COST = 300
-const CACHE_VERSION = 5
+const CACHE_VERSION = 6
 const CONTINUOUS_CACHE_KEY = '__continuous_listing__'
 const MAX_CONTINUOUS_POOL_SIZE = 600
 const STANDARD_NICHE_TARGET = 90
@@ -42,6 +42,22 @@ function parsePrice(v: unknown): number {
   if (typeof v === 'number') return v
   const n = parseFloat(String(v).replace(/[^0-9.]/g, ''))
   return isNaN(n) ? 0 : n
+}
+
+function repriceCachedProduct(product: Record<string, unknown>, sourceNiche: string) {
+  const amazonPrice = parsePrice(product.amazonPrice)
+  if (amazonPrice <= 0) return null
+  const { ebayPrice, profit, roi } = calcMetrics(amazonPrice)
+  const risk = amazonPrice > 150 ? 'HIGH' : amazonPrice > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
+  return {
+    ...product,
+    amazonPrice,
+    ebayPrice,
+    profit,
+    roi,
+    risk,
+    sourceNiche: product.sourceNiche || sourceNiche,
+  }
 }
 
 function isRejected(title: string) {
@@ -274,7 +290,9 @@ async function refreshContinuousCache(): Promise<number> {
         if (!asin || seen.has(asin)) continue
         if (!title || isRejected(title)) continue
         seen.add(asin)
-        products.push({ ...product, asin, sourceNiche: product.sourceNiche || row.niche })
+        const repriced = repriceCachedProduct({ ...product, asin }, row.niche)
+        if (!repriced) continue
+        products.push(repriced)
         if (products.length >= MAX_CONTINUOUS_POOL_SIZE) break
       }
       if (products.length >= MAX_CONTINUOUS_POOL_SIZE) break

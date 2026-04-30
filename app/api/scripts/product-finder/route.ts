@@ -14,7 +14,7 @@ export const maxDuration = 60
 
 const MAX_COST   = 300
 const CACHE_TTL  = 23 * 60 * 60 * 1000 // 23 hours — refresh once per day
-const CACHE_VERSION = 5
+const CACHE_VERSION = 6
 const TARGET_STOCK = 30
 const MAX_POOL_SIZE = 160
 const CONTINUOUS_CACHE_KEY = '__continuous_listing__'
@@ -143,6 +143,18 @@ function calcMetrics(amazonPrice: number) {
   return { ebayPrice, fees, profit, roi, margin }
 }
 
+function repriceProduct(product: Product): Product {
+  const amazonPrice = parsePrice(product.amazonPrice)
+  if (amazonPrice <= 0) return product
+  const { ebayPrice, profit, roi } = calcMetrics(amazonPrice)
+  const risk = product.risk === 'HIGH' || amazonPrice > 150
+    ? 'HIGH'
+    : amazonPrice > 60 || roi < 45 || product.risk === 'MEDIUM'
+      ? 'MEDIUM'
+      : 'LOW'
+  return { ...product, amazonPrice, ebayPrice, profit, roi, risk }
+}
+
 function isRejected(title: string) {
   return hasBlockedListingPolicyFlag(getListingPolicyFlags({ title }))
 }
@@ -249,7 +261,7 @@ function rankProducts(
   const spreadNiches = typeof options === 'boolean' ? false : Boolean(options.spreadNiches)
   const jitterSpread = randomize ? (spreadNiches ? 0.72 : 0.28) : 0
 
-  const ranked = dedupeProducts(products)
+  const ranked = dedupeProducts(products.map(repriceProduct))
     .map((product) => {
       const qualityScore = getProductScore(product)
       const jitter = randomize ? seededRatio(`${seed}:${product.asin}:${product.sourceNiche || ''}`) : 0.5
@@ -821,8 +833,9 @@ export async function GET(req: NextRequest) {
   const saveResultsToCache = async (productsToSave = results) => {
     if (productsToSave.length === 0) return
     try {
+      const repriced = productsToSave.map(repriceProduct)
       await sql`
-        INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(rankProducts(productsToSave, false))}, ${CACHE_VERSION})
+        INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(rankProducts(repriced, false))}, ${CACHE_VERSION})
         ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()
       `
     } catch { /* non-fatal */ }
@@ -836,7 +849,7 @@ export async function GET(req: NextRequest) {
     }))).catch(() => 0)
 
   const scheduleCacheSave = (productsToSave = results) => {
-    const snapshot = rankProducts([...productsToSave], false)
+    const snapshot = rankProducts([...productsToSave].map(repriceProduct), false)
     after(async () => {
       await saveResultsToCache(snapshot)
       await ingestProductsToSourceEngine(snapshot)

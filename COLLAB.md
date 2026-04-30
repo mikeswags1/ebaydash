@@ -18,6 +18,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-04-30 | Codex | Fixed stale product-cache pricing so Product Finder/Continuous Listing reprices cached rows on read/save, source-engine rows recalculate on read, and cache version bumped to flush old ROI values | `app/api/scripts/product-finder/route.ts`, `app/api/cron/refresh-products/route.ts`, `lib/product-source-engine.ts` |
 | 2026-04-30 | Codex | Rebuilt pricing into a shared dynamic engine with cost-band ROI targets, eBay fee/fixed-fee/buffer math, psychological endings, competitor-aware publish pricing, and unified dashboard/source/cron/finder calculations | `lib/listing-pricing.ts`, `app/api/ebay/list-product/route.ts`, `app/api/cron/refresh-products/route.ts`, `app/api/scripts/product-finder/route.ts`, `lib/product-source-engine.ts`, `app/dashboard/utils.ts`, `app/dashboard/constants.ts` |
 | 2026-04-30 | Codex | Added shared listing policy guard for Product Finder, Continuous Listing, source-engine intake, and final eBay publish; added deep catalog refresh mode for larger product-source warmups | `lib/listing-policy.ts`, `app/api/scripts/product-finder/route.ts`, `app/api/cron/refresh-products/route.ts`, `lib/product-source-engine.ts`, `app/api/ebay/list-product/route.ts` |
 | 2026-04-29 | Claude | Removed Amazon Seller connection card from Settings + removed `fetchAmazonCredentials` from bootstrap + removed "Unable to load Amazon connection status" banner | `SettingsTab.tsx`, `page.tsx` |

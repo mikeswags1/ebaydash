@@ -144,25 +144,29 @@ function normalizeProduct(input: SourceProductInput): (SourceEngineProduct & { s
 
 function rowToProduct(row: ProductSourceRow): SourceEngineProduct {
   const raw = row.raw || {}
-  return {
+  const amazonPrice = parseNumber(row.amazon_price)
+  const ebayPrice = getRecommendedEbayPrice(amazonPrice, EBAY_DEFAULT_FEE_RATE)
+  const metrics = getListingMetrics(amazonPrice, ebayPrice, EBAY_DEFAULT_FEE_RATE)
+  const product: SourceEngineProduct = {
     asin: row.asin,
     title: row.title,
-    amazonPrice: parseNumber(row.amazon_price),
-    ebayPrice: parseNumber(row.ebay_price),
-    profit: parseNumber(row.profit),
-    roi: parseNumber(row.roi),
+    amazonPrice,
+    ebayPrice,
+    profit: metrics.profit,
+    roi: metrics.roi,
     imageUrl: row.image_url || undefined,
-    risk: row.risk || 'MEDIUM',
+    risk: getRisk(amazonPrice, metrics.roi),
     salesVolume: row.sales_volume || undefined,
     images: Array.isArray(raw.images) ? raw.images as string[] : undefined,
     features: Array.isArray(raw.features) ? raw.features as string[] : undefined,
     description: typeof raw.description === 'string' ? raw.description : undefined,
     specs: Array.isArray(raw.specs) ? raw.specs as Array<[string, string]> : undefined,
     sourceNiche: row.source_niche || undefined,
-    qualityScore: parseNumber(row.total_score),
     _rating: parseNumber(row.rating),
     _numRatings: Math.round(parseNumber(row.review_count)),
   }
+  product.qualityScore = scoreProduct(product)
+  return product
 }
 
 export async function ensureProductSourceTables() {
