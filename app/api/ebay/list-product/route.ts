@@ -959,26 +959,19 @@ function buildDescription(title: string, features: string[], about: string, imag
     .slice(0, 4)
     .map((value) => value.replace(/: /g, ' '))
     .join(', ')
-  const MARKETING_PATTERN = /(no\.?\s*1\s+amazon|licensed distributor|millions of customers|featured in|star tribune|msn news|must-have|over \d+ years|travel sentry|unconditional|after sales|selected as|smart choice|hassle-free trip|award|#\d+\s+(choice|pick|best))/i
-  const sourceParagraphs = toParagraphs(decodeAllEntities(about))
-    .filter((paragraph) => !isGenericFeature(paragraph))
-    .filter((paragraph) => !MARKETING_PATTERN.test(paragraph))
-    .slice(0, 3)
-  const generatedOverview = `${displayTitle}${inferredBrand ? ` by ${inferredBrand}` : ''} is a new ${productType.toLowerCase()} selected for buyers who want dependable everyday use, clear product details, and fast tracked delivery.`
+  const generatedOverview = `${displayTitle}${inferredBrand ? ` by ${inferredBrand}` : ''} is a ${productType.toLowerCase()} built for dependable everyday use. Every order includes free 2–4 day tracked shipping and a 30-day return guarantee.`
   const generatedDetails = topSpecsSentence
-    ? `Important product details include ${topSpecsSentence}. ${featureSummary ? `Key highlights include ${featureSummary}.` : 'Review the photos and item specifics for the exact style, fit, and included components.'}`
-    : featureSummary
-      ? `Key highlights include ${featureSummary}. Review the photos and item specifics for the exact style, fit, and included components.`
-      : 'Review the photos, item specifics, and feature summary below for the exact style, fit, and included components.'
-  const descriptionParagraphs = sourceParagraphs.length > 0
-    ? Array.from(new Set([...sourceParagraphs.slice(0, 2), generatedDetails])).slice(0, 3)
-    : [generatedOverview, generatedDetails]
-  const detailParagraphs = Array.from(new Set([...sourceParagraphs.slice(2), generatedDetails])).slice(0, 2)
-  const overviewBlock = descriptionParagraphs.length > 0
-    ? descriptionParagraphs
-      .map((paragraph) => `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">${paragraph}</p>`)
-      .join('\n')
-    : `<p style="font-size:14px;line-height:1.8;padding:0 14px 12px;margin:0;color:#333;overflow-wrap:anywhere;">${generatedOverview}</p>`
+    ? `Key specs: ${topSpecsSentence}. Review the photos and item specifics for the exact style, fit, and included components.`
+    : 'Review the photos and item specifics below for the exact style, fit, and included components.'
+
+  // Overview always uses clean generated content — no Amazon text dump
+  const overviewBlock = [generatedOverview, generatedDetails]
+    .map((p) => `<p style="font-size:15px;line-height:1.85;padding:14px 18px 0;margin:0 0 12px;color:#333;">${p}</p>`)
+    .join('\n')
+
+  // Bold ALL-CAPS feature headers before the dash: "TITLE – description" → "<strong>TITLE</strong> – description"
+  const formatBullet = (text: string) =>
+    text.replace(/^([A-Z][A-Z0-9 &,'().]{3,}?)\s*[–—-]\s*/, '<strong>$1</strong> – ')
 
   const heroImages = uniqueImages.slice(0, 2)
   const detailImages = uniqueImages.slice(2, 4)
@@ -1020,11 +1013,11 @@ ${detailImages.map(u => `      <img src="${u}" alt="" style="width:210px;max-wid
 
   <!-- Features -->
   ${sectionHeader('Product Features')}
-  ${finalBullets.length > 0 ? `<ul style="font-size:14px;font-weight:500;line-height:1.8;padding:14px 14px 14px 30px;margin:0;color:#111;overflow-wrap:anywhere;">
-    ${finalBullets.map(f => `<li style="margin-bottom:8px;">${f}</li>`).join('\n')}
-  </ul>` : (detailParagraphs.length > 0
-    ? `<div style="padding:12px 14px 16px;color:#333;font-size:14px;line-height:1.8;overflow-wrap:anywhere;">${detailParagraphs.map((paragraph) => `<p style="margin:0 0 10px;">${paragraph}</p>`).join('')}</div>`
-    : `<p style="font-size:14px;line-height:1.8;padding:12px 14px;margin:0;color:#333;overflow-wrap:anywhere;">Key product details are included in the images and item specifics for this listing.</p>`)}
+  ${finalBullets.length > 0
+    ? `<ul style="font-size:14px;line-height:1.75;padding:16px 18px 16px 36px;margin:0;color:#222;overflow-wrap:anywhere;">
+    ${finalBullets.map(f => `<li style="margin-bottom:14px;">${formatBullet(f)}</li>`).join('\n')}
+  </ul>`
+    : `<p style="font-size:14px;line-height:1.8;padding:14px 18px;margin:0;color:#333;">Key product details are included in the images and item specifics for this listing.</p>`}
 
   <!-- Specs (if available) -->
   ${specRows ? `${sectionHeader('Specifications')}<table style="width:100%;border-collapse:collapse;margin-top:2px;"><tbody>${specRows}</tbody></table>` : ''}
