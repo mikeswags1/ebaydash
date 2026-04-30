@@ -191,7 +191,7 @@ function chooseBestDescription(...values: Array<string | undefined>) {
 }
 
 function sanitizeContent(text: string): string {
-  return text
+  return decodeAllEntities(text)
     .replace(/\b(amazon\.?com?|amazon prime|prime\s+shipping|prime\s+eligible|prime\s+member|fulfilled\s+by\s+amazon|ships\s+from\s+amazon|sold\s+by\s+amazon|amazon\s+basics|amazon\s+brand|buy\s+on\s+amazon|visit\s+the\s+\S+\s+store|fba)\b/gi, '')
     .replace(/\b(amazon[''']?s?\s+choice|overall\s+pick|#?\s*1\s+best\s+seller|best\s+seller|limited\s+time\s+deal|climate\s+pledge\s+friendly|small\s+business|sponsored|top\s+brand|highly\s+rated|deal\s+of\s+the\s+day)\b/gi, '')
     .replace(/<[^>]*>/g, ' ')
@@ -253,14 +253,32 @@ function dedupeSpecEntries(values: Array<[string, string]>) {
   return rows
 }
 
-function sanitizeDescriptionText(input: string) {
+function decodeAllEntities(input: string): string {
   return input
+    .replace(/&#0*34;?/g, '"')
+    .replace(/&#0*39;?/g, "'")
+    .replace(/&#0*38;?/g, '&')
+    .replace(/&#0*60;?/g, '<')
+    .replace(/&#0*62;?/g, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#\d+;/g, ' ')   // strip any remaining numeric entities
+    .replace(/&[a-z]+;/gi, ' ') // strip any remaining named entities
+}
+
+function sanitizeDescriptionText(input: string) {
+  return decodeAllEntities(input)
     .split(/\n+/)
     .map((line) => sanitizeContent(line))
     .filter((line) => line.length > 35)
     .filter((line) => !/(data-csa|aplus|widget|module|desktop|wrapper|padding|margin|background-image|function|position relative|display table)/i.test(line))
     .filter((line) => !/(click to play|watch the video|how to add|visit the .* store|learn more|amazon.?s choice|prime|customer review)/i.test(line))
     .filter((line) => !/[{}]/.test(line))
+    // Strip lines that are mostly Amazon marketing/promotional content
+    .filter((line) => !/(no\.?\s*1\s+amazon|licensed distributor|millions of customers|featured in|star tribune|msn news|must-have travel|over \d+ years|travel sentry|unconditional.*support|after sales|selected as)/i.test(line))
     .join(' ')
     .trim()
 }
@@ -915,11 +933,8 @@ async function uploadToEPS(externalUrl: string, token: string, appId: string): P
 // ── Description builder ──────────────────────────────────────────────────────
 function buildDescription(title: string, features: string[], about: string, images: string[], specs: Array<[string, string]> = []): string {
 
-  // Decode HTML entities in title so &quot; / &amp; etc. render correctly
-  const displayTitle = title
-    .replace(/&quot;/g, '"').replace(/&#34;/g, '"')
-    .replace(/&amp;/g, '&').replace(/&#38;/g, '&')
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  // Decode all HTML entities so &#039; → ' and &#034; → " etc. render correctly
+  const displayTitle = decodeAllEntities(title)
 
   const uniqueImages = dedupeImageUrls(images)
   const relevantSpecs = pickRelevantSpecs(specs)
@@ -944,8 +959,10 @@ function buildDescription(title: string, features: string[], about: string, imag
     .slice(0, 4)
     .map((value) => value.replace(/: /g, ' '))
     .join(', ')
-  const sourceParagraphs = toParagraphs(about)
+  const MARKETING_PATTERN = /(no\.?\s*1\s+amazon|licensed distributor|millions of customers|featured in|star tribune|msn news|must-have|over \d+ years|travel sentry|unconditional|after sales|selected as|smart choice|hassle-free trip|award|#\d+\s+(choice|pick|best))/i
+  const sourceParagraphs = toParagraphs(decodeAllEntities(about))
     .filter((paragraph) => !isGenericFeature(paragraph))
+    .filter((paragraph) => !MARKETING_PATTERN.test(paragraph))
     .slice(0, 3)
   const generatedOverview = `${displayTitle}${inferredBrand ? ` by ${inferredBrand}` : ''} is a new ${productType.toLowerCase()} selected for buyers who want dependable everyday use, clear product details, and fast tracked delivery.`
   const generatedDetails = topSpecsSentence
