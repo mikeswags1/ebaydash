@@ -372,7 +372,7 @@ export async function GET(req: NextRequest) {
   const rollingRefresh = req.nextUrl.searchParams.get('rolling') === '1'
   const sourceOnly = req.nextUrl.searchParams.get('sourceOnly') === '1'
   const catalogRefresh = req.nextUrl.searchParams.get('catalog') === '1' || req.nextUrl.searchParams.get('deep') === '1'
-  const fullRefresh = req.nextUrl.searchParams.get('full') === '1' || !rollingRefresh
+  const fullRefresh = req.nextUrl.searchParams.get('full') === '1' || (!rollingRefresh && !catalogRefresh)
   const requestedBatchSize = Number(req.nextUrl.searchParams.get('batch') || '')
   const requestedStartIndex = Number(req.nextUrl.searchParams.get('start') || '')
   const now = new Date()
@@ -385,7 +385,7 @@ export async function GET(req: NextRequest) {
   }
 
   // 1. Sync eBay listing statuses for all users
-  const shouldSyncUsers = fullRefresh || (now.getUTCMinutes() === 0 && now.getUTCHours() % 4 === 0)
+  const shouldSyncUsers = !catalogRefresh && (fullRefresh || (now.getUTCMinutes() === 0 && now.getUTCHours() % 4 === 0))
   if (shouldSyncUsers) {
     try {
       const users = await queryRows<{ user_id: number }>`SELECT user_id FROM ebay_credentials`
@@ -413,16 +413,16 @@ export async function GET(req: NextRequest) {
     : fullRefresh && !catalogRefresh ? 0 : (rotation * batchSize) % allNiches.length
   const niches = Array.from({ length: Math.min(batchSize, allNiches.length) }, (_, index) => allNiches[(startIndex + index) % allNiches.length])
   const rapidOptions = catalogRefresh
-    ? { target: targetProducts, queryLimit: 12, pages: [1, 2], timeoutMs: 6500 }
+    ? { target: targetProducts, queryLimit: 6, pages: [1, 2], timeoutMs: 4500 }
     : { target: targetProducts, queryLimit: 4, pages: [1], timeoutMs: 8000 }
   const scrapeOptions = catalogRefresh
-    ? { target: targetProducts, queryLimit: 6, pages: [1, 2], timeoutMs: 4500 }
+    ? { target: targetProducts, queryLimit: 4, pages: [1, 2], timeoutMs: 3500 }
     : { target: targetProducts, queryLimit: 3, pages: [1], timeoutMs: 6000 }
   let refreshed = 0, quotaHit = false
 
   if (rapidKey) {
     for (const niche of niches) {
-      if (quotaHit || Date.now() - startedAt > 200_000) break
+      if (quotaHit || Date.now() - startedAt > (catalogRefresh ? 165_000 : 200_000)) break
       const count = await refreshNiche(niche, rapidKey, rapidOptions)
       if (count === -1) { quotaHit = true; break }
       if (count > 0) refreshed++
@@ -435,7 +435,7 @@ export async function GET(req: NextRequest) {
   // If quota hit, fill remaining niches via direct Amazon scrape
   if (quotaHit) {
     for (const niche of niches) {
-      if (Date.now() - startedAt > 270_000) break
+      if (Date.now() - startedAt > (catalogRefresh ? 235_000 : 270_000)) break
       try {
         const count = await refreshNicheScrape(niche, scrapeOptions)
         if (count > 0) refreshed++
