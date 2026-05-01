@@ -18,6 +18,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-01 | Claude | **Fix bulk listing (List All / Continuous)**: Root cause was catalog-crawl products entering the pool with only `imageUrl` (no `images[]`, no features, no description). Three-part fix: (1) `respondWithProducts` in product-finder now does a single batch `SELECT FROM amazon_product_cache WHERE asin = ANY(...)` before returning products — fills in full images/features/description for sparse products at zero extra API cost. (2) `list-product/route.ts` now supplements sparse `validatedAmazon` data from `amazon_product_cache` in BOTH trusted and non-trusted mode; also blocks listings where Amazon validation returned fallback-only data (1 image, no features) to prevent bad listings from going live. (3) Bulk listing concurrency lowered 5→3 to reduce simultaneous Amazon API pressure. `loadCachedAmazonProduct` exported from `lib/amazon-product.ts`. | `lib/amazon-product.ts`, `app/api/scripts/product-finder/route.ts`, `app/api/ebay/list-product/route.ts`, `app/dashboard/page.tsx` |
 | 2026-05-01 | Claude | Fix wrong gallery images permanently: removed `fetchedAmazon.images` from gallery entirely. Only `validatedAmazon.images` + `imageUrl` are used. `fetchedAmazon` is still fetched for features/description/specs but NEVER for images. | `app/api/ebay/list-product/route.ts` |
 | 2026-05-01 | Claude | Re-validate at publish for sparse images: if product has <2 images, skip trusted mode and do full Amazon re-validation to get correct ASIN, images, and price. | `app/dashboard/page.tsx` |
 | 2026-05-01 | Claude | Fix niche cursor: `Number('')` was evaluating to 0 causing cursor to always pick niches 0,1,2. Now uses `hasExplicitStart` flag so cursor logic only bypassed when `?start=N` is explicitly passed. | `app/api/cron/refresh-products/route.ts` |
@@ -65,6 +66,10 @@ _Clear this section when done._
 ---
 
 ## ⚠️ Flags for Other Agent
+
+- **Bulk listing fix (2026-05-01)**: `respondWithProducts` in `product-finder/route.ts` is now async — it does a batch `amazon_product_cache` lookup before returning. All `return respondWithProducts(...)` callers still work fine (async return in async handler). `loadCachedAmazonProduct` is now exported from `lib/amazon-product.ts`. `list-product/route.ts` uses it to supplement `validatedAmazon` after both the trusted and non-trusted branches. Do NOT revert these — they fix 1-image, wrong-ASIN, and weak-description bulk listing bugs.
+- **Fallback listing block**: Non-trusted listings with `source === 'fallback'` AND `images.length <= 1` are now blocked with `ASIN_VALIDATION_FAILED`. This prevents bad listings from going live when Amazon temporarily fails. Users will see an error for those products and should reload their queue.
+- **Bulk concurrency**: `listProductsInBatches` is called with `concurrency: 3` (was default 5) in both `handleListAll` and `handleContinuousListAll`. This prevents 5×3=15 simultaneous Amazon scrape calls per batch which caused rate limiting. Do NOT raise back to 5.
 
 - **Gallery images**: NEVER use `fetchedAmazon.images`. It contaminates listings with images from other products. Only `validatedAmazon.images` + provided `imageUrl` are used. Do NOT revert.
 - **Niche cursor**: Stored in `product_cache` as `niche = '__cursor__'`. Advances by 3 each catalog crawl run. `requestedStartIndex` defaults to NaN (not 0) so cursor is used when `?start=` is absent.

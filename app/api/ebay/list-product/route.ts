@@ -5,7 +5,7 @@ import { apiError, apiOk } from '@/lib/api-response'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { sql } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
-import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
+import { fetchAmazonProductByAsin, loadCachedAmazonProduct } from '@/lib/amazon-product'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getPricingRecommendation, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 import { getListingPolicyBlockReason, getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
@@ -1302,6 +1302,44 @@ export async function POST(req: NextRequest) {
       })
     }
     validatedAmazon = fetched
+  }
+
+  // Supplement sparse data from amazon_product_cache (DB-only, no extra API calls).
+  // Catalog-crawl products enter the pool with only imageUrl and no images array,
+  // features, or description. If the ASIN was ever validated before, the cache has the full set.
+  const isDataSparse =
+    validatedAmazon.images.length < 3 ||
+    !validatedAmazon.description ||
+    validatedAmazon.features.length === 0
+
+  if (isDataSparse) {
+    try {
+      const cached = await loadCachedAmazonProduct(asin)
+      if (cached) {
+        if (cached.images.length > validatedAmazon.images.length) {
+          validatedAmazon = { ...validatedAmazon, images: cached.images, imageUrl: cached.imageUrl || validatedAmazon.imageUrl }
+        }
+        if (!validatedAmazon.description && cached.description) {
+          validatedAmazon = { ...validatedAmazon, description: cached.description }
+        }
+        if (validatedAmazon.features.length === 0 && cached.features.length > 0) {
+          validatedAmazon = { ...validatedAmazon, features: cached.features }
+        }
+        if (validatedAmazon.specs.length === 0 && cached.specs.length > 0) {
+          validatedAmazon = { ...validatedAmazon, specs: cached.specs }
+        }
+      }
+    } catch { /* cache lookup is best-effort — never block on failure */ }
+  }
+
+  // In non-trusted mode: after all supplementation, if we still only have fallback-quality
+  // data (1 image, no features), block the listing. This prevents publishing a listing with
+  // the wrong product photo and empty description — which is worse than not listing at all.
+  if (!trusted && validatedAmazon.source === 'fallback' && validatedAmazon.images.length <= 1) {
+    return apiError(
+      `Cannot validate this product on Amazon — the ASIN may be stale or Amazon is temporarily unavailable. Remove it from your queue and reload to get fresh products.`,
+      { status: 400, code: 'ASIN_VALIDATION_FAILED' }
+    )
   }
 
   const listingTitle = chooseBestListingTitle([validatedAmazon.title, title]) || title

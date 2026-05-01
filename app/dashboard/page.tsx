@@ -740,6 +740,7 @@ export default function Dashboard() {
       onProgress: (progress) => {
         setFinderState((prev) => ({ ...prev, listAllProgress: progress }))
       },
+      concurrency: 3,
     })
 
     if (result.reconnectRequired) {
@@ -784,6 +785,7 @@ export default function Dashboard() {
       onProgress: (progress) => {
         setContinuousFinderState((prev) => ({ ...prev, listAllProgress: progress }))
       },
+      concurrency: 3,
     })
 
     if (result.reconnectRequired) {

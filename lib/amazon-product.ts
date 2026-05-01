@@ -274,7 +274,7 @@ async function ensureAmazonProductCacheTable() {
   await sql`ALTER TABLE amazon_product_cache ADD COLUMN IF NOT EXISTS brand TEXT`.catch(() => {})
 }
 
-async function loadCachedAmazonProduct(asin: string): Promise<ValidatedAmazonProduct | null> {
+export async function loadCachedAmazonProduct(asin: string): Promise<ValidatedAmazonProduct | null> {
   await ensureAmazonProductCacheTable()
   const rows = await queryRows<CachedAmazonProduct>`
     SELECT asin, title, amazon_price, images, primary_image, features, description, specs, brand, available

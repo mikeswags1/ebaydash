@@ -638,8 +638,64 @@ export async function GET(req: NextRequest) {
       spreadNiches: continuousMode,
     })
 
-  const respondWithProducts = (products: Product[], source: string) => {
-    const ranked = getAvailableProducts(products)
+  const respondWithProducts = async (products: Product[], source: string) => {
+    let ranked = getAvailableProducts(products)
+
+    // Supplement products that have sparse images/content with data from amazon_product_cache.
+    // Catalog-crawl products only store imageUrl (1 image). If this ASIN was ever validated
+    // by the niche finder, the full images/features/description are already in the cache.
+    // A single batch DB lookup here — no new API calls — fixes bulk listing image/description issues.
+    const sparseAsins = ranked
+      .filter(p => (p.images?.length ?? 0) < 2)
+      .slice(0, targetCount)
+      .map(p => p.asin)
+
+    if (sparseAsins.length > 0) {
+      try {
+        const cachedRows = await queryRows<{
+          asin: string
+          primary_image: string | null
+          images: string[]
+          features: string[]
+          description: string | null
+          specs: Array<[string, string]>
+        }>`
+          SELECT asin, primary_image, images, features, description, specs
+          FROM amazon_product_cache
+          WHERE asin = ANY(${sparseAsins})
+        `
+        if (cachedRows.length > 0) {
+          const cacheMap = new Map(cachedRows.map(r => [r.asin, r]))
+          ranked = ranked.map(product => {
+            if ((product.images?.length ?? 0) >= 2) return product
+            const cached = cacheMap.get(product.asin)
+            if (!cached) return product
+
+            const mergedImages = [
+              cached.primary_image,
+              ...(Array.isArray(cached.images) ? cached.images : []),
+            ].filter((u): u is string => typeof u === 'string' && u.startsWith('http'))
+            const deduped = Array.from(new Set(mergedImages))
+            if (deduped.length < 2) return product  // still sparse — no improvement
+
+            return {
+              ...product,
+              images: deduped,
+              imageUrl: deduped[0] || product.imageUrl,
+              features: (product.features?.length ?? 0) > 0
+                ? product.features
+                : (Array.isArray(cached.features) ? cached.features : product.features),
+              description: product.description ||
+                (typeof cached.description === 'string' ? cached.description : product.description),
+              specs: (product.specs?.length ?? 0) > 0
+                ? product.specs
+                : (Array.isArray(cached.specs) ? cached.specs : product.specs),
+            }
+          })
+        }
+      } catch { /* best-effort — never block on cache lookup failure */ }
+    }
+
     console.info('[product-finder]', JSON.stringify({
       mode: continuousMode ? 'continuous' : 'niche',
       source,
