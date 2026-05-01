@@ -1386,9 +1386,15 @@ export async function POST(req: NextRequest) {
     .replace(/\s*[-|,]\s*(Pack of|Pack|Count|Piece|Pcs|Units?|Set of)\s*\d+/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim()
-  const rawSafeTitle = cleanTitle.length <= 80
-    ? cleanTitle
-    : cleanTitle.slice(0, 80).replace(/\s+\S*$/, '').trim()
+  const rawSafeTitle = (() => {
+    if (cleanTitle.length <= 80) return cleanTitle
+    // Remove last partial word after slicing to 80 chars
+    let t = cleanTitle.slice(0, 80).replace(/\s+\S*$/, '').trim()
+    // Also strip trailing prepositions/connectors that leave a dangling incomplete phrase
+    // e.g. "...Sleep Mask with Zero" → "...Sleep Mask"
+    t = t.replace(/\s+(?:with|for|in|to|of|and|or|a|an|the|by|at|from|as|into|zero|one|two|three|four|five|&|\+)$/i, '').trim()
+    return t
+  })()
 
   // ── SEO Title Expander ───────────────────────────────────────────────────────
   // eBay's Cassini algorithm ranks by keyword match. Fill the 80-char budget
@@ -1489,11 +1495,30 @@ export async function POST(req: NextRequest) {
   // Trusted (bulk) mode: always recalculate from the current pricing engine — the cached
   // ebayPrice may have been built with old pricing logic or a stale Amazon cost.
   // Non-trusted (single): respect manual price edits if the user changed it from the auto-price.
-  const finalEbayPrice = trusted
+  let finalEbayPrice = trusted
     ? pricingRecommendation.price
     : priceLooksAutomatic
       ? pricingRecommendation.price
       : Math.max(parsedEbayPrice, pricingRecommendation.minimumViablePrice)
+
+  // Market sanity check for trusted high-price listings.
+  // When a cached Amazon cost is stale/wrong (e.g. $50 cached when actual is $9.99),
+  // the engine correctly prices to ~$68 based on that wrong cost — and it looks valid.
+  // For any trusted listing above $40, compare against live eBay competitor prices.
+  // If our price is >1.4x the competitor median, cap it to market level.
+  if (trusted && finalEbayPrice > 40) {
+    try {
+      const marketCheck = await getComparableEbayPrices(safeTitle, credentials.accessToken, listingAmazonPrice)
+      if (marketCheck.count >= 3) {
+        const sorted = [...marketCheck.prices].sort((a, b) => a - b)
+        const median = sorted[Math.floor(sorted.length / 2)]
+        if (median > 0 && finalEbayPrice > median * 1.4) {
+          // Significantly above market — use market-anchored price, never below minimum viable
+          finalEbayPrice = Number(Math.max(pricingRecommendation.minimumViablePrice, median * 1.1).toFixed(2))
+        }
+      }
+    } catch { /* market check is best-effort — never block a listing on failure */ }
+  }
 
   // Hard backstop — catches stale cache where Amazon raised their price after queuing
   const priceCheck = getListingMetrics(listingAmazonPrice, finalEbayPrice, EBAY_DEFAULT_FEE_RATE)
