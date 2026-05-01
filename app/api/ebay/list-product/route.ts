@@ -1328,8 +1328,21 @@ export async function POST(req: NextRequest) {
         if (validatedAmazon.specs.length === 0 && cached.specs.length > 0) {
           validatedAmazon = { ...validatedAmazon, specs: cached.specs }
         }
+        // If cache explicitly confirms the product is unavailable with no price, trust it
+        if (!cached.available && cached.amazonPrice === 0) {
+          validatedAmazon = { ...validatedAmazon, available: false }
+        }
       }
     } catch { /* cache lookup is best-effort — never block on failure */ }
+  }
+
+  // Block listings where Amazon shows the product as unavailable (out of stock, no price).
+  // Applies to both live-validated (non-trusted) and cache-supplemented (trusted) paths.
+  if (!validatedAmazon.available) {
+    return apiError(
+      `This product is currently unavailable on Amazon and cannot be listed. Remove it from your queue and reload to get fresh products.`,
+      { status: 400, code: 'PRODUCT_UNAVAILABLE' }
+    )
   }
 
   // In non-trusted mode: after all supplementation, if we still only have fallback-quality

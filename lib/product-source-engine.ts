@@ -391,6 +391,13 @@ export async function refreshProductSourcePrices(options: { limit?: number; stal
             const json = await res.json()
             const data = json?.data ?? json
             if (!String(data?.message || '').match(/limit|quota|exceed/)) {
+              const availability = String(data.product_availability || '').toLowerCase()
+              if (availability === 'currently unavailable') {
+                // Product is explicitly unavailable — deactivate from pool immediately
+                await sql`UPDATE product_source_items SET active = FALSE, last_seen_at = NOW() WHERE asin = ${row.asin}`.catch(() => {})
+                failed += 1
+                return
+              }
               const raw = data.product_price || data.price
               const p = typeof raw === 'number' ? raw : parseFloat(String(raw || '').replace(/[^0-9.]/g, ''))
               if (p > 0) freshPrice = p

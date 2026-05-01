@@ -723,6 +723,84 @@ async function syncUserListings(userId: number) {
   }
 }
 
+// ── End eBay listings where Amazon confirms product unavailable ───────────────
+// Runs daily alongside syncUserListings. Checks amazon_product_cache for listings
+// where available = FALSE and price = 0 (confirmed out-of-stock), then calls EndItem.
+async function syncUnavailableListings(): Promise<{ ended: number; failed: number; skipped: number }> {
+  const unavailableRows = await queryRows<{
+    user_id: number
+    ebay_listing_id: string
+    asin: string
+  }>`
+    SELECT la.user_id, la.ebay_listing_id, la.asin
+    FROM listed_asins la
+    JOIN amazon_product_cache apc ON UPPER(apc.asin) = UPPER(la.asin)
+    WHERE la.ended_at IS NULL
+      AND la.ebay_listing_id IS NOT NULL
+      AND apc.available = FALSE
+      AND CAST(apc.amazon_price AS NUMERIC) = 0
+      AND apc.updated_at > NOW() - INTERVAL '2 days'
+    LIMIT 200
+  `.catch(() => [])
+
+  if (unavailableRows.length === 0) return { ended: 0, failed: 0, skipped: 0 }
+
+  const byUser = new Map<number, Array<{ ebay_listing_id: string }>>()
+  for (const row of unavailableRows) {
+    const entries = byUser.get(row.user_id) || []
+    entries.push({ ebay_listing_id: row.ebay_listing_id })
+    byUser.set(row.user_id, entries)
+  }
+
+  const appId = process.env.EBAY_APP_ID || ''
+  let ended = 0, failed = 0, skipped = 0
+
+  for (const [userId, listings] of byUser) {
+    const credentials = await getValidEbayAccessToken(userId).catch(() => null)
+    if (!credentials?.accessToken) {
+      skipped += listings.length
+      continue
+    }
+
+    for (const listing of listings) {
+      try {
+        const token = credentials.accessToken.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        const xml = `<?xml version="1.0" encoding="utf-8"?>
+<EndItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
+  <ItemID>${listing.ebay_listing_id}</ItemID>
+  <EndingReason>NotAvailable</EndingReason>
+</EndItemRequest>`
+
+        const res = await fetch('https://api.ebay.com/ws/api.dll', {
+          method: 'POST',
+          headers: {
+            'X-EBAY-API-CALL-NAME': 'EndItem',
+            'X-EBAY-API-SITEID': '0',
+            'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
+            'X-EBAY-API-APP-NAME': appId,
+            Authorization: `Bearer ${credentials.accessToken}`,
+            'Content-Type': 'text/xml',
+          },
+          body: xml,
+          signal: AbortSignal.timeout(10000),
+        })
+        const text = await res.text()
+        if (/<Ack>(Success|Warning)<\/Ack>/i.test(text)) {
+          await sql`UPDATE listed_asins SET ended_at = NOW() WHERE user_id = ${userId} AND ebay_listing_id = ${listing.ebay_listing_id}`.catch(() => {})
+          ended++
+        } else {
+          failed++
+        }
+      } catch {
+        failed++
+      }
+    }
+  }
+
+  return { ended, failed, skipped }
+}
+
 // ── Cron handler ─────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
@@ -769,6 +847,11 @@ export async function GET(req: NextRequest) {
       }
       report.usersSynced = synced
     } catch (e) { report.syncError = String(e) }
+
+    // End eBay listings where Amazon has confirmed the product is out-of-stock
+    try {
+      report.unavailableSync = await syncUnavailableListings()
+    } catch { report.unavailableSync = 'error' }
   } else {
     report.usersSynced = 'skipped'
   }
