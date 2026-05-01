@@ -18,6 +18,9 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-05 | Claude | **BIG: Own scraper replaces RapidAPI** — `refreshNiche` now uses `scrapeAmazonSearch` (direct amazon.com, no API key, no shared pool). 20 unique keyword queries per niche × 5 pages × 20 products = **2,500/niche × 40 niches = 100,000 unique products**. CATALOG_NICHE_TARGET bumped 220→2500. NICHE_QUERIES expanded to 20 specific search terms per niche. Admin can trigger full crawl at `/admin` | `app/api/cron/refresh-products/route.ts`, `app/api/admin/refresh-pool/route.ts`, `app/admin/page.tsx` |
+| 2026-05-05 | Claude | SEO title expander: fills 80-char eBay title limit with niche-specific search keywords buyers actually type. `buildSeoTitle()` appends unused keyword candidates from `SEO_KEYWORDS` map per niche. SEO-rich description overview includes niche search terms naturally. | `app/api/ebay/list-product/route.ts` |
+| 2026-05-05 | Claude | Scripts tab stripped to 3 cards: Check Orders, Delete Dead Listings, Product Finder. All other scripts removed (already automated by the system). | `app/dashboard/components/ScriptsTab.tsx` |
 | 2026-05-05 | Claude | Block supplement/vitamin listings: expanded `drugs_restricted` pattern to catch multivitamin, omega-3, softgel, gummy, capsule, whole food, protein powder, etc. — full supplements niche is now blocked at policy level | `lib/listing-policy.ts` |
 | 2026-05-05 | Claude | Fix wrong gallery images: `fetchedAmazon.images` (live scraper) was always merged in, pulling unrelated variant/related-product images. Now only used as fallback when validated images < 2 | `app/api/ebay/list-product/route.ts` |
 | 2026-05-05 | Claude | Admin stats page at `/admin` (only accessible by admin emails), blocks new signups (private beta), payment table stub in setup-db | `app/admin/page.tsx`, `app/api/admin/stats/route.ts`, `app/signup/page.tsx`, `lib/auth.ts` |
@@ -56,6 +59,10 @@ _Clear this section when done._
 
 ## ⚠️ Flags for Other Agent
 
+- **Own scraper is now primary**: `scrapeAmazonSearch` in `lib/amazon-scrape.ts` hits amazon.com directly. RapidAPI is now fallback only in product-detail fetches. Do NOT revert `refreshNiche` back to RapidAPI for search — unique keyword combos are the competitive advantage.
+- **NICHE_QUERIES expanded**: 20 specific search terms per niche in `refresh-products/route.ts`. Each query scrapes 5 pages × 20 products = 100 products per query. Adding more queries = more pool depth. Good place for Codex to expand further.
+- **Cron schedule**: `vercel.json` runs once daily at 6AM UTC (`0 6 * * *`). On Vercel Hobby this is the limit. For 24/7 refreshing, upgrade to Vercel Pro (supports every-hour crons) or add external cron service (cron-job.org etc.) hitting `/api/cron/refresh-products?sourceOnly=1` every 2-4 hours.
+- **Admin trigger**: `/admin` page has "Deep Catalog Crawl" button that calls `/api/admin/refresh-pool` → triggers the cron internally. Only accessible to admin emails.
 - **Supplements niche is BLOCKED**: `drugs_restricted` policy pattern covers multivitamin, omega-3, softgel, gummy, capsule, whole food, protein powder, etc. Do NOT remove these. The Supplements & Vitamins niche should not be used for dropshipping — eBay has restrictions and the listings are misleading.
 - **Image pipeline**: `fetchedAmazon.images` (live scraper) is only merged when `validatedAmazon.images.length < 2`. Do NOT revert to unconditional merge — it causes wrong gallery images from unrelated products/variants.
 - **Stale pricing is the #1 live bug**: Products in the pool get cached with an Amazon price that Amazon later changes. `refreshProductSourcePrices()` is wired into cron `?sourceOnly=1` and re-fetches prices for products older than 5 days, repricing with the engine. The publish gate also blocks any listing where `profit < $1` as a hard backstop. Do NOT remove either of these.
