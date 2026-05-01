@@ -1347,6 +1347,16 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Sanity check — if the eBay price is over 4x the minimum viable price, the cached
+  // Amazon cost was likely wrong (stale ASIN cross-mapping). Recalculate from scratch.
+  const minViable = pricingRecommendation.minimumViablePrice
+  if (minViable > 0 && finalEbayPrice > minViable * 4) {
+    return apiError(
+      `The listed price ($${finalEbayPrice.toFixed(2)}) looks too high for this product — the Amazon cost may be stale or from the wrong product. Remove it from your queue and re-source it.`,
+      { status: 400, code: 'PRICE_SANITY_FAILED' }
+    )
+  }
+
   const price = finalEbayPrice.toFixed(2)
   const fallbackSpecificsXml = (NICHE_SPECIFICS[niche] || [])
     .map(([n, v]) => `\n      <NameValueList><Name>${n}</Name><Value>${v}</Value></NameValueList>`)

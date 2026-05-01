@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ScriptMessage } from '../types'
 import { SectionIntro } from './shared'
 
@@ -27,11 +28,69 @@ export function ScriptsTab({
   onRunScript: (file: string) => Promise<void>
   onOpenProductFinder: () => void
 }) {
+  const [endState, setEndState] = useState<'idle' | 'confirm' | 'running' | 'done' | 'error'>('idle')
+  const [endResult, setEndResult] = useState<{ ended?: number; failed?: number; message?: string } | null>(null)
+
+  const handleEndAllListings = async () => {
+    if (endState === 'idle') { setEndState('confirm'); return }
+    if (endState !== 'confirm') return
+    setEndState('running')
+    try {
+      const res = await fetch('/api/ebay/end-listings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmed: true }),
+      })
+      const data = await res.json()
+      setEndResult(data)
+      setEndState(res.ok ? 'done' : 'error')
+    } catch {
+      setEndState('error')
+      setEndResult({ message: 'Request failed. Check your eBay connection.' })
+    }
+  }
+
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
       <SectionIntro eyebrow="StackPilot / Automation" title="Scripts" />
-      <div style={{ padding: '0 44px 44px' }}>
+      <div style={{ padding: `0 var(--xpad) 44px` }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: '18px' }}>
+
+          {/* End All Listings — special destructive action */}
+          <div className="card" style={{ padding: '28px', border: endState === 'confirm' ? '1px solid rgba(248,81,73,0.45)' : undefined }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', gap: '12px' }}>
+              <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 600, color: 'var(--txt)' }}>End All Listings</div>
+              <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '8px', fontWeight: 700, background: 'rgba(248,81,73,0.10)', color: 'var(--red)', border: '1px solid rgba(248,81,73,0.28)' }}>
+                Danger
+              </span>
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '22px', lineHeight: 1.6 }}>
+              Immediately ends every active listing on your eBay account. Cannot be undone. Use this to do a full reset before re-listing with correct prices.
+            </div>
+            {endResult ? (
+              <div style={{ marginBottom: '12px', fontSize: '12px', color: endState === 'done' ? 'var(--grn)' : 'var(--red)', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                {endResult.message}
+              </div>
+            ) : endState === 'confirm' ? (
+              <div style={{ marginBottom: '12px', fontSize: '12px', color: 'var(--red)', padding: '8px 12px', borderRadius: '8px', background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.25)' }}>
+                ⚠ This will end every active listing. Click again to confirm.
+              </div>
+            ) : null}
+            <button
+              className={`btn btn-sm ${endState === 'confirm' ? 'btn-danger' : 'btn-ghost'}`}
+              style={{ width: '100%', color: endState !== 'confirm' ? 'var(--red)' : undefined, borderColor: endState !== 'confirm' ? 'rgba(248,81,73,0.28)' : undefined }}
+              disabled={endState === 'running' || endState === 'done'}
+              onClick={handleEndAllListings}
+            >
+              {endState === 'running' ? 'Ending listings...' : endState === 'done' ? 'Done' : endState === 'confirm' ? '⚠ Confirm — End All Listings' : 'End All Listings'}
+            </button>
+            {endState === 'confirm' ? (
+              <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: '8px' }} onClick={() => setEndState('idle')}>
+                Cancel
+              </button>
+            ) : null}
+          </div>
+
           {SCRIPT_CARDS.map((script) => {
             const isRunning = scriptRunning === script.file
             const isProductFinder = script.file === 'product-finder.js'
@@ -48,17 +107,7 @@ export function ScriptsTab({
                 <div style={{ fontSize: '11px', color: 'var(--dim)', marginBottom: '8px', fontFamily: 'monospace', opacity: 0.7 }}>{script.file}</div>
                 <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '22px', lineHeight: 1.6 }}>{script.desc}</div>
                 {message ? (
-                  <div
-                    style={{
-                      marginBottom: '12px',
-                      fontSize: '12px',
-                      color: message.tone === 'success' ? 'var(--grn)' : message.tone === 'error' ? 'var(--red)' : 'var(--gold)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(14,116,144,0.12)',
-                    }}
-                  >
+                  <div style={{ marginBottom: '12px', fontSize: '12px', color: message.tone === 'success' ? 'var(--grn)' : message.tone === 'error' ? 'var(--red)' : 'var(--gold)', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(14,116,144,0.12)' }}>
                     {message.text}
                   </div>
                 ) : null}

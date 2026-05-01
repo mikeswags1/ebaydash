@@ -18,6 +18,11 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-05 | Claude | Smart title-derived feature bullets from product title (watt/WiFi/pack/waterproof etc.), niche context bullets, killed all generic filler ("Practical general accessory", "Brand shown in item specifics", "Review the photos"), emptied DEFAULT_FEATURES | `app/api/ebay/list-product/route.ts` |
+| 2026-05-05 | Claude | Fix stale pricing: `refreshProductSourcePrices()` re-fetches live Amazon prices for stale pool products every 5 days, reprices using engine. Hard profitability gate blocks loss-making listings at publish. | `lib/product-source-engine.ts`, `app/api/cron/refresh-products/route.ts`, `app/api/ebay/list-product/route.ts` |
+| 2026-05-05 | Claude | Fast bulk listing: `trusted` mode skips re-validation + competitor lookup for List All. Batch 3→5, `Promise.allSettled` isolation, auto-retry. | `app/dashboard/utils.ts`, `app/api/ebay/list-product/route.ts`, `app/dashboard/page.tsx` |
+| 2026-05-05 | Claude | Wire `listing-quality.ts`: `chooseBestListingTitle` fixes brand-only title bug, `isWeakListingTitle` blocks at publish and in finder queue, no-image gate. | `app/api/ebay/list-product/route.ts`, `app/api/scripts/product-finder/route.ts` |
+| 2026-05-05 | Claude | Fix HTML entities in descriptions (`&#039;`→`'`), strip Amazon marketing copy, bold ALL-CAPS feature headers, 2-paragraph overview. | `app/api/ebay/list-product/route.ts` |
 | 2026-04-30 | Codex | Removed the hard `PRICING_NOT_VIABLE` publish block so below-market comps become a stored pricing warning/floor instead of stopping Product Listing; cleaned old USPS fallback copy | `app/api/ebay/list-product/route.ts` |
 | 2026-04-30 | Codex | Fixed listing polish: regenerated transparent free-shipping PNG, made listing badge larger/trimmed, and restored detailed eBay descriptions from source description, feature bullets, and specs | `public/free-shipping-stamp.png`, `app/api/image/badge/route.ts`, `app/api/ebay/list-product/route.ts` |
 | 2026-04-30 | Codex | Fixed stale product-cache pricing so Product Finder/Continuous Listing reprices cached rows on read/save, source-engine rows recalculate on read, and cache version bumped to flush old ROI values | `app/api/scripts/product-finder/route.ts`, `app/api/cron/refresh-products/route.ts`, `lib/product-source-engine.ts` |
@@ -47,6 +52,9 @@ _Clear this section when done._
 
 ## ⚠️ Flags for Other Agent
 
+- **Stale pricing is the #1 live bug**: Products in the pool get cached with an Amazon price that Amazon later changes. `refreshProductSourcePrices()` is wired into cron `?sourceOnly=1` and re-fetches prices for products older than 5 days, repricing with the engine. The publish gate also blocks any listing where `profit < $1` as a hard backstop. Do NOT remove either of these.
+- **ASIN cross-mapping bug**: Amazon occasionally reassigns ASINs to different products. When this happens, the title and price in the pool are completely wrong. The reprice cron will catch cost changes but not title changes. A title similarity check between pool title and validated Amazon title would further reduce this risk — not yet implemented.
+- **`trusted` mode**: Used for List All — skips Amazon re-validation and competitor lookup. Uses cached `amazonPrice` from finder. Safe because reprice cron keeps prices fresh. Do NOT disable trusted mode — it's 3x faster for bulk listing.
 - **Amazon connection**: REMOVED from Settings UI and page.tsx bootstrap. Do NOT add back — it doesn't work.
 - **Codex = primary coder**: `stackpilot-app.vercel.app` always points to Codex's latest deployment. Claude works in a separate Desktop copy and documents changes here for Codex to merge.
 - **Category system**: Now uses eBay Taxonomy REST API (`/commerce/taxonomy/v1/...`) as primary source. Do NOT revert to `GetSuggestedCategories` as primary — it is kept only as a legacy fallback.
