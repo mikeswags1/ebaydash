@@ -514,36 +514,42 @@ async function refreshNiche(niche: string, rapidKey: string, options: RefreshOpt
   const allQueries = buildCatalogQueries(niche)
   const queryLimit = options.queryLimit || Math.min(allQueries.length, 25)
   const queries = allQueries.slice(0, queryLimit)
-  const pages = options.pages?.length ? options.pages : [1, 2, 3, 4, 5]
-  const timeoutMs = options.timeoutMs || 12000
+  const pages = options.pages?.length ? options.pages : [1, 2, 3]
+  const timeoutMs = options.timeoutMs || 10000
   const results: Record<string, unknown>[] = []
   const seen = new Set<string>()
 
+  // Build all (query, page) pairs then run in parallel batches of 5
+  const tasks: Array<{ query: string; page: number }> = []
   for (const query of queries) {
-    if (results.length >= target) break
     for (const page of pages) {
-      if (results.length >= target) break
-      try {
-        // Own scraper — scrapes amazon.com directly, no shared API pool
-        const scraped = await scrapeAmazonSearch(query, page, timeoutMs)
-        if (scraped.length === 0) break // No results for this page, skip remaining pages
+      tasks.push({ query, page })
+    }
+  }
 
-        for (const p of scraped) {
-          const asin  = String(p.asin || '')
-          if (!asin || seen.has(asin)) continue
-          seen.add(asin)
-          const price = p.price
-          const title = String(p.title || '')
-          if (!price || price <= 0 || price > MAX_COST || !title || isRejected(title)) continue
-          const { ebayPrice, profit, roi } = calcMetrics(price)
-          if (profit < MIN_PROFIT) continue
-          const risk       = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
-          const rating     = p.rating || 0
-          const numRatings = p.reviewCount || 0
-          results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl: p.imageUrl || '', risk, salesVolume: '', sourceNiche: niche, _rating: rating, _numRatings: numRatings })
-          if (results.length >= target) break
-        }
-      } catch { break }
+  const PARALLEL = 5
+  for (let i = 0; i < tasks.length; i += PARALLEL) {
+    if (results.length >= target) break
+    const batch = tasks.slice(i, i + PARALLEL)
+    const settled = await Promise.allSettled(
+      batch.map(({ query, page }) => scrapeAmazonSearch(query, page, timeoutMs))
+    )
+    for (const outcome of settled) {
+      if (results.length >= target) break
+      if (outcome.status !== 'fulfilled') continue
+      for (const p of outcome.value) {
+        const asin = String(p.asin || '')
+        if (!asin || seen.has(asin)) continue
+        seen.add(asin)
+        const price = p.price
+        const title = String(p.title || '')
+        if (!price || price <= 0 || price > MAX_COST || !title || isRejected(title)) continue
+        const { ebayPrice, profit, roi } = calcMetrics(price)
+        if (profit < MIN_PROFIT) continue
+        const risk = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
+        results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl: p.imageUrl || '', risk, salesVolume: '', sourceNiche: niche, _rating: p.rating || 0, _numRatings: p.reviewCount || 0 })
+        if (results.length >= target) break
+      }
     }
   }
 

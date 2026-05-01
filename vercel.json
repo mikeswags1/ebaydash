@@ -9,8 +9,12 @@
   },
   "crons": [
     {
-      "path": "/api/cron/refresh-products",
+      "path": "/api/cron/refresh-products?catalog=1",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-products?sourceOnly=1",
+      "schedule": "0 */6 * * *"
     }
   ]
 }
