@@ -1512,12 +1512,11 @@ export async function POST(req: NextRequest) {
   const proto = host.startsWith('localhost') ? 'http' : 'https'
   const siteUrl = `${proto}://${host}`
 
-  // In trusted mode: only use validated images — never pull from live scraper (causes wrong product images)
-  // In normal mode: allow scraper images as fallback only when validated images are sparse
-  const useScraperImages = !trusted && validatedAmazon.images.length < 2
+  // Never use fetchedAmazon.images — it pulls from Amazon's related products carousel
+  // and contaminates the gallery with images from completely different products.
+  // Only use images that are directly tied to this specific ASIN.
   const validatedGallery = dedupeImageUrls([
     ...validatedAmazon.images,
-    ...(useScraperImages ? fetchedAmazon.images : []),
     validatedAmazon.imageUrl,
     imageUrl,
   ])
