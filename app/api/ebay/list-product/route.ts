@@ -966,7 +966,7 @@ async function uploadToEPS(externalUrl: string, token: string, appId: string): P
 }
 
 // ── Description builder ──────────────────────────────────────────────────────
-function buildDescription(title: string, features: string[], about: string, images: string[], specs: Array<[string, string]> = []): string {
+function buildDescription(title: string, features: string[], about: string, images: string[], specs: Array<[string, string]> = [], listingNiche: string | null = null): string {
 
   // Decode all HTML entities so &#039; → ' and &#034; → " etc. render correctly
   const displayTitle = decodeAllEntities(title)
@@ -994,10 +994,33 @@ function buildDescription(title: string, features: string[], about: string, imag
     .slice(0, 4)
     .map((value) => value.replace(/: /g, ' '))
     .join(', ')
-  const generatedOverview = `${displayTitle}${inferredBrand ? ` by ${inferredBrand}` : ''} is a ${productType.toLowerCase()} built for dependable everyday use. Every order includes free 2–4 day tracked shipping and a 30-day return guarantee.`
+  // SEO-rich overview — includes product type, brand, and niche keywords buyers search
+  const nicheSearchTerms: Record<string, string> = {
+    'Phone Accessories': 'cell phone accessories universal compatible protective case cover',
+    'Computer Parts': 'laptop desktop computer accessories USB ergonomic compatible',
+    'Audio & Headphones': 'wireless bluetooth audio headphones earbuds speaker sound',
+    'Smart Home Devices': 'smart home WiFi alexa google home voice control app',
+    'Gaming Gear': 'gaming accessories RGB mechanical controller PC Xbox PlayStation',
+    'Kitchen Gadgets': 'kitchen gadget cooking baking tool BPA free dishwasher safe',
+    'Home Decor': 'home decor modern living room bedroom wall accent decor',
+    'Fitness Equipment': 'home gym workout exercise training resistance adjustable',
+    'Pet Supplies': 'dog cat pet supplies accessories safe durable easy clean',
+    'Car Accessories': 'car accessories universal fit SUV truck interior auto',
+    'Office Supplies': 'desk organizer home office work from home professional',
+    'Baby & Kids': 'baby kids toddler BPA free non-toxic safe newborn',
+    'Toys & Games': 'educational toy STEM interactive ages 3 plus kids',
+    'Clothing & Accessories': 'unisex adjustable lightweight casual everyday wear gift',
+    'Jewelry & Watches': 'fashion jewelry stainless steel hypoallergenic gift elegant',
+    'Camping & Hiking': 'outdoor camping hiking waterproof lightweight portable survival',
+    'Garden & Tools': 'garden outdoor tool heavy duty stainless steel ergonomic',
+    'Sporting Goods': 'sports athletic training gym outdoor performance all season',
+    'Medical Supplies': 'medical grade accurate digital professional FDA approved',
+  }
+  const nicheTerms = nicheSearchTerms[listingNiche || ''] || 'everyday use home outdoor gift'
+  const generatedOverview = `${displayTitle}${inferredBrand ? ` by ${inferredBrand}` : ''} — ${productType} designed for dependable everyday performance. ${nicheTerms.split(' ').slice(0, 6).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')} | Free 2–4 day tracked shipping. 30-day returns.`
   const generatedDetails = topSpecsSentence
-    ? `Key specs: ${topSpecsSentence}. Review the photos and item specifics for the exact style, fit, and included components.`
-    : 'Review the photos and item specifics below for the exact style, fit, and included components.'
+    ? `Specifications: ${topSpecsSentence}. See photos and item specifics for exact style, size, and included components.`
+    : `See all photos and item specifics for exact style, fit, color, and included components before purchasing.`
 
   // Overview always uses clean generated content — no Amazon text dump
   const overviewBlock = [generatedOverview, generatedDetails]
@@ -1298,9 +1321,75 @@ export async function POST(req: NextRequest) {
     .replace(/\s*[-|,]\s*(Pack of|Pack|Count|Piece|Pcs|Units?|Set of)\s*\d+/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim()
-  const safeTitle = cleanTitle.length <= 80
+  const rawSafeTitle = cleanTitle.length <= 80
     ? cleanTitle
     : cleanTitle.slice(0, 80).replace(/\s+\S*$/, '').trim()
+
+  // ── SEO Title Expander ───────────────────────────────────────────────────────
+  // eBay's Cassini algorithm ranks by keyword match. Fill the 80-char budget
+  // with the highest-value search terms buyers actually type.
+  const SEO_KEYWORDS: Record<string, string[]> = {
+    'Phone Accessories':      ['Cell Phone', 'Universal Fit', 'Compatible', 'Protective', 'Wireless'],
+    'Computer Parts':         ['Laptop', 'Desktop', 'MacBook', 'USB', 'PC', 'Compatible', 'Ergonomic'],
+    'Audio & Headphones':     ['Wireless', 'Bluetooth', 'Noise Cancelling', 'Over Ear', 'Earbuds', 'Hi-Fi'],
+    'Smart Home Devices':     ['WiFi', 'Alexa', 'Google Home', 'Smart', 'Voice Control', 'App Control'],
+    'Gaming Gear':            ['PS5', 'Xbox', 'PC', 'Gaming', 'Controller', 'RGB', 'Mechanical'],
+    'Kitchen Gadgets':        ['Kitchen', 'Cooking', 'Baking', 'BPA Free', 'Dishwasher Safe', 'Non-Stick'],
+    'Home Decor':             ['Modern', 'Wall Decor', 'Living Room', 'Bedroom', 'Aesthetic', 'Gift'],
+    'Furniture & Lighting':   ['Adjustable', 'LED', 'Desk', 'Home Office', 'Energy Efficient', 'Dimmable'],
+    'Cleaning Supplies':      ['Heavy Duty', 'Reusable', 'Washable', 'All Surface', 'Commercial Grade'],
+    'Storage & Organization': ['Organizer', 'Space Saving', 'Stackable', 'Clear', 'Drawer', 'Cabinet'],
+    'Camping & Hiking':       ['Outdoor', 'Waterproof', 'Lightweight', 'Portable', 'Survival', 'Camping'],
+    'Garden & Tools':         ['Heavy Duty', 'Garden', 'Outdoor', 'Stainless Steel', 'Ergonomic Grip'],
+    'Sporting Goods':         ['Athletic', 'Training', 'Gym', 'Outdoor', 'Performance', 'All Season'],
+    'Fishing & Hunting':      ['Fishing', 'Hunting', 'Outdoor', 'Heavy Duty', 'All Season', 'Waterproof'],
+    'Fitness Equipment':      ['Home Gym', 'Workout', 'Exercise', 'Training', 'Resistance', 'Adjustable'],
+    'Personal Care':          ['Portable', 'Rechargeable', 'Professional', 'Salon Quality', 'Travel Size'],
+    'Medical Supplies':       ['FDA Approved', 'Medical Grade', 'Professional', 'Accurate', 'Digital'],
+    'Car Accessories':        ['Universal Fit', 'All Cars', 'SUV', 'Truck', 'Interior', 'Auto Accessory'],
+    'Car Parts':              ['Universal', 'OEM Quality', 'Heavy Duty', 'All Cars', 'Direct Fit'],
+    'Pet Supplies':           ['Dog', 'Cat', 'Small Medium Large', 'Safe', 'Durable', 'Easy Clean'],
+    'Baby & Kids':            ['BPA Free', 'Non-Toxic', 'Safe', 'Toddler', 'Newborn', 'Gender Neutral'],
+    'Toys & Games':           ['Educational', 'Ages 3+', 'STEM', 'Interactive', 'Battery Operated'],
+    'Clothing & Accessories': ['Unisex', 'One Size', 'Adjustable', 'Lightweight', 'Casual', 'Gift'],
+    'Jewelry & Watches':      ['Fashion', 'Stainless Steel', 'Hypoallergenic', 'Gift Box', 'Elegant'],
+    'Office Supplies':        ['Desk Organizer', 'Home Office', 'Work From Home', 'Heavy Duty', 'Professional'],
+    'Trading Cards':          ['Acid Free', 'Card Sleeves', 'Binder', 'Collector', 'Protective'],
+    'Coins & Currency':       ['Collector', 'Display Case', 'Protective', 'Storage', 'Archival Quality'],
+    'Sports Memorabilia':     ['Display Case', 'Frame', 'Collectible', 'Authentic', 'UV Protected'],
+  }
+
+  function buildSeoTitle(base: string, productNiche: string | null, productSpecs: Array<[string, string]>): string {
+    const budget = 80 - base.length
+    if (budget <= 3) return base
+
+    const baseLower = base.toLowerCase()
+    const candidates = SEO_KEYWORDS[productNiche || ''] || []
+
+    // Also pull high-value spec values not already in title
+    const specValues = productSpecs
+      .filter(([k]) => /brand|model|compatible|size|material|connectivity/i.test(k))
+      .map(([, v]) => sanitizeContent(v).split(/[,/]/)[0].trim())
+      .filter(v => v.length > 2 && v.length < 20 && !baseLower.includes(v.toLowerCase()))
+
+    const allCandidates = [...specValues, ...candidates]
+    const additions: string[] = []
+    let remaining = budget
+
+    for (const term of allCandidates) {
+      if (baseLower.includes(term.toLowerCase())) continue
+      const needed = term.length + 1 // space + term
+      if (remaining - needed < 0) continue
+      additions.push(term)
+      remaining -= needed
+      if (remaining <= 3) break
+    }
+
+    if (additions.length === 0) return base
+    return (base + ' ' + additions.join(' ')).slice(0, 80).replace(/\s+\S*$/, '').trim()
+  }
+
+  const safeTitle = buildSeoTitle(rawSafeTitle, niche, [])
 
   if (isWeakListingTitle(safeTitle)) {
     return apiError(
@@ -1486,7 +1575,8 @@ export async function POST(req: NextRequest) {
     amazon.features,
     amazon.description,
     descriptionImageUrls,
-    amazon.specs
+    amazon.specs,
+    niche
   )
 
 

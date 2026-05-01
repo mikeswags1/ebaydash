@@ -3,18 +3,9 @@ import type { ScriptMessage } from '../types'
 import { SectionIntro } from './shared'
 
 const SCRIPT_CARDS = [
-  { title: 'Auto Feedback', file: 'auto-feedback.js', desc: 'Review post-order feedback automation guidance.', badge: 'Fulfillment' },
-  { title: 'Optimize Titles', file: 'optimize-titles.js', desc: 'Analyze listing titles for search visibility improvements.', badge: 'SEO' },
-  { title: 'Apply Title Changes', file: 'optimize-titles-apply.js', desc: 'Push approved title updates live to eBay.', badge: 'SEO' },
-  { title: 'Check Orders', file: 'check-orders.js', desc: 'Audit order status and highlight items that need action.', badge: 'Operations' },
-  { title: 'Fix Campaigns', file: 'fix-campaigns.js', desc: 'Review Promoted Listings campaign health.', badge: 'Ads' },
-  { title: 'Delete Low ROI', file: 'delete-low-roi.js', desc: 'Flag listings that no longer meet margin requirements.', badge: 'Cleanup' },
-  { title: 'Audit and Clean', file: 'audit-and-clean.js', desc: 'Run a broad inventory and listing quality pass.', badge: 'Cleanup' },
-  { title: 'Product Finder', file: 'product-finder.js', desc: 'Open the sourcing workflow for profitable product research.', badge: 'Research' },
-  { title: 'Delete Dead Listings', file: 'delete-dead-listings.js', desc: 'Review stale listings with no traction.', badge: 'Cleanup' },
-  { title: 'Auto Lister', file: 'auto-lister.js', desc: 'Prepare bulk listing actions from product data.', badge: 'Automation' },
-  { title: 'Update Descriptions', file: 'update-descriptions.js', desc: 'Refresh listing descriptions at scale.', badge: 'SEO' },
-  { title: 'Sync Amazon Costs', file: 'sync-amazon-costs.js', desc: 'Recheck cost-of-goods against Amazon.', badge: 'Finance' },
+  { title: 'Check Orders', file: 'check-orders.js', desc: 'Review all orders and surface any that need immediate action or follow-up.', badge: 'Operations' },
+  { title: 'Delete Dead Listings', file: 'delete-dead-listings.js', desc: 'Review listings with zero views or watchers after 14+ days and remove the ones with no traction.', badge: 'Cleanup' },
+  { title: 'Product Finder', file: 'product-finder.js', desc: 'Open the sourcing workflow to find profitable products to list.', badge: 'Research' },
 ]
 
 export function ScriptsTab({
