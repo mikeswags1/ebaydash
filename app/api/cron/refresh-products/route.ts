@@ -743,7 +743,8 @@ export async function GET(req: NextRequest) {
   const catalogRefresh = req.nextUrl.searchParams.get('catalog') === '1' || req.nextUrl.searchParams.get('deep') === '1'
   const fullRefresh = req.nextUrl.searchParams.get('full') === '1' || (!rollingRefresh && !catalogRefresh)
   const requestedBatchSize = Number(req.nextUrl.searchParams.get('batch') || '')
-  const requestedStartIndex = Number(req.nextUrl.searchParams.get('start') || '')
+  const hasExplicitStart = req.nextUrl.searchParams.has('start')
+  const requestedStartIndex = hasExplicitStart ? Number(req.nextUrl.searchParams.get('start')) : NaN
   const now = new Date()
 
   if (sourceOnly) {

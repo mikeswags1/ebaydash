@@ -18,6 +18,10 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-01 | Claude | Fix wrong gallery images permanently: removed `fetchedAmazon.images` from gallery entirely. Only `validatedAmazon.images` + `imageUrl` are used. `fetchedAmazon` is still fetched for features/description/specs but NEVER for images. | `app/api/ebay/list-product/route.ts` |
+| 2026-05-01 | Claude | Re-validate at publish for sparse images: if product has <2 images, skip trusted mode and do full Amazon re-validation to get correct ASIN, images, and price. | `app/dashboard/page.tsx` |
+| 2026-05-01 | Claude | Fix niche cursor: `Number('')` was evaluating to 0 causing cursor to always pick niches 0,1,2. Now uses `hasExplicitStart` flag so cursor logic only bypassed when `?start=N` is explicitly passed. | `app/api/cron/refresh-products/route.ts` |
+| 2026-05-01 | Claude | Unblock supplements: removed multivitamin/omega-3/softgel/etc keywords from `drugs_restricted` policy. Only controlled substances (kratom, ozempic, testosterone, etc.) remain blocked. | `lib/listing-policy.ts` |
 | 2026-05-01 | Claude | Cross-user ASIN dedup: product finder now loads ALL users' active ASINs (not just current user's) so two users rarely get shown the same product. Limit 2,000 rows. Fuzzy title matching still per-user only. | `app/api/scripts/product-finder/route.ts` |
 | 2026-05-01 | Claude | Niche rotation fix: catalog crawl now picks the 3 STALEST niches (oldest `cached_at` in product_cache) instead of time-based rotation — so every click covers new niches instead of repeating the same 3. | `app/api/cron/refresh-products/route.ts` |
 | 2026-05-05 | Claude | Parallel scraping: `refreshNiche` now runs 5 scrape calls simultaneously (was sequential). 75 tasks per niche batched in groups of 5. ~5x throughput. Vercel crons updated: daily catalog crawl + every-6-hour sourceOnly refresh. | `app/api/cron/refresh-products/route.ts`, `vercel.json` |
@@ -62,6 +66,9 @@ _Clear this section when done._
 
 ## ⚠️ Flags for Other Agent
 
+- **Gallery images**: NEVER use `fetchedAmazon.images`. It contaminates listings with images from other products. Only `validatedAmazon.images` + provided `imageUrl` are used. Do NOT revert.
+- **Niche cursor**: Stored in `product_cache` as `niche = '__cursor__'`. Advances by 3 each catalog crawl run. `requestedStartIndex` defaults to NaN (not 0) so cursor is used when `?start=` is absent.
+- **Supplements unblocked**: Can be listed. Only hard-blocked: kratom, ozempic, insulin, testosterone, CBD/THC, nicotine, controlled substances.
 - **Cross-user dedup**: Product finder loads ALL active ASINs across all users (limit 2,000). Two users won't be shown the same product in their queue. This is intentional — prevents StackPilot users from competing with each other on eBay. Do NOT revert to per-user only.
 - **Stalest-niche rotation**: Catalog crawl picks niches by oldest `cached_at` in `product_cache`. Every click covers 3 NEW niches instead of repeating the same ones. Do not revert to time-based rotation for catalog mode.
 - **Own scraper is now primary**: `scrapeAmazonSearch` in `lib/amazon-scrape.ts` hits amazon.com directly. RapidAPI is now fallback only in product-detail fetches. Do NOT revert `refreshNiche` back to RapidAPI for search — unique keyword combos are the competitive advantage.
