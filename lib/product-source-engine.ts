@@ -355,6 +355,82 @@ export async function repriceProductSourceItems(limit = 2500) {
   return upsertProductSourceItems(products)
 }
 
+export async function refreshProductSourcePrices(options: { limit?: number; staleDays?: number } = {}) {
+  await ensureProductSourceTables()
+  const limit = Math.min(options.limit || 300, 500)
+  const staleDays = options.staleDays || 5
+
+  const rows = await queryRows<ProductSourceRow & { asin: string }>`
+    SELECT asin, title, source_niche, amazon_price, ebay_price, profit, roi, image_url, risk,
+           sales_volume, rating, review_count, total_score, raw
+    FROM product_source_items
+    WHERE active = TRUE
+      AND last_seen_at < NOW() - INTERVAL '${staleDays} days'
+    ORDER BY last_seen_at ASC
+    LIMIT ${limit}
+  `
+
+  if (rows.length === 0) return { updated: 0, unchanged: 0, failed: 0 }
+
+  const rapidKey = process.env.RAPIDAPI_KEY || ''
+  let updated = 0, unchanged = 0, failed = 0
+  const BATCH = 5
+
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH)
+    await Promise.all(batch.map(async (row) => {
+      try {
+        let freshPrice: number | null = null
+
+        if (rapidKey) {
+          const res = await fetch(
+            `https://real-time-amazon-data.p.rapidapi.com/product-details?asin=${row.asin}&country=US`,
+            { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey }, signal: AbortSignal.timeout(6000) }
+          ).catch(() => null)
+          if (res?.ok) {
+            const json = await res.json()
+            const data = json?.data ?? json
+            if (!String(data?.message || '').match(/limit|quota|exceed/)) {
+              const raw = data.product_price || data.price
+              const p = typeof raw === 'number' ? raw : parseFloat(String(raw || '').replace(/[^0-9.]/g, ''))
+              if (p > 0) freshPrice = p
+            }
+          }
+        }
+
+        if (!freshPrice) return void (failed += 1)
+
+        const oldPrice = parseNumber(row.amazon_price)
+        // Only update if price changed by more than 2% to avoid noise
+        if (Math.abs(freshPrice - oldPrice) / Math.max(oldPrice, 1) < 0.02) {
+          unchanged += 1
+          // Still touch last_seen_at so it doesn't keep getting re-checked
+          await sql`UPDATE product_source_items SET last_seen_at = NOW() WHERE asin = ${row.asin}`.catch(() => {})
+          return
+        }
+
+        // Price changed — recalculate eBay price using the live pricing engine
+        const newEbayPrice = getRecommendedEbayPrice(freshPrice, EBAY_DEFAULT_FEE_RATE)
+        const metrics = getListingMetrics(freshPrice, newEbayPrice, EBAY_DEFAULT_FEE_RATE)
+        await sql`
+          UPDATE product_source_items
+          SET amazon_price = ${freshPrice},
+              ebay_price   = ${newEbayPrice},
+              profit       = ${metrics.profit},
+              roi          = ${metrics.roi},
+              last_seen_at = NOW()
+          WHERE asin = ${row.asin}
+        `.catch(() => {})
+        updated += 1
+      } catch {
+        failed += 1
+      }
+    }))
+  }
+
+  return { updated, unchanged, failed }
+}
+
 export async function loadProductSourceProducts(options: { niche?: string | null; limit?: number } = {}) {
   const limit = Math.max(1, Math.min(900, options.limit || 120))
   const rowLimit = Math.min(2500, Math.max(limit, limit * 3))

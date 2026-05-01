@@ -7,7 +7,7 @@ import { sql } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { fetchAmazonProductByAsin } from '@/lib/amazon-product'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
-import { EBAY_DEFAULT_FEE_RATE, getPricingRecommendation, getRecommendedEbayPrice } from '@/lib/listing-pricing'
+import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getPricingRecommendation, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 import { getListingPolicyBlockReason, getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 import { chooseBestListingTitle, isWeakListingTitle } from '@/lib/listing-quality'
 
@@ -1302,6 +1302,16 @@ export async function POST(req: NextRequest) {
     : priceLooksAutomatic
       ? pricingRecommendation.price
       : Math.max(parsedEbayPrice, pricingRecommendation.minimumViablePrice)
+
+  // Hard backstop — catches stale cache where Amazon raised their price after queuing
+  const priceCheck = getListingMetrics(listingAmazonPrice, finalEbayPrice, EBAY_DEFAULT_FEE_RATE)
+  if (priceCheck.profit < 1) {
+    return apiError(
+      `Cannot list — the eBay price ($${finalEbayPrice.toFixed(2)}) is below the Amazon cost ($${listingAmazonPrice.toFixed(2)}) after fees. Amazon likely raised their price since this product was queued. It will be repriced automatically on the next refresh cycle.`,
+      { status: 400, code: 'UNPROFITABLE_LISTING' }
+    )
+  }
+
   const price = finalEbayPrice.toFixed(2)
   const fallbackSpecificsXml = (NICHE_SPECIFICS[niche] || [])
     .map(([n, v]) => `\n      <NameValueList><Name>${n}</Name><Value>${v}</Value></NameValueList>`)
