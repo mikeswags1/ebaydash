@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server'
+import { after, NextRequest } from 'next/server'
 import { apiError, apiOk } from '@/lib/api-response'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { queryRows, sql } from '@/lib/db'
@@ -968,9 +968,11 @@ export async function GET(req: NextRequest) {
   }
 
   Object.assign(report, await runProductRefresh())
-  // After full scrape: also warm cache and sync unavailable listings
-  report.warmCache = await warmAmazonProductCache(20).catch(() => ({ warmed: 0, failed: 0 }))
-  try { report.unavailableSync = await syncUnavailableListings() } catch { report.unavailableSync = 'error' }
+  // Warm cache + sync run after response so they don't risk the 300s scrape budget
+  after(async () => {
+    await warmAmazonProductCache(20).catch(() => {})
+    await syncUnavailableListings().catch(() => {})
+  })
   report.durationMs = Date.now() - startedAt
   return apiOk({ success: true, ...report })
 }

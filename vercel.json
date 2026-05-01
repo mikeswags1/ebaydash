@@ -9,7 +9,7 @@
   },
   "crons": [
     {
-      "path": "/api/cron/refresh-products?catalog=1",
+      "path": "/api/cron/refresh-products?catalog=1&wait=1",
       "schedule": "0 6 * * *"
     }
   ]
