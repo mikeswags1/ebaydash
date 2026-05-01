@@ -1,6 +1,7 @@
 import { queryRows, sql } from '@/lib/db'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
+import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
 
 export type SourceEngineProduct = {
   asin: string
@@ -403,6 +404,21 @@ export async function refreshProductSourcePrices(options: { limit?: number; stal
               if (p > 0) freshPrice = p
             }
           }
+        }
+
+        // Fallback to direct Amazon scraper when RapidAPI is unavailable or quota exhausted
+        if (!freshPrice) {
+          try {
+            const scraped = await scrapeAmazonProduct(row.asin)
+            if (scraped?.price && scraped.price > 0) {
+              freshPrice = scraped.price
+              if (!scraped.available) {
+                await sql`UPDATE product_source_items SET active = FALSE, last_seen_at = NOW() WHERE asin = ${row.asin}`.catch(() => {})
+                failed += 1
+                return
+              }
+            }
+          } catch { /* scraper also failed — skip */ }
         }
 
         if (!freshPrice) return void (failed += 1)

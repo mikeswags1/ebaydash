@@ -785,7 +785,7 @@ export default function Dashboard() {
       onProgress: (progress) => {
         setContinuousFinderState((prev) => ({ ...prev, listAllProgress: progress }))
       },
-      concurrency: 3,
+      concurrency: 2,
     })
 
     if (result.reconnectRequired) {

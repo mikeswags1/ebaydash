@@ -1251,6 +1251,20 @@ export async function POST(req: NextRequest) {
     return apiError('Enter a valid eBay price before publishing.', { status: 400, code: 'INVALID_LISTING_PRICE' })
   }
 
+  // Reject if this ASIN is already active in the user's listings — prevents duplicate eBay listings
+  // from appearing when the same product shows up in both the niche tab and continuous tab.
+  const existingListing = await queryRows<{ ebay_listing_id: string }>`
+    SELECT ebay_listing_id FROM listed_asins
+    WHERE user_id = ${session.user.id} AND asin = ${String(asin).toUpperCase()} AND ended_at IS NULL
+    LIMIT 1
+  `.catch(() => [])
+  if (existingListing.length > 0) {
+    return apiError(
+      `This product (ASIN ${asin}) is already listed on your eBay store (listing #${existingListing[0].ebay_listing_id}). Duplicate listings are blocked to protect your account.`,
+      { status: 409, code: 'ALREADY_LISTED' }
+    )
+  }
+
   const initialPolicyFlags = getListingPolicyFlags({ title, description: inputDescription, niche })
   if (hasBlockedListingPolicyFlag(initialPolicyFlags)) {
     return apiError(getListingPolicyBlockReason(initialPolicyFlags), {
@@ -1472,8 +1486,11 @@ export async function POST(req: NextRequest) {
     ? 'Comparable eBay prices are below the minimum profitable price, so StackPilot used the minimum profitable price instead of blocking the listing.'
     : null
 
+  // Trusted (bulk) mode: always recalculate from the current pricing engine — the cached
+  // ebayPrice may have been built with old pricing logic or a stale Amazon cost.
+  // Non-trusted (single): respect manual price edits if the user changed it from the auto-price.
   const finalEbayPrice = trusted
-    ? Math.max(parsedEbayPrice, pricingRecommendation.minimumViablePrice)
+    ? pricingRecommendation.price
     : priceLooksAutomatic
       ? pricingRecommendation.price
       : Math.max(parsedEbayPrice, pricingRecommendation.minimumViablePrice)

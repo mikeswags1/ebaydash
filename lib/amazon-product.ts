@@ -489,6 +489,46 @@ async function fetchSearchFallbackByTitle(title: string, fallbackImage?: string,
   })
 }
 
+// Pre-enriches products in product_source_items that are missing from amazon_product_cache.
+// Runs during the daily cron to ensure continuous-listing products have rich data
+// (images, features, description) before users try to list them in bulk.
+export async function warmAmazonProductCache(limit = 40): Promise<{ warmed: number; failed: number }> {
+  await ensureAmazonProductCacheTable()
+  const rows = await queryRows<{ asin: string; image_url: string | null }>`
+    SELECT psi.asin, psi.image_url
+    FROM product_source_items psi
+    LEFT JOIN amazon_product_cache apc ON UPPER(apc.asin) = UPPER(psi.asin)
+    WHERE psi.active = TRUE
+      AND apc.asin IS NULL
+    ORDER BY psi.total_score DESC
+    LIMIT ${limit}
+  `.catch(() => [])
+
+  if (rows.length === 0) return { warmed: 0, failed: 0 }
+
+  let warmed = 0, failed = 0
+  const BATCH = 3
+
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH)
+    const results = await Promise.allSettled(
+      batch.map(row =>
+        fetchAmazonProductByAsin({
+          asin: row.asin,
+          fallbackImage: row.image_url || undefined,
+          strictAsin: false,
+        }).catch(() => null)
+      )
+    )
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value) warmed++
+      else failed++
+    }
+  }
+
+  return { warmed, failed }
+}
+
 export async function fetchAmazonProductByAsin(
   options: FetchAmazonProductOptions
 ): Promise<ValidatedAmazonProduct | null> {

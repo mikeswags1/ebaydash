@@ -696,6 +696,32 @@ export async function GET(req: NextRequest) {
       } catch { /* best-effort — never block on cache lookup failure */ }
     }
 
+    // For products still sparse after the cache lookup, schedule background enrichment
+    // so the NEXT time the user loads products they'll already have full images/features.
+    // Uses after() — runs after response is sent, never delays the user.
+    const stillSparseAsins = ranked
+      .filter(p => (p.images?.length ?? 0) < 2)
+      .slice(0, 12)
+      .map(p => ({ asin: p.asin, imageUrl: p.imageUrl }))
+
+    if (stillSparseAsins.length > 0) {
+      after(async () => {
+        const ENRICH_BATCH = 3
+        for (let i = 0; i < stillSparseAsins.length; i += ENRICH_BATCH) {
+          const batch = stillSparseAsins.slice(i, i + ENRICH_BATCH)
+          await Promise.allSettled(
+            batch.map(({ asin, imageUrl }) =>
+              fetchAmazonProductByAsin({
+                asin,
+                fallbackImage: imageUrl,
+                strictAsin: false,
+              }).catch(() => null)
+            )
+          )
+        }
+      })
+    }
+
     console.info('[product-finder]', JSON.stringify({
       mode: continuousMode ? 'continuous' : 'niche',
       source,

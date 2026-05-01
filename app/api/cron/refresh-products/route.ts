@@ -4,6 +4,7 @@ import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { queryRows, sql } from '@/lib/db'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 import { ensureProductSourceTables, rebuildProductSourceFromCache, repriceProductSourceItems, refreshProductSourcePrices } from '@/lib/product-source-engine'
+import { warmAmazonProductCache } from '@/lib/amazon-product'
 import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 
@@ -831,6 +832,10 @@ export async function GET(req: NextRequest) {
     report.repriced = await repriceProductSourceItems()
     report.sourceProducts = await rebuildProductSourceFromCache()
     report.continuousProducts = await refreshContinuousCache()
+    // Pre-enrich catalog-crawl products that lack amazon_product_cache entries.
+    // This ensures continuous-listing products have full images/features/description
+    // before users try to bulk-list them. Top-scored 40 unenriched products per run.
+    report.warmCache = await warmAmazonProductCache(40).catch(() => ({ warmed: 0, failed: 0 }))
     report.durationMs = Date.now() - startedAt
     return apiOk({ success: true, ...report })
   }
