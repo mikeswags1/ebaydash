@@ -18,7 +18,7 @@ const MAX_CONTINUOUS_POOL_SIZE = 600
 const STANDARD_NICHE_TARGET = 200
 const CATALOG_NICHE_TARGET = 2500
 const SCHEDULED_NICHE_BATCH_SIZE = 8
-const CATALOG_NICHE_BATCH_SIZE = 6
+const CATALOG_NICHE_BATCH_SIZE = 3
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -514,8 +514,8 @@ async function refreshNiche(niche: string, rapidKey: string, options: RefreshOpt
   const allQueries = buildCatalogQueries(niche)
   const queryLimit = options.queryLimit || Math.min(allQueries.length, 25)
   const queries = allQueries.slice(0, queryLimit)
-  const pages = options.pages?.length ? options.pages : [1, 2, 3]
-  const timeoutMs = options.timeoutMs || 10000
+  const pages = options.pages?.length ? options.pages : [1, 2]
+  const timeoutMs = options.timeoutMs || 6000
   const results: Record<string, unknown>[] = []
   const seen = new Set<string>()
 

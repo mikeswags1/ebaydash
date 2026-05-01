@@ -42,15 +42,20 @@ export default function AdminPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [collab, setCollab] = useState<string>('')
   const pool = usePoolRefresh()
 
   useEffect(() => {
     if (status === 'unauthenticated') { router.replace('/login'); return }
     if (status !== 'authenticated') return
-    fetch('/api/admin/stats')
-      .then(r => r.json())
-      .then(d => { setStats(d); setLoading(false) })
-      .catch(() => { setError('Failed to load stats.'); setLoading(false) })
+    Promise.all([
+      fetch('/api/admin/stats').then(r => r.json()),
+      fetch('/api/admin/collab').then(r => r.json()),
+    ]).then(([statsData, collabData]) => {
+      setStats(statsData)
+      setCollab(collabData?.content || '')
+      setLoading(false)
+    }).catch(() => { setError('Failed to load.'); setLoading(false) })
   }, [status, router])
 
   if (loading) return (
@@ -144,6 +149,20 @@ export default function AdminPage() {
             </tbody>
           </table>
         </div>
+
+        {/* COLLAB.md live viewer */}
+        {collab && (
+          <div style={{ marginTop: '36px' }}>
+            <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--sil)', marginBottom: '12px' }}>
+              COLLAB.md — Live
+            </div>
+            <div className="card" style={{ padding: '24px' }}>
+              <pre style={{ fontSize: '11px', color: 'var(--sil)', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0, fontFamily: 'monospace', overflowX: 'auto' }}>
+                {collab}
+              </pre>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
