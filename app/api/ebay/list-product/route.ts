@@ -175,7 +175,13 @@ function isGenericFeature(value: string) {
     normalized.includes('easy to store and carry') ||
     normalized.includes('excellent gift') ||
     normalized.includes('ships fast via usps') ||
-    normalized.includes('30-day hassle-free returns')
+    normalized.includes('30-day hassle-free returns') ||
+    normalized.includes('practical general accessory') ||
+    normalized.includes('practical') && normalized.includes('for everyday use') ||
+    normalized.startsWith('brand shown in item specifics') ||
+    normalized.includes('review the photos and item specifics for exact details') ||
+    normalized.includes('review the photos and item specifics for the exact style') ||
+    normalized.includes('key product details are included in the images')
   )
 }
 
@@ -748,27 +754,64 @@ function buildItemSpecificsXml(title: string, specs: Array<[string, string]>, fa
 }
 
 function buildOriginalFeatureBullets(title: string, specs: Array<[string, string]>, niche: string | null) {
-  const type = inferTypeFromProduct(title, niche, specs)
-  const brand = inferBrandFromProduct(title, specs)
-  const bullets: string[] = [
-    `Practical ${type.toLowerCase()} for everyday use.`,
-  ]
+  const t = title.toLowerCase()
+  const bullets: string[] = []
 
-  const compatibleBrand = getSpecValue(specs, /compatible brand|compatible model|compatibility/i)
+  // Extract meaningful attributes from the title itself
+  const wattMatch = title.match(/(\d+)\s*(?:watt|w)\s*(?:equivalent|eq\.?)?/i)
+  if (wattMatch) bullets.push(`${wattMatch[1]}W Equivalent — Energy-efficient LED replaces a standard ${wattMatch[1]}-watt bulb, saving on electricity costs.`)
+
+  const packMatch = title.match(/(\d+)\s*(?:-?\s*pack|piece|pc|count|ct)\b/i)
+  if (packMatch && Number(packMatch[1]) > 1) bullets.push(`${packMatch[1]}-Pack — Includes ${packMatch[1]} units, great for multi-room or bulk use.`)
+
+  if (/\bwi-?fi\b|\bwireless\b/i.test(title)) bullets.push('WiFi Connected — Control from anywhere using a smartphone app, even when you\'re away from home.')
+  if (/\bbluetooth\b/i.test(title)) bullets.push('Bluetooth Enabled — Pairs quickly with your phone for easy wireless control and setup.')
+  if (/\bcolor.chang|rgb|rgbw|multicolor|multi-color/i.test(title)) bullets.push('Full Color Control — Choose from millions of colors plus warm and cool white to match any mood or room.')
+  if (/\balexa|google home|homekit|siri|voice control/i.test(title)) bullets.push('Voice Control Ready — Works with Alexa, Google Home, and Apple HomeKit for hands-free operation.')
+  if (/\brechargeable|usb.c|usb charge/i.test(title)) bullets.push('USB Rechargeable — Built-in rechargeable battery, no disposables needed. Charge with any USB cable.')
+  if (/\bwaterproof|water.resist|ipx?\d/i.test(title)) bullets.push('Water Resistant — Designed to handle splashes and moisture, safe for outdoor or bathroom use.')
+  if (/\bno.?touch|touchless|infrared|non-?contact/i.test(title)) bullets.push('No-Touch Design — Accurate readings in 1 second without physical contact — hygienic and safe for the whole family.')
+  if (/\bvacuum.seal|space.sav|compression bag/i.test(title)) bullets.push('Space Saving — Vacuum seal removes air to compress bulky items like comforters and clothes down to a fraction of their size.')
+
+  // Spec-derived bullets
   const material = getSpecValue(specs, /material|fabric|finish/i)
-  const color = getSpecValue(specs, /color|colour/i)
-  const size = getSpecValue(specs, /size|dimensions|length|width|height/i)
+  const compatibility = getSpecValue(specs, /compatible brand|compatible model|compatibility/i)
+  const size = getSpecValue(specs, /size|dimensions/i)
   const connectivity = getSpecValue(specs, /connectivity|interface/i)
-  const powerSource = getSpecValue(specs, /power source|battery/i)
+  const powerSource = getSpecValue(specs, /power source/i)
 
-  if (brand && brand.toLowerCase() !== 'generic') bullets.push(`Brand shown in item specifics: ${brand}.`)
-  if (compatibleBrand) bullets.push(`Compatibility: ${compatibleBrand}.`)
-  if (material) bullets.push(`Material or finish: ${material}.`)
-  if (color) bullets.push(`Color or style: ${color}.`)
-  if (size) bullets.push(`Size or dimensions: ${size}.`)
-  if (connectivity) bullets.push(`Connectivity or interface: ${connectivity}.`)
-  if (powerSource) bullets.push(`Power source: ${powerSource}.`)
-  bullets.push('Review the photos and item specifics for exact details before purchase.')
+  if (material) bullets.push(`Material: ${material} — durable construction built for everyday use.`)
+  if (compatibility) bullets.push(`Compatible with: ${compatibility}.`)
+  if (size) bullets.push(`Size: ${size} — check the photos and item specifics for exact fit.`)
+  if (connectivity && !/wifi|bluetooth/i.test(connectivity)) bullets.push(`Connectivity: ${connectivity}.`)
+  if (powerSource && !/rechargeable/i.test(t)) bullets.push(`Power: ${powerSource}.`)
+
+  // Niche-specific contextual bullets when title is sparse
+  if (bullets.length < 3) {
+    const nicheExtras: Record<string, string[]> = {
+      'Smart Home Devices': ['Easy App Setup — Download the free app and connect in minutes. No hub required.', 'Schedule & Automate — Set timers, schedules, and routines so your home works for you.'],
+      'Kitchen Gadgets': ['Easy to Clean — Dishwasher-safe or wipes clean in seconds.', 'Compact Storage — Designed to fit neatly in any kitchen drawer or cabinet.'],
+      'Pet Supplies': ['Pet Safe — Non-toxic materials, designed with your pet\'s safety in mind.', 'Durable Build — Reinforced construction stands up to daily use by active pets.'],
+      'Fitness Equipment': ['Full Body Workout — Targets multiple muscle groups for an efficient home gym session.', 'Compact & Portable — Folds or rolls up for easy storage at home or on the go.'],
+      'Personal Care': ['Gentle Formula — Dermatologist tested and suitable for all skin types.', 'Fast Results — See a noticeable difference with regular daily use.'],
+      'Car Accessories': ['Universal Fit — Designed to fit most car models. Check item specifics to confirm compatibility.', 'Easy Install — No tools required. Installs in minutes.'],
+      'Home Decor': ['Premium Finish — Adds a polished, modern look to any room.', 'Versatile Style — Coordinates with a wide range of decor styles and color schemes.'],
+      'Office Supplies': ['Desk Ready — Keeps your workspace organized and efficient.', 'Sturdy Construction — Built to hold up through years of daily office use.'],
+    }
+    const extras = nicheExtras[niche || ''] || []
+    for (const extra of extras) {
+      if (bullets.length >= 6) break
+      bullets.push(extra)
+    }
+  }
+
+  // Final fallback if we still have nothing useful
+  if (bullets.length === 0) {
+    const type = inferTypeFromProduct(title, niche, specs).toLowerCase()
+    bullets.push(`Brand new ${type} — ships in original packaging, ready to use out of the box.`)
+    bullets.push('Free 2–4 day tracked shipping included with every order.')
+    bullets.push('30-day returns accepted — contact us before leaving feedback and we will make it right.')
+  }
 
   return Array.from(new Set(bullets)).slice(0, 8)
 }
@@ -777,15 +820,7 @@ function buildOriginalFeatureBullets(title: string, specs: Array<[string, string
 async function fetchAmazonDetails(
   asin: string, rapidKey: string, fallbackImage?: string
 ): Promise<AmazonDetails & { _apiError?: string }> {
-  const DEFAULT_FEATURES = [
-    'Brand new and factory sealed in original manufacturer packaging',
-    'Premium quality — built to meet or exceed manufacturer specifications',
-    'Simple setup, ready to use straight out of the box',
-    'Compact, lightweight design — easy to store and carry',
-    'Makes an excellent gift for any occasion',
-    'Ships fast with free tracked shipping — estimated 2-4 business days',
-    '30-day hassle-free returns — your satisfaction is 100% guaranteed',
-  ]
+  const DEFAULT_FEATURES: string[] = []
 
   // Try RapidAPI first
   if (rapidKey) {
