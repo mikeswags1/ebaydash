@@ -3,6 +3,22 @@ import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 
+function usePoolRefresh() {
+  const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [msg, setMsg] = useState('')
+  const trigger = async (mode: 'catalog' | 'sourceOnly') => {
+    setState('running')
+    setMsg(mode === 'catalog' ? 'Deep catalog crawl running — this takes 3–5 minutes...' : 'Quick refresh running...')
+    try {
+      const res = await fetch('/api/admin/refresh-pool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) })
+      const data = await res.json()
+      setState(res.ok ? 'done' : 'error')
+      setMsg(res.ok ? `Done. ${JSON.stringify(data.result?.sourceProducts || data.result || '')}` : 'Error — check logs.')
+    } catch { setState('error'); setMsg('Request failed.') }
+  }
+  return { state, msg, trigger }
+}
+
 type Customer = {
   id: number
   email: string
@@ -26,6 +42,7 @@ export default function AdminPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const pool = usePoolRefresh()
 
   useEffect(() => {
     if (status === 'unauthenticated') { router.replace('/login'); return }
@@ -56,6 +73,24 @@ export default function AdminPage() {
         </div>
         <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '36px' }}>
           Signed in as {session?.user?.email}
+        </div>
+
+        {/* Product pool controls */}
+        <div className="card" style={{ padding: '24px', marginBottom: '28px' }}>
+          <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--sil)', marginBottom: '14px' }}>Product Pool</div>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button className="btn btn-solid btn-sm" disabled={pool.state === 'running'} onClick={() => pool.trigger('catalog')}>
+              {pool.state === 'running' ? 'Crawling...' : '🚀 Deep Catalog Crawl (100K products)'}
+            </button>
+            <button className="btn btn-gold btn-sm" disabled={pool.state === 'running'} onClick={() => pool.trigger('sourceOnly')}>
+              Quick Refresh
+            </button>
+          </div>
+          {pool.msg && (
+            <div style={{ marginTop: '12px', fontSize: '12px', color: pool.state === 'error' ? 'var(--red)' : pool.state === 'done' ? 'var(--grn)' : 'var(--gold)' }}>
+              {pool.msg}
+            </div>
+          )}
         </div>
 
         {/* Summary cards */}
