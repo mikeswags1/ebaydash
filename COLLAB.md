@@ -18,6 +18,8 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-01 | Claude | Cross-user ASIN dedup: product finder now loads ALL users' active ASINs (not just current user's) so two users rarely get shown the same product. Limit 2,000 rows. Fuzzy title matching still per-user only. | `app/api/scripts/product-finder/route.ts` |
+| 2026-05-01 | Claude | Niche rotation fix: catalog crawl now picks the 3 STALEST niches (oldest `cached_at` in product_cache) instead of time-based rotation — so every click covers new niches instead of repeating the same 3. | `app/api/cron/refresh-products/route.ts` |
 | 2026-05-05 | Claude | Parallel scraping: `refreshNiche` now runs 5 scrape calls simultaneously (was sequential). 75 tasks per niche batched in groups of 5. ~5x throughput. Vercel crons updated: daily catalog crawl + every-6-hour sourceOnly refresh. | `app/api/cron/refresh-products/route.ts`, `vercel.json` |
 | 2026-05-05 | Claude | **BIG: Own scraper replaces RapidAPI** — `refreshNiche` now uses `scrapeAmazonSearch` (direct amazon.com, no API key, no shared pool). 20 unique keyword queries per niche × 5 pages × 20 products = **2,500/niche × 40 niches = 100,000 unique products**. CATALOG_NICHE_TARGET bumped 220→2500. NICHE_QUERIES expanded to 20 specific search terms per niche. Admin can trigger full crawl at `/admin` | `app/api/cron/refresh-products/route.ts`, `app/api/admin/refresh-pool/route.ts`, `app/admin/page.tsx` |
 | 2026-05-05 | Claude | SEO title expander: fills 80-char eBay title limit with niche-specific search keywords buyers actually type. `buildSeoTitle()` appends unused keyword candidates from `SEO_KEYWORDS` map per niche. SEO-rich description overview includes niche search terms naturally. | `app/api/ebay/list-product/route.ts` |
@@ -60,6 +62,8 @@ _Clear this section when done._
 
 ## ⚠️ Flags for Other Agent
 
+- **Cross-user dedup**: Product finder loads ALL active ASINs across all users (limit 2,000). Two users won't be shown the same product in their queue. This is intentional — prevents StackPilot users from competing with each other on eBay. Do NOT revert to per-user only.
+- **Stalest-niche rotation**: Catalog crawl picks niches by oldest `cached_at` in `product_cache`. Every click covers 3 NEW niches instead of repeating the same ones. Do not revert to time-based rotation for catalog mode.
 - **Own scraper is now primary**: `scrapeAmazonSearch` in `lib/amazon-scrape.ts` hits amazon.com directly. RapidAPI is now fallback only in product-detail fetches. Do NOT revert `refreshNiche` back to RapidAPI for search — unique keyword combos are the competitive advantage.
 - **NICHE_QUERIES expanded**: 20 specific search terms per niche in `refresh-products/route.ts`. Each query scrapes 5 pages × 20 products = 100 products per query. Adding more queries = more pool depth. Good place for Codex to expand further.
 - **Cron schedule**: Two crons in `vercel.json` — (1) full catalog crawl daily at 6AM UTC, (2) sourceOnly price refresh every 6 hours. On Vercel Pro these run automatically. On Hobby, only daily runs are guaranteed — upgrade to Pro for the 6-hour refresh to fire.

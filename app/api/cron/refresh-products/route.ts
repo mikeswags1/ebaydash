@@ -778,12 +778,34 @@ export async function GET(req: NextRequest) {
   const targetProducts = catalogRefresh ? CATALOG_NICHE_TARGET : STANDARD_NICHE_TARGET
   const defaultBatchSize = catalogRefresh ? CATALOG_NICHE_BATCH_SIZE : (fullRefresh ? allNiches.length : SCHEDULED_NICHE_BATCH_SIZE)
   const batchSize = Math.max(1, Math.min(allNiches.length, Number.isFinite(requestedBatchSize) && requestedBatchSize > 0 ? Math.floor(requestedBatchSize) : defaultBatchSize))
-  const rotationMinutes = catalogRefresh ? 60 : 15
-  const rotation = Math.floor(Date.now() / (rotationMinutes * 60 * 1000))
-  const startIndex = Number.isFinite(requestedStartIndex) && requestedStartIndex >= 0
-    ? Math.floor(requestedStartIndex) % allNiches.length
-    : fullRefresh && !catalogRefresh ? 0 : (rotation * batchSize) % allNiches.length
-  const niches = Array.from({ length: Math.min(batchSize, allNiches.length) }, (_, index) => allNiches[(startIndex + index) % allNiches.length])
+
+  // For catalog refresh, pick the STALEST niches (least recently cached) so every
+  // click covers different niches instead of repeating the same 3.
+  let niches: string[]
+  if (catalogRefresh && !Number.isFinite(requestedStartIndex)) {
+    try {
+      const cached = await queryRows<{ niche: string; cached_at: string }>`
+        SELECT niche, cached_at FROM product_cache ORDER BY cached_at ASC
+      `
+      const cachedMap = new Map(cached.map(r => [r.niche, r.cached_at]))
+      niches = [...allNiches]
+        .sort((a, b) => {
+          const aTime = cachedMap.has(a) ? new Date(cachedMap.get(a)!).getTime() : 0
+          const bTime = cachedMap.has(b) ? new Date(cachedMap.get(b)!).getTime() : 0
+          return aTime - bTime // oldest first
+        })
+        .slice(0, batchSize)
+    } catch {
+      niches = allNiches.slice(0, batchSize)
+    }
+  } else {
+    const rotationMinutes = catalogRefresh ? 60 : 15
+    const rotation = Math.floor(Date.now() / (rotationMinutes * 60 * 1000))
+    const startIndex = Number.isFinite(requestedStartIndex) && requestedStartIndex >= 0
+      ? Math.floor(requestedStartIndex) % allNiches.length
+      : fullRefresh && !catalogRefresh ? 0 : (rotation * batchSize) % allNiches.length
+    niches = Array.from({ length: Math.min(batchSize, allNiches.length) }, (_, index) => allNiches[(startIndex + index) % allNiches.length])
+  }
   const rapidOptions = catalogRefresh
     ? { target: targetProducts, queryLimit: 6, pages: [1, 2], timeoutMs: 4500 }
     : { target: targetProducts, queryLimit: 4, pages: [1], timeoutMs: 8000 }
@@ -824,7 +846,6 @@ export async function GET(req: NextRequest) {
       catalogRefresh,
       targetProductsPerNiche: targetProducts,
       batchSize,
-      startIndex,
       quotaHit,
       sourceProducts: await rebuildProductSourceFromCache(catalogRefresh ? 250 : 120),
       continuousProducts: await refreshContinuousCache(),
@@ -839,7 +860,6 @@ export async function GET(req: NextRequest) {
     report.catalogRefresh = catalogRefresh
     report.targetProductsPerNiche = targetProducts
     report.batchSize = batchSize
-    report.startIndex = startIndex
     report.sourceProducts = await rebuildProductSourceFromCache(250)
     report.continuousProducts = await refreshContinuousCache()
     report.durationMs = Date.now() - startedAt

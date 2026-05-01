@@ -597,25 +597,27 @@ export async function GET(req: NextRequest) {
   // Defer niche weights until after cache check — avoids eBay API call when cache is warm
   let nicheWeights = new Map<string, number>()
 
-  // ── Load user's already-listed ASINs (to filter duplicates) ─────────────────
-  // Only block ASINs that are currently active on eBay (ended_at IS NULL)
-  // If a listing sold out or was removed, that ASIN becomes available again
+  // ── Load ALL users' active ASINs (cross-user deduplication) ─────────────────
+  // Blocks any ASIN already live on eBay by ANY account on the platform.
+  // This prevents two users from listing the same product and competing with each other.
+  // If a listing ends (sold out or removed), that ASIN becomes available again for everyone.
   let listedAsins = new Set<string>()
   let listedTitles: string[] = []
   try {
     const listedRows = await withTimeout(
-      queryRows<{ asin: string; title: string | null }>`
-        SELECT asin, title
+      queryRows<{ asin: string; title: string | null; is_mine: boolean }>`
+        SELECT asin, title, (user_id = ${session.user.id}) AS is_mine
         FROM listed_asins
-        WHERE user_id = ${session.user.id} AND ended_at IS NULL
+        WHERE ended_at IS NULL
         ORDER BY listed_at DESC
-        LIMIT 750
+        LIMIT 2000
       `,
       continuousMode ? 900 : 1800,
       []
     )
     listedAsins = new Set(listedRows.map((r) => String(r.asin).toUpperCase()))
-    listedTitles = listedRows.map((r) => String(r.title || '')).filter(Boolean)
+    // Only use titles from this user's listings for fuzzy-match blocking
+    listedTitles = listedRows.filter(r => r.is_mine).map((r) => String(r.title || '')).filter(Boolean)
   } catch { /* table may not exist yet */ }
 
   const matchesActiveListing = (title: string) =>
