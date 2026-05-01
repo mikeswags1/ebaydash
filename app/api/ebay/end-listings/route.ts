@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
       cleaned,
       failed,
       total,
-      message: `${ended} active listings ended, ${cleaned} unsold listings cleaned up.${failed > 0 ? ` ${failed} failed.` : ''}`,
+      message: `${ended} active listing${ended !== 1 ? 's' : ''} ended on eBay.${cleaned > 0 ? ` ${cleaned} inactive listing${cleaned !== 1 ? 's' : ''} removed from our records (to delete them from eBay go to Inactive → Select all → Delete).` : ''}${failed > 0 ? ` ${failed} failed.` : ''}`,
     })
   } catch (error) {
     if (error instanceof EbayReconnectRequiredError) {

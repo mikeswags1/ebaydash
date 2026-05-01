@@ -65,7 +65,7 @@ export function ScriptsTab({
               </span>
             </div>
             <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '22px', lineHeight: 1.6 }}>
-              Immediately ends every active listing on your eBay account. Cannot be undone. Use this to do a full reset before re-listing with correct prices.
+              Immediately ends every active listing on your eBay account. Cannot be undone. Inactive/unsold listings must be deleted manually in eBay Seller Hub (Inactive → Select all → Delete).
             </div>
             {endResult ? (
               <div style={{ marginBottom: '12px', fontSize: '12px', color: endState === 'done' ? 'var(--grn)' : 'var(--red)', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
