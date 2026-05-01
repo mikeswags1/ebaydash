@@ -701,6 +701,20 @@ export async function GET(req: NextRequest) {
     if (cachedAvailable.length >= targetCount) {
       return respondWithProducts(cachedProducts, 'cache')
     }
+    // Cache is fresh but below target — return what we have and refill in background
+    if (cachedAvailable.length > 0 && !continuousMode) {
+      after(async () => {
+        try {
+          const cronSecret = process.env.CRON_SECRET || ''
+          const host = req.nextUrl.origin
+          await fetch(`${host}/api/cron/refresh-products?catalog=1&wait=1&batch=3`, {
+            headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {},
+            signal: AbortSignal.timeout(280000),
+          })
+        } catch { /* background — ignore errors */ }
+      })
+      return respondWithProducts(cachedProducts, 'cache-partial-refilling')
+    }
   }
 
   // Cache miss — load lightweight DB-only niche weights before live fetch.

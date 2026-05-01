@@ -1452,7 +1452,12 @@ export async function POST(req: NextRequest) {
     .join('')
 
   const rapidKey = process.env.RAPIDAPI_KEY || ''
-  const fetchedAmazon = await fetchAmazonDetails(asin, rapidKey, validatedAmazon.imageUrl)
+  // In trusted mode (List All), skip the live Amazon fetch entirely — it can pull
+  // images and features from other products in the same brand catalog, contaminating
+  // the gallery with wrong product photos.
+  const fetchedAmazon = trusted
+    ? { images: [] as string[], features: [] as string[], description: '', specs: [] as Array<[string, string]>, _apiError: undefined }
+    : await fetchAmazonDetails(asin, rapidKey, validatedAmazon.imageUrl)
   const validatedRich = hasRichAmazonContent(validatedAmazon)
   const fetchedRich = hasRichAmazonContent(fetchedAmazon)
   const preferredFeatureSources = [
@@ -1507,9 +1512,9 @@ export async function POST(req: NextRequest) {
   const proto = host.startsWith('localhost') ? 'http' : 'https'
   const siteUrl = `${proto}://${host}`
 
-  // Use scraper images only when validated images are sparse (< 2) — scraper can pull
-  // unrelated variant/related-product images from Amazon which pollute the gallery
-  const useScraperImages = validatedAmazon.images.length < 2
+  // In trusted mode: only use validated images — never pull from live scraper (causes wrong product images)
+  // In normal mode: allow scraper images as fallback only when validated images are sparse
+  const useScraperImages = !trusted && validatedAmazon.images.length < 2
   const validatedGallery = dedupeImageUrls([
     ...validatedAmazon.images,
     ...(useScraperImages ? fetchedAmazon.images : []),
