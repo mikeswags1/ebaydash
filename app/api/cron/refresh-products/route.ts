@@ -15,8 +15,8 @@ const MAX_COST = 300
 const CACHE_VERSION = 6
 const CONTINUOUS_CACHE_KEY = '__continuous_listing__'
 const MAX_CONTINUOUS_POOL_SIZE = 600
-const STANDARD_NICHE_TARGET = 90
-const CATALOG_NICHE_TARGET = 220
+const STANDARD_NICHE_TARGET = 200
+const CATALOG_NICHE_TARGET = 2500
 const SCHEDULED_NICHE_BATCH_SIZE = 8
 const CATALOG_NICHE_BATCH_SIZE = 6
 
@@ -65,46 +65,389 @@ function isRejected(title: string) {
 }
 
 const NICHE_QUERIES: Record<string, string[]> = {
-  'Phone Accessories':      ['phone case wireless charger', 'screen protector tempered glass', 'phone stand holder desk', 'portable battery pack charger'],
-  'Computer Parts':         ['usb c hub multiport adapter', 'laptop stand ergonomic adjustable', 'mechanical keyboard compact', 'wireless mouse ergonomic'],
-  'Audio & Headphones':     ['wireless earbuds bluetooth noise cancelling', 'portable bluetooth speaker waterproof', 'headphone stand holder'],
-  'Smart Home Devices':     ['smart plug wifi outlet alexa', 'smart home security camera indoor', 'smart led bulb color'],
-  'Gaming Gear':            ['gaming accessories rgb keyboard', 'gaming headset pc ps4', 'gaming chair lumbar support'],
-  'Kitchen Gadgets':        ['kitchen gadgets silicone utensils set', 'air fryer accessories baking', 'mandoline slicer vegetables'],
-  'Home Decor':             ['wall art prints framed bedroom', 'decorative vase home accent', 'throw blanket couch soft', 'scented candle set home'],
-  'Furniture & Lighting':   ['led desk lamp usb charging', 'floor lamp living room', 'wall sconce light plug in'],
-  'Cleaning Supplies':      ['microfiber cleaning cloths pack', 'cleaning brush kit bathroom', 'squeegee window cleaner'],
-  'Storage & Organization': ['storage bins organizer closet', 'cable management organizer desk', 'vacuum storage bags space saver'],
-  'Camping & Hiking':       ['camping lantern led rechargeable', 'tactical flashlight rechargeable', 'hiking water bottle insulated'],
-  'Garden & Tools':         ['garden tools set planting kit', 'pruning shears garden scissors', 'garden hose nozzle spray', 'garden gloves heavy duty'],
-  'Sporting Goods':         ['resistance bands workout set', 'jump rope speed fitness', 'knee brace support sports'],
-  'Fishing & Hunting':      ['fishing lure kit bass trout', 'braided fishing line 30lb', 'fishing tackle box organizer'],
-  'Cycling':                ['bike accessories cycling light usb', 'cycling gloves padded gel', 'bike lock combination'],
-  'Fitness Equipment':      ['resistance bands set workout loop', 'ab roller wheel core', 'foam roller muscle recovery'],
-  'Personal Care':          ['electric facial cleansing brush', 'facial roller jade gua sha', 'hair turban towel microfiber'],
-  'Supplements & Vitamins': ['vitamin d3 k2 supplement', 'magnesium glycinate sleep supplement', 'elderberry immune support gummies'],
-  'Medical Supplies':       ['pulse oximeter fingertip blood oxygen', 'digital thermometer forehead'],
-  'Mental Wellness':        ['essential oil diffuser ultrasonic', 'weighted sleep mask eye'],
-  'Car Parts':              ['dash cam front rear camera', 'obd2 scanner bluetooth diagnostic', 'jump starter portable battery'],
-  'Car Accessories':        ['car organizer back seat trunk', 'car cleaning kit detailing', 'air freshener vent clip'],
-  'Motorcycle Gear':        ['motorcycle gloves touchscreen riding', 'motorcycle lock disc brake'],
-  'Truck & Towing':         ['truck bed organizer storage', 'towing hitch receiver cover'],
-  'Car Care':               ['car wash kit microfiber towels', 'windshield wiper blades universal'],
-  'Pet Supplies':           ['dog dental chews tartar control', 'cat interactive toys feather wand', 'pet deshedding brush dog cat'],
-  'Baby & Kids':            ['baby carrier wrap ergonomic newborn', 'toddler activity toy learning', 'silicone bib waterproof baby'],
-  'Toys & Games':           ['fidget toys sensory pack kids', 'card games family fun adults', 'magnetic tiles building blocks'],
-  'Clothing & Accessories': ['compression socks athletic women men', 'sun hat wide brim women upf'],
-  'Jewelry & Watches':      ['minimalist bracelet set women gold', 'watch band replacement silicone'],
-  'Office Supplies':        ['desk organizer accessories office', 'ergonomic wrist rest mouse pad'],
-  'Industrial Equipment':   ['safety glasses protective eyewear ansi', 'work gloves mechanic heavy duty'],
-  'Safety Gear':            ['safety vest reflective high visibility', 'first aid kit emergency'],
-  'Janitorial & Cleaning':  ['heavy duty trash bags industrial 55 gallon', 'paper towels bulk pack'],
-  'Packaging Materials':    ['bubble mailers padded envelopes', 'poly mailers shipping bags'],
-  'Trading Cards':          ['card sleeves deck protector standard', 'card storage binder 9 pocket'],
-  'Vintage & Antiques':     ['vintage style wall clock decor', 'retro tin signs man cave bar'],
-  'Coins & Currency':       ['coin holder album collection', 'magnifying glass loupe jeweler'],
-  'Comics & Manga':         ['manga book storage box', 'comic book bags boards supplies'],
-  'Sports Memorabilia':     ['sports card display case frame', 'jersey display case shadow box'],
+  'Phone Accessories': [
+    'phone case wireless charger', 'screen protector tempered glass', 'phone stand holder desk',
+    'portable battery pack charger', 'phone grip ring holder', 'car phone mount vent',
+    'lightning cable fast charging 6ft', 'usb c cable braided fast charge',
+    'phone wallet case card holder', 'wireless charging pad station',
+    'iphone case clear protective', 'android phone case heavy duty',
+    'screen protector privacy filter', 'phone shoulder bag crossbody',
+    'phone sanitizer uv light', 'selfie ring light phone',
+    'pop socket phone grip', 'phone waterproof pouch case',
+    'bluetooth headset earpiece wireless', 'phone camera lens kit wide angle',
+  ],
+  'Computer Parts': [
+    'usb c hub multiport adapter', 'laptop stand ergonomic adjustable',
+    'mechanical keyboard compact tkl', 'wireless mouse ergonomic silent',
+    'monitor stand riser with storage', 'laptop cooling pad fan',
+    'usb hub 4 port splitter', 'hdmi cable 4k 6ft',
+    'webcam 1080p streaming', 'laptop sleeve bag 15 inch',
+    'keyboard wrist rest memory foam', 'mouse pad xxl desk mat',
+    'cable organizer clips desk', 'laptop docking station dual monitor',
+    'privacy screen filter 15 inch', 'computer speaker usb powered',
+    'ssd hard drive external 1tb', 'led desk pad gaming mouse pad',
+    'usb c to hdmi adapter 4k', 'screen cleaning kit microfiber',
+  ],
+  'Audio & Headphones': [
+    'wireless earbuds bluetooth noise cancelling', 'portable bluetooth speaker waterproof',
+    'headphone stand holder aluminum', 'over ear headphones wired studio',
+    'earbuds true wireless sport sweat proof', 'bluetooth speaker shower waterproof small',
+    'gaming headset surround sound pc', 'bone conduction headphones open ear',
+    'microphone usb condenser streaming', 'speaker wire 16 gauge 50ft',
+    'headphone amplifier portable dac', 'aux cable 3.5mm 6ft braided',
+    'earphone tips replacement silicone', 'soundbar small tv desk',
+    'record player bluetooth turntable', 'noise cancelling ear muffs shooting',
+    'karaoke microphone bluetooth wireless', 'kids headphones volume limited',
+    'in ear monitor stage performance', 'audio interface usb recording',
+  ],
+  'Smart Home Devices': [
+    'smart plug wifi outlet alexa', 'smart home security camera indoor',
+    'smart led bulb color changing rgbw', 'video doorbell wireless battery',
+    'motion sensor light indoor outdoor', 'smart thermostat wifi programmable',
+    'smart lock deadbolt keypad', 'indoor security camera 360 pan tilt',
+    'smart power strip surge protector', 'smart switch no neutral wire',
+    'smart smoke carbon monoxide detector', 'wifi garage door opener controller',
+    'smart led strip lights room 16ft', 'smart display screen alexa show',
+    'mesh wifi router system whole home', 'smart water leak sensor detector',
+    'smart window blind motor', 'robot vacuum mop wifi',
+    'air purifier hepa filter room', 'smart irrigation controller wifi',
+  ],
+  'Gaming Gear': [
+    'gaming mouse pad xxl rgb', 'gaming headset surround sound led',
+    'mechanical keyboard gaming rgb switch', 'gaming controller holder stand',
+    'gaming chair lumbar support pillow', 'capture card 4k hdmi streaming',
+    'gaming desk cable management', 'controller charging station ps5',
+    'thumb grips analog stick caps', 'gaming headset stand holder',
+    'led strip lights gaming room', 'monitor light bar gaming',
+    'controller trigger extenders fps', 'gaming glasses blue light blocking',
+    'ps5 controller skin wrap', 'xbox controller battery pack rechargeable',
+    'gaming router ethernet switch', 'wrist support gaming brace',
+    'gaming chair mat floor protector', 'rgb fan case 120mm',
+  ],
+  'Kitchen Gadgets': [
+    'kitchen gadgets silicone utensils set', 'air fryer accessories baking pan',
+    'mandoline slicer vegetables adjustable', 'instant pot accessories steamer basket',
+    'kitchen scale digital 11lb', 'food storage containers glass set',
+    'avocado slicer 3 in 1 tool', 'egg slicer mushroom cutter',
+    'spiralizer vegetable slicer zucchini', 'salad spinner large bowl',
+    'knife sharpener electric 3 stage', 'silicone baking mat sheet pan liner',
+    'meat thermometer instant read wireless', 'can opener electric automatic',
+    'immersion blender handheld stick', 'garlic press stainless steel rocker',
+    'measuring cups spoons set magnetic', 'cast iron skillet cleaner scraper',
+    'coffee grinder burr manual hand', 'vacuum sealer food bags rolls',
+  ],
+  'Home Decor': [
+    'wall art prints framed bedroom', 'decorative throw pillow covers 18x18',
+    'scented candle set lavender vanilla', 'picture frames collage set wall',
+    'artificial plants succulents pot', 'woven wall hanging tapestry boho',
+    'decorative tray coffee table gold', 'string lights fairy bedroom curtain',
+    'table runner burlap linen farmhouse', 'vase ceramic modern minimalist',
+    'wall clock silent non ticking wood', 'decorative lantern candle holder',
+    'bathroom accessories set 4 piece', 'welcome mat doormat outdoor non slip',
+    'mirror round wall mounted gold', 'floating shelves wall mounted set',
+    'cabinet knobs pulls drawer handle', 'curtain rods adjustable double',
+    'rug pad gripper non slip hardwood', 'decorative bowl fruit centerpiece',
+  ],
+  'Furniture & Lighting': [
+    'led desk lamp usb charging eye care', 'floor lamp tripod living room linen',
+    'wall sconce light plug in cord', 'under cabinet led light strip kitchen',
+    'solar outdoor garden lights path', 'led candles flameless remote timer',
+    'nightstand lamp bedside table touch', 'pendant light cord ceiling fixture',
+    'string patio lights outdoor 48ft', 'vanity mirror light led makeup',
+    'clamp desk lamp reading arm swing', 'closet organizer shelf tower',
+    'folding table portable camping', 'tv tray table set 4 piece folding',
+    'bar stool counter height adjustable', 'step ladder 3 step non slip',
+    'bookshelf 5 tier industrial wood', 'file cabinet 2 drawer locking',
+    'shower caddy tension pole rust proof', 'over door organizer hooks rack',
+  ],
+  'Cleaning Supplies': [
+    'microfiber cleaning cloths 24 pack', 'cleaning brush kit bathroom grout',
+    'mop bucket set spin self wringing', 'dust mop hardwood floor dry wet',
+    'toilet brush holder set caddy', 'dish scrubber sponge holder',
+    'cleaning spray bottle refillable 32oz', 'rubber gloves cleaning reusable',
+    'squeegee shower door window cleaner', 'grout cleaner brush narrow stiff',
+    'washing machine cleaning tablets', 'dryer vent cleaning brush kit',
+    'stainless steel cleaner wipes polish', 'shower head cleaner descaler',
+    'garbage disposal cleaner pods', 'toilet bowl cleaner stamps gel',
+    'lint roller extra sticky refill', 'pet hair remover couch furniture',
+    'wood floor cleaner concentrated', 'enzyme cleaner pet stain odor',
+  ],
+  'Storage & Organization': [
+    'storage bins organizer closet fabric', 'vacuum storage bags space saver jumbo',
+    'drawer organizer bamboo divider', 'under bed storage bags zippered',
+    'closet organizer shirt hangers velvet', 'shoe rack organizer stackable',
+    'over door shoe organizer pocket', 'pantry organizer bins canned goods',
+    'cable organizer box hide cords', 'jewelry organizer box drawer insert',
+    'garage storage shelving heavy duty', 'baskets bins for shelves wire',
+    'file organizer desktop accordion', 'medicine cabinet organizer wall mount',
+    'purse organizer hanging bag closet', 'toy storage chest bench kids',
+    'spice rack organizer pull out', 'bathroom counter organizer set',
+    'media storage tower dvd holder', 'luggage organizer packing cubes 8 set',
+  ],
+  'Camping & Hiking': [
+    'camping lantern led rechargeable solar', 'tactical flashlight rechargeable 1000 lumen',
+    'hiking water bottle insulated stainless', 'camping cookware set lightweight titanium',
+    'sleeping bag 20 degree mummy', 'emergency bivvy survival blanket',
+    'fire starter flint steel waterproof', 'trekking poles collapsible carbon',
+    'camping hammock lightweight nylon', 'headlamp rechargeable 350 lumen',
+    'water filter straw portable hiking', 'camp towel microfiber quick dry',
+    'paracord bracelet survival tools', 'camp chair folding lightweight',
+    'bear spray canister hiking', 'compass orienteering hiking',
+    'multi tool knife camping folding', 'first aid kit compact outdoor',
+    'rain poncho emergency waterproof', 'dry bag waterproof roll top',
+  ],
+  'Garden & Tools': [
+    'garden tools set 5 piece planting', 'pruning shears bypass garden scissors',
+    'garden hose expandable flexible kink free', 'garden gloves heavy duty thorns',
+    'raised garden bed planter box cedar', 'kneeling pad garden cushion foam',
+    'watering can 2 gallon indoor outdoor', 'plant labels garden markers stakes',
+    'composting bin kitchen countertop', 'weed puller stand up weeder tool',
+    'garden sprayer pump pressure 2 gallon', 'soil moisture meter sensor plant',
+    'grow lights led indoor plants full spectrum', 'garden tote bag tools carrier',
+    'tree pruning saw folding blade', 'leaf blower battery cordless lightweight',
+    'bird feeder squirrel proof hanging', 'wind chimes outdoor garden large',
+    'pot feet plant risers set ceramic', 'garden hose reel cart rolling',
+  ],
+  'Sporting Goods': [
+    'resistance bands set 5 loop workout', 'knee brace support sports compression',
+    'jump rope speed fitness weighted', 'yoga mat non slip thick exercise',
+    'workout gloves weight lifting grip', 'ankle weights set 10lb pair',
+    'pull up bar doorway no screw', 'exercise ball stability 65cm',
+    'gymnastics mat folding 4 inch', 'speed agility ladder training',
+    'boxing gloves training sparring', 'dumbbell neoprene coated set',
+    'compression arm sleeve basketball', 'sport water bottle straw lid',
+    'swimming goggles anti fog adult', 'running belt waist pack phone',
+    'pickleball paddle lightweight carbon', 'badminton set backyard outdoor',
+    'volleyball net portable beach', 'athletic knee sleeve pair',
+  ],
+  'Fishing & Hunting': [
+    'fishing lure kit bass trout spinners', 'braided fishing line 30lb 300yd',
+    'fishing tackle box organizer 3600', 'telescoping fishing rod travel',
+    'fishing pliers stainless steel multi', 'fishing net rubber mesh handle',
+    'trail camera wildlife 24mp no glow', 'hunting face mask camo mesh',
+    'tree stand harness safety vest', 'game call deer turkey electronic',
+    'fishing rod holder rack wall mount', 'fish scale digital 110lb',
+    'fishing lure storage bag portable', 'scent eliminator spray hunting',
+    'bow release aid trigger wrist', 'fishing hat sun protection wide brim',
+    'camo netting ghillie suit', 'duck call set waterfowl',
+    'fishing line clip bobber set', 'hook remover extractor pliers',
+  ],
+  'Fitness Equipment': [
+    'resistance bands loop set heavy light', 'ab roller wheel core workout',
+    'foam roller deep tissue massage', 'pull up bar multi grip doorway',
+    'battle rope anchor strap training', 'speed rope jump fitness handles',
+    'workout mat exercise yoga thick', 'slider discs core gliding carpet',
+    'balance board wobble trainer', 'dip bar parallette bars push up',
+    'barbell pad squat hip thrust', 'wrist ankle weight 5lb set',
+    'exercise ball chair pump balance', 'agility ladder speed training set',
+    'gymnastics rings wooden olympic', 'step aerobics platform adjustable',
+    'weight bench foldable adjustable', 'knee sleeves compression 7mm',
+    'lifting belt powerlifting lever', 'massage gun percussion deep tissue',
+  ],
+  'Personal Care': [
+    'electric facial cleansing brush sonic', 'jade roller face gua sha set',
+    'hair turban towel microfiber quick dry', 'nail file buffer block set',
+    'eyebrow razor dermaplaning face', 'cuticle pusher nail care set',
+    'facial steamer portable nano ionic', 'blackhead remover vacuum pore',
+    'eyelash curler heated silicone', 'hair claw clips large women',
+    'scalp massager shampoo brush', 'bath pillow spa cushion suction',
+    'loofah sponge back scrubber long', 'nail drill electric set rechargeable',
+    'hair diffuser universal blow dryer', 'tongue scraper stainless steel set',
+    'electric callus remover foot file', 'facial massage roller ice globes',
+    'shower cap reusable waterproof', 'teeth whitening strips 28 pack',
+  ],
+  'Medical Supplies': [
+    'pulse oximeter fingertip blood oxygen', 'digital thermometer forehead no touch',
+    'pill organizer weekly 4 times day', 'blood pressure monitor upper arm',
+    'knee brace hinged support ligament', 'wrist brace carpal tunnel splint',
+    'back brace lumbar support posture', 'ankle brace stabilizer sprain',
+    'compression socks 20-30 mmhg women', 'heating pad electric fast heating',
+    'ice pack reusable flexible gel', 'eye mask warm compress USB',
+    'back massager cushion heat shiatsu', 'tens unit muscle stimulator pads',
+    'nebulizer machine portable rechargeable', 'cervical neck traction pillow',
+    'posture corrector back brace adult', 'finger splint stack brace',
+    'foot massager plantar fasciitis', 'knee ice wrap compression cold',
+  ],
+  'Car Accessories': [
+    'car phone mount dashboard vent', 'car organizer back seat trash bag',
+    'car seat covers full set waterproof', 'car air freshener vent clip',
+    'dash cam front rear dual 1080p', 'car cleaning kit detailing microfiber',
+    'trunk organizer collapsible car', 'car sun shade windshield foldable',
+    'jumper cables heavy duty 25ft', 'car vacuum cordless portable',
+    'steering wheel cover non slip', 'seat gap filler car center console',
+    'car first aid kit emergency roadside', 'blind spot mirror wide angle',
+    'tire pressure gauge digital', 'car floor mats all weather heavy duty',
+    'tint film window privacy solar', 'led interior lights rgb remote',
+    'seat belt cover shoulder pad', 'car charger dual usb fast charge',
+  ],
+  'Car Parts': [
+    'dash cam 4k front rear mirror', 'obd2 scanner bluetooth diagnostic',
+    'jump starter portable battery 2000a', 'tire inflator portable 12v',
+    'wiper blade universal 24 inch', 'cabin air filter replacement',
+    'engine air filter performance', 'car battery charger trickle maintainer',
+    'oil drain pan plug removal kit', 'spark plug socket set 5/8',
+    'brake caliper wind back tool', 'headlight restoration kit polishing',
+    'led headlight bulb conversion kit', 'license plate frame stainless',
+    'fuse box replacement assorted', 'serpentine belt tool kit',
+    'timing light engine automotive', 'socket set metric sae 40 piece',
+    'car cover weatherproof outdoor', 'tonneau cover truck bed roll up',
+  ],
+  'Pet Supplies': [
+    'dog dental chews tartar control large', 'cat interactive toy feather wand',
+    'pet deshedding brush tool dog cat', 'dog harness no pull padded',
+    'cat tree tower condo scratcher', 'dog collar adjustable nylon',
+    'pet grooming glove brush remove hair', 'automatic pet feeder cat dog',
+    'pet stroller large 4 wheel', 'dog puzzle toy interactive slow feeder',
+    'cat litter mat double layer', 'dog bone chew toy aggressive chewer',
+    'pet nail grinder quiet rechargeable', 'pet carrier airline approved soft',
+    'reptile heat lamp basking bulb', 'aquarium filter canister quiet',
+    'bird cage medium parakeet parrot', 'small animal bedding fleece liner',
+    'dog seat cover back seat waterproof', 'elevated dog bowl stand stainless',
+  ],
+  'Baby & Kids': [
+    'baby carrier wrap ergonomic newborn', 'toddler activity toy learning center',
+    'silicone bib waterproof pocket catch', 'baby monitor video wifi',
+    'white noise machine baby sleep', 'bath seat infant support ring',
+    'baby food maker blender puree', 'teether toy sensory silicone',
+    'diaper bag backpack large capacity', 'portable high chair booster seat',
+    'baby gate pressure mounted stairs', 'nightlight projector star baby',
+    'stroller organizer cup holder', 'infant carrier ring sling',
+    'foam play mat interlocking tiles', 'baby swing portable indoor',
+    'nursing pillow breastfeeding support', 'baby food storage containers',
+    'car seat travel bag gate check', 'baby washcloths soft muslin set',
+  ],
+  'Toys & Games': [
+    'fidget toys sensory pack adults kids', 'magnetic tiles building blocks 60pc',
+    'card game family adults funny', 'kids science kit experiment set',
+    'remote control car fast offroad', 'drone mini beginner indoor',
+    'slime kit make your own activity', 'kinetic sand set mold tools',
+    'outdoor lawn games set yard', 'foam dart blaster gun ammo',
+    'educational flashcards kids learning', 'building blocks stem engineering',
+    'stuffed animal plush toy soft', 'arts crafts kit girls boys',
+    'puzzle 1000 pieces adults scenery', 'balance bike no pedal toddler',
+    'kite easy fly kids large', 'wooden block set stacking toddler',
+    'board game strategy two players', 'marble run set 100 pieces',
+  ],
+  'Clothing & Accessories': [
+    'compression socks athletic 6 pack women', 'sun hat wide brim spf 50',
+    'beanie hat knit unisex winter', 'fingerless gloves touchscreen',
+    'face mask reusable washable 5 pack', 'belt leather reversible mens',
+    'sunglasses polarized women uv400', 'reading glasses blue light blocking',
+    'wallet slim men rfid blocking', 'tactical belt riggers heavy duty',
+    'bandana cotton multi use pack', 'shoe insoles arch support cushion',
+    'umbrella windproof automatic open', 'rain jacket packable lightweight',
+    'thermal underwear base layer set', 'hiking socks merino wool cushion',
+    'gloves touchscreen waterproof', 'neck gaiter balaclava face cover',
+    'trucker hat mesh baseball cap', 'fanny pack waterproof waist bag',
+  ],
+  'Jewelry & Watches': [
+    'minimalist bracelet women gold layering', 'watch band apple silicone replacement',
+    'stud earrings set women hypoallergenic', 'anklet set layered women gold',
+    'necklace pendant simple delicate gold', 'rings stacking set women adjustable',
+    'jewelry organizer box velvet travel', 'watch display stand case holder',
+    'silver polish cloth anti tarnish', 'earring organizer wall hanging',
+    'men bracelet leather braided set', 'charm bracelet women pandora compatible',
+    'birthstone necklace personalized', 'cuff bracelet adjustable women',
+    'hair clip barrette set women', 'magnetic locket necklace floating',
+    'jewelry cleaning solution kit', 'ring size adjuster guard set',
+    'brooch pin vintage women', 'hair jewelry pins accessories wedding',
+  ],
+  'Office Supplies': [
+    'desk organizer accessories set bamboo', 'ergonomic wrist rest mouse pad',
+    'label maker tape printer handheld', 'stapler heavy duty 210 sheets',
+    'pen holder organizer magnetic mesh', 'whiteboard magnetic dry erase 17x23',
+    'planner agenda undated weekly', 'sticky notes 3x3 assorted colors',
+    'scissors set multipurpose stainless', 'binder clips large assorted 60 pack',
+    'hanging file folders letter size', 'printer paper 8.5x11 500 sheets',
+    'tape dispenser weighted heavy duty', 'calculator scientific solar',
+    'highlighter set dual tip pastel', 'correction tape white out roller',
+    'rubber stamp custom self inking', 'paper tray letter desktop 3 tier',
+    'index cards ruled 4x6 pack 500', 'push pins thumb tacks assorted',
+  ],
+  'Safety Gear': [
+    'safety glasses protective clear ansi', 'first aid kit emergency home car',
+    'safety vest reflective high visibility', 'hard hat vented construction',
+    'work gloves mechanic heavy duty', 'respirator n95 particulate mask',
+    'safety ear muffs noise reduction', 'knee pads construction flooring',
+    'tool bag organizer canvas large', 'safety boots steel toe',
+    'fire escape ladder 2 story', 'emergency kit car roadside',
+    'smoke alarm detector battery', 'carbon monoxide detector plug in',
+    'reflective road flares emergency', 'harness fall protection construction',
+    'traffic cone collapsible safety', 'safety sign caution floor wet',
+    'lock box key hide outdoor', 'personal alarm keychain emergency',
+  ],
+  'Industrial Equipment': [
+    'multimeter digital professional clamp', 'soldering iron kit temperature control',
+    'cable tracer toner network kit', 'pipe wrench heavy duty 14 inch',
+    'drill bit set masonry concrete', 'saw blade circular 7.25 framing',
+    'level laser self leveling 360', 'torque wrench 1/2 drive click',
+    'wire stripper cutter crimper tool', 'stud finder electronic magnetic',
+    'heat gun variable temperature', 'caulking gun sausage pack heavy',
+    'utility knife box cutter retractable', 'duct tape heavy duty silver 3in',
+    'sandpaper assorted grits 120 sheets', 'safety gloves cut resistant level 5',
+    'bolt cutter 24 inch heavy hardened', 'pipe cutter copper pvc ratchet',
+    'work light rechargeable portable led', 'magnetic pickup tool flexible',
+  ],
+  'Trading Cards': [
+    'card sleeves standard size 200 pack', 'card binder 9 pocket 360 side loading',
+    'card storage box 800 count', 'top loader rigid 3x4 100 pack',
+    'penny sleeves 1000 pack clear', 'card grading holder one touch',
+    'card display frame wall mount', 'card dividers tabs organizer',
+    'toploaders 4x6 oversized cards', 'card sorting tray organizer',
+    'card case screw down holder', 'pokemon card sleeve ultra pro',
+    'trading card display stand counter', 'magnetic one touch 35pt holder',
+    'card safe deposit box fireproof', 'grading submission kit supplies',
+    'trading card album zippered portfolio', 'card texture cleaning cloth',
+    'collector display shelf wall mounted', 'card UV protection case sleeve',
+  ],
+  'Coins & Currency': [
+    'coin holder album collection book', 'magnifying glass loupe jeweler 30x',
+    'coin capsules direct fit quarters', 'coin tubes half dollars storage',
+    'currency album binder paper money', 'coin display case shadow box',
+    'cleaning cloth silver jewelry polish', 'coin scale digital gram',
+    'numismatic reference guide book', 'coin storage box lockable',
+    'silver coin tongs non scratch', 'grading set coin holder snap',
+    'coin photography mat backdrop', 'pcgs slab storage box',
+    'round tube containers cents nickels', 'paper money sleeves currency',
+    'jewelers loupe triplet 10x loupe', 'coin microscope digital usb',
+    'bullion display stand bar holder', 'acid test kit gold silver',
+  ],
+  'Janitorial & Cleaning': [
+    'heavy duty trash bags 55 gallon 50ct', 'paper towels bulk 12 rolls',
+    'toilet paper bulk 30 rolls', 'hand soap refill gallon foaming',
+    'dish soap commercial degreaser', 'floor cleaner concentrate gallon',
+    'mop head replacement commercial cotton', 'broom dustpan set indoor',
+    'janitorial cart cleaning supply', 'urinal screen deodorizer 10 pack',
+    'air freshener spray can 12 pack', 'all purpose cleaner spray gallon',
+    'laundry detergent pods 150 count', 'bleach tablets toilet bowl 48ct',
+    'drain cleaner safe pipes enzyme', 'grease trap cleaner biological',
+    'hand sanitizer gallon refill 70%', 'disinfectant wipes 400ct canister',
+    'floor buffer pad scrubbing red', 'squeegee floor water push blade',
+  ],
+  'Packaging Materials': [
+    'bubble mailers padded envelopes 6x10', 'poly mailers shipping bags 10x13',
+    'cardboard boxes moving small 10pk', 'packing tape rolls clear heavy 6pk',
+    'packing peanuts 14 cubic feet bag', 'tissue paper 100 sheets assorted',
+    'kraft paper roll 17in wrapping', 'stretch wrap hand dispenser 18in',
+    'fragile stickers labels roll 500', 'thank you cards stickers small biz',
+    'padded mailers bubble lined bags', 'jewelry pouches small organza',
+    'shipping scale postal 50lb digital', 'label printer thermal 4x6',
+    'void fill paper rolls shredded', 'corner edge protectors cardboard',
+    'security seal tamper evident bags', 'merchandise bags clear handles',
+    'freezer zip bags gallon 150ct', 'heat sealer impulse machine 8 inch',
+  ],
+  'Sports Memorabilia': [
+    'jersey display case frame shadow box', 'baseball card display case wall',
+    'basketball case acrylic display stand', 'football helmet display stand',
+    'autograph signing ball holder pen', 'memorabilia uv protection frame',
+    'bobblehead display case shelf', 'sports photo frame 8x10 collage',
+    'ball display holder crystal stand', 'collectible figure display shelf',
+    'baseball bat display wall mount', 'pennant display frame shadow box',
+    'sports medal holder display rack', 'ticket stub album holder display',
+    'autographed item uv sleeves bags', 'memorabilia storage acid free',
+    'glass display case countertop lock', 'trading card holder premium display',
+    'sports trading card frame 4x6', 'collector storage cabinet lockable',
+  ],
 }
 
 type RefreshOptions = {
@@ -168,46 +511,40 @@ function buildCatalogQueries(niche: string) {
 // ── Refresh one niche in the product_cache table ─────────────────────────────
 async function refreshNiche(niche: string, rapidKey: string, options: RefreshOptions = {}): Promise<number> {
   const target = Math.max(30, Math.min(CATALOG_NICHE_TARGET, options.target || STANDARD_NICHE_TARGET))
-  const queries = buildCatalogQueries(niche).slice(0, options.queryLimit || 4)
-  const pages = options.pages?.length ? options.pages : [1]
-  const timeoutMs = options.timeoutMs || 8000
+  const allQueries = buildCatalogQueries(niche)
+  const queryLimit = options.queryLimit || Math.min(allQueries.length, 25)
+  const queries = allQueries.slice(0, queryLimit)
+  const pages = options.pages?.length ? options.pages : [1, 2, 3, 4, 5]
+  const timeoutMs = options.timeoutMs || 12000
   const results: Record<string, unknown>[] = []
   const seen = new Set<string>()
 
   for (const query of queries) {
     if (results.length >= target) break
-    try {
-      for (const page of pages) {
-        if (results.length >= target) break
-        const res = await fetch(
-          `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(query)}&country=US&category_id=aps&page=${page}`,
-          { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey }, signal: AbortSignal.timeout(timeoutMs) }
-        )
-        if (res.status === 429 || res.status === 403) return results.length > 0 ? results.length : -1
-        if (!res.ok) break
-        const data = await res.json()
-        if (String(data?.message || '').toLowerCase().match(/limit|quota|exceed/)) return results.length > 0 ? results.length : -1
-        const products: Record<string, unknown>[] = data?.data?.products || []
+    for (const page of pages) {
+      if (results.length >= target) break
+      try {
+        // Own scraper — scrapes amazon.com directly, no shared API pool
+        const scraped = await scrapeAmazonSearch(query, page, timeoutMs)
+        if (scraped.length === 0) break // No results for this page, skip remaining pages
 
-        for (const p of products) {
+        for (const p of scraped) {
           const asin  = String(p.asin || '')
           if (!asin || seen.has(asin)) continue
           seen.add(asin)
-          const price = parsePrice(p.product_price) || parsePrice(p.product_original_price)
-          const title = String(p.product_title || '')
+          const price = p.price
+          const title = String(p.title || '')
           if (!price || price <= 0 || price > MAX_COST || !title || isRejected(title)) continue
           const { ebayPrice, profit, roi } = calcMetrics(price)
           if (profit < MIN_PROFIT) continue
           const risk       = price > 150 ? 'HIGH' : price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
-          const salesVol   = String(p.sales_volume || '')
-          const rating     = parseFloat(String(p.product_star_rating || '0')) || 0
-          const numRatings = parseInt(String(p.product_num_ratings || '0').replace(/[^0-9]/g, ''), 10) || 0
-          results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl: String(p.product_photo || ''), risk, salesVolume: salesVol, sourceNiche: niche, _rating: rating, _numRatings: numRatings })
+          const rating     = p.rating || 0
+          const numRatings = p.reviewCount || 0
+          results.push({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl: p.imageUrl || '', risk, salesVolume: '', sourceNiche: niche, _rating: rating, _numRatings: numRatings })
           if (results.length >= target) break
         }
-        if (products.length === 0) break
-      }
-    } catch { continue }
+      } catch { break }
+    }
   }
 
   if (results.length === 0) return 0
