@@ -41,17 +41,17 @@ async function endItem(itemId: string, accessToken: string, appId: string): Prom
   }
 }
 
-async function getActiveListingIds(accessToken: string, appId: string): Promise<string[]> {
+async function getListingIds(accessToken: string, appId: string, listType: 'ActiveList' | 'UnsoldList'): Promise<string[]> {
   const ids: string[] = []
 
   for (let page = 1; page <= 10; page++) {
     const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <RequesterCredentials><eBayAuthToken>${escapeXml(accessToken)}</eBayAuthToken></RequesterCredentials>
-  <ActiveList>
+  <${listType}>
     <Include>true</Include>
     <Pagination><EntriesPerPage>200</EntriesPerPage><PageNumber>${page}</PageNumber></Pagination>
-  </ActiveList>
+  </${listType}>
   <DetailLevel>ReturnSummary</DetailLevel>
 </GetMyeBaySellingRequest>`
 
@@ -94,18 +94,27 @@ export async function POST(req: NextRequest) {
     }
 
     const appId = process.env.EBAY_APP_ID || ''
-    const itemIds = await getActiveListingIds(credentials.accessToken, appId)
 
-    if (itemIds.length === 0) {
-      return apiOk({ ended: 0, failed: 0, message: 'No active listings found.' })
+    // Fetch active + unsold inactive listings in parallel
+    const [activeIds, unsoldIds] = await Promise.all([
+      getListingIds(credentials.accessToken, appId, 'ActiveList'),
+      getListingIds(credentials.accessToken, appId, 'UnsoldList'),
+    ])
+
+    // Active listings need EndItem — unsold are already ended, just need DB cleanup
+    const allIds = [...new Set([...activeIds, ...unsoldIds])]
+
+    if (allIds.length === 0) {
+      return apiOk({ ended: 0, cleaned: 0, failed: 0, message: 'No active or unsold listings found.' })
     }
 
     let ended = 0
     let failed = 0
     const BATCH = 5
 
-    for (let i = 0; i < itemIds.length; i += BATCH) {
-      const batch = itemIds.slice(i, i + BATCH)
+    // End active listings
+    for (let i = 0; i < activeIds.length; i += BATCH) {
+      const batch = activeIds.slice(i, i + BATCH)
       const results = await Promise.allSettled(
         batch.map(id => endItem(id, credentials.accessToken, appId))
       )
@@ -115,10 +124,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Mark all as ended in our DB
+    // Mark everything as ended in our DB (active + unsold)
     await sql`UPDATE listed_asins SET ended_at = NOW() WHERE user_id = ${session.user.id} AND ended_at IS NULL`.catch(() => {})
 
-    return apiOk({ ended, failed, total: itemIds.length, message: `Ended ${ended} listings.${failed > 0 ? ` ${failed} failed — may already be ended or sold.` : ''}` })
+    const cleaned = unsoldIds.length
+    const total = activeIds.length + cleaned
+    return apiOk({
+      ended,
+      cleaned,
+      failed,
+      total,
+      message: `${ended} active listings ended, ${cleaned} unsold listings cleaned up.${failed > 0 ? ` ${failed} failed.` : ''}`,
+    })
   } catch (error) {
     if (error instanceof EbayReconnectRequiredError) {
       return apiError('eBay session expired. Reconnect in Settings.', { status: 401, code: 'RECONNECT_REQUIRED' })

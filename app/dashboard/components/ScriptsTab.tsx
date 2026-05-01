@@ -42,7 +42,7 @@ export function ScriptsTab({
         body: JSON.stringify({ confirmed: true }),
       })
       const data = await res.json()
-      setEndResult(data)
+      setEndResult({ message: data.message || (res.ok ? 'Done.' : 'Something went wrong.') })
       setEndState(res.ok ? 'done' : 'error')
     } catch {
       setEndState('error')

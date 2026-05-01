@@ -45,9 +45,8 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account }) {
       if (account?.provider === 'google') {
         const existing = await queryRows<{ id: number }>`SELECT id FROM users WHERE email = ${user.email} LIMIT 1`
-        if (existing.length === 0) {
-          await sql`INSERT INTO users (email, name, password_hash) VALUES (${user.email}, ${user.name}, NULL)`
-        }
+        // Private beta — only existing accounts can sign in, no new registrations
+        if (existing.length === 0) return false
       }
 
       return true

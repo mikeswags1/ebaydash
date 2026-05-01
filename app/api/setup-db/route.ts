@@ -56,6 +56,24 @@ export async function GET() {
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS niche VARCHAR(100)`.catch(() => {})
     await sql`ALTER TABLE ebay_credentials ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMP`.catch(() => {})
     await sql`ALTER TABLE ebay_credentials ADD COLUMN IF NOT EXISTS refresh_token TEXT`.catch(() => {})
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        plan VARCHAR(50) NOT NULL DEFAULT 'trial',
+        status VARCHAR(50) NOT NULL DEFAULT 'active',
+        amount_cents INTEGER,
+        currency VARCHAR(10) DEFAULT 'USD',
+        billing_interval VARCHAR(20),
+        current_period_start TIMESTAMP,
+        current_period_end TIMESTAMP,
+        payment_method VARCHAR(100),
+        external_subscription_id VARCHAR(255),
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `
     await ensureListedAsinsFinancialColumns()
     await ensureProductSourceTables()
     return NextResponse.json({ success: true, message: 'Database tables ready' })
