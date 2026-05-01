@@ -942,6 +942,14 @@ export async function GET(req: NextRequest) {
   }
 
   if (catalogRefresh && req.nextUrl.searchParams.get('wait') !== '1') {
+    // Fast daily cron path — runs every day via Vercel schedule (?catalog=1, no wait=1).
+    // Does NOT re-scrape Amazon (that's for manual Deep Catalog Crawl); instead it:
+    //  1. Rebuilds source pool from existing product_cache
+    //  2. Refreshes continuous listing cache
+    //  3. Warms amazon_product_cache for 20 top unenriched pool products (fixes 1-image bulk listing)
+    //  4. Refreshes stale Amazon prices (catches price changes and unavailable products)
+    //  5. Reprices pool with current engine
+    //  6. Ends eBay listings for confirmed-unavailable products
     report.fastCatalogRefresh = true
     report.liveFetchSkipped = 'Add wait=1 to run the slower live Amazon fetch loop.'
     report.nichesRefreshed = 'skipped'
@@ -951,11 +959,18 @@ export async function GET(req: NextRequest) {
     report.batchSize = batchSize
     report.sourceProducts = await rebuildProductSourceFromCache(250)
     report.continuousProducts = await refreshContinuousCache()
+    report.priceRefresh = await refreshProductSourcePrices({ limit: 60, staleDays: 7 }).catch(() => ({}))
+    report.repriced = await repriceProductSourceItems().catch(() => 0)
+    report.warmCache = await warmAmazonProductCache(20).catch(() => ({ warmed: 0, failed: 0 }))
+    try { report.unavailableSync = await syncUnavailableListings() } catch { report.unavailableSync = 'error' }
     report.durationMs = Date.now() - startedAt
     return apiOk({ success: true, ...report })
   }
 
   Object.assign(report, await runProductRefresh())
+  // After full scrape: also warm cache and sync unavailable listings
+  report.warmCache = await warmAmazonProductCache(20).catch(() => ({ warmed: 0, failed: 0 }))
+  try { report.unavailableSync = await syncUnavailableListings() } catch { report.unavailableSync = 'error' }
   report.durationMs = Date.now() - startedAt
   return apiOk({ success: true, ...report })
 }
