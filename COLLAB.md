@@ -18,6 +18,10 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-05 | Claude | Block supplement/vitamin listings: expanded `drugs_restricted` pattern to catch multivitamin, omega-3, softgel, gummy, capsule, whole food, protein powder, etc. — full supplements niche is now blocked at policy level | `lib/listing-policy.ts` |
+| 2026-05-05 | Claude | Fix wrong gallery images: `fetchedAmazon.images` (live scraper) was always merged in, pulling unrelated variant/related-product images. Now only used as fallback when validated images < 2 | `app/api/ebay/list-product/route.ts` |
+| 2026-05-05 | Claude | Admin stats page at `/admin` (only accessible by admin emails), blocks new signups (private beta), payment table stub in setup-db | `app/admin/page.tsx`, `app/api/admin/stats/route.ts`, `app/signup/page.tsx`, `lib/auth.ts` |
+| 2026-05-05 | Claude | End All Listings script in Scripts tab with 2-click confirmation, handles active + unsold cleanup | `app/api/ebay/end-listings/route.ts`, `ScriptsTab.tsx` |
 | 2026-05-05 | Claude | Smart title-derived feature bullets from product title (watt/WiFi/pack/waterproof etc.), niche context bullets, killed all generic filler ("Practical general accessory", "Brand shown in item specifics", "Review the photos"), emptied DEFAULT_FEATURES | `app/api/ebay/list-product/route.ts` |
 | 2026-05-05 | Claude | Fix stale pricing: `refreshProductSourcePrices()` re-fetches live Amazon prices for stale pool products every 5 days, reprices using engine. Hard profitability gate blocks loss-making listings at publish. | `lib/product-source-engine.ts`, `app/api/cron/refresh-products/route.ts`, `app/api/ebay/list-product/route.ts` |
 | 2026-05-05 | Claude | Fast bulk listing: `trusted` mode skips re-validation + competitor lookup for List All. Batch 3→5, `Promise.allSettled` isolation, auto-retry. | `app/dashboard/utils.ts`, `app/api/ebay/list-product/route.ts`, `app/dashboard/page.tsx` |
@@ -52,6 +56,8 @@ _Clear this section when done._
 
 ## ⚠️ Flags for Other Agent
 
+- **Supplements niche is BLOCKED**: `drugs_restricted` policy pattern covers multivitamin, omega-3, softgel, gummy, capsule, whole food, protein powder, etc. Do NOT remove these. The Supplements & Vitamins niche should not be used for dropshipping — eBay has restrictions and the listings are misleading.
+- **Image pipeline**: `fetchedAmazon.images` (live scraper) is only merged when `validatedAmazon.images.length < 2`. Do NOT revert to unconditional merge — it causes wrong gallery images from unrelated products/variants.
 - **Stale pricing is the #1 live bug**: Products in the pool get cached with an Amazon price that Amazon later changes. `refreshProductSourcePrices()` is wired into cron `?sourceOnly=1` and re-fetches prices for products older than 5 days, repricing with the engine. The publish gate also blocks any listing where `profit < $1` as a hard backstop. Do NOT remove either of these.
 - **ASIN cross-mapping bug**: Amazon occasionally reassigns ASINs to different products. When this happens, the title and price in the pool are completely wrong. The reprice cron will catch cost changes but not title changes. A title similarity check between pool title and validated Amazon title would further reduce this risk — not yet implemented.
 - **`trusted` mode**: Used for List All — skips Amazon re-validation and competitor lookup. Uses cached `amazonPrice` from finder. Safe because reprice cron keeps prices fresh. Do NOT disable trusted mode — it's 3x faster for bulk listing.

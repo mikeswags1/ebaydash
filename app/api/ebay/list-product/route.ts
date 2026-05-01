@@ -1418,11 +1418,12 @@ export async function POST(req: NextRequest) {
   const proto = host.startsWith('localhost') ? 'http' : 'https'
   const siteUrl = `${proto}://${host}`
 
-  // Merge all image sources: validated API data + scraper data + fallback URLs
-  // fetchedAmazon.images from the scraper is the key fix — it often has more angles
+  // Use scraper images only when validated images are sparse (< 2) — scraper can pull
+  // unrelated variant/related-product images from Amazon which pollute the gallery
+  const useScraperImages = validatedAmazon.images.length < 2
   const validatedGallery = dedupeImageUrls([
     ...validatedAmazon.images,
-    ...fetchedAmazon.images,
+    ...(useScraperImages ? fetchedAmazon.images : []),
     validatedAmazon.imageUrl,
     imageUrl,
   ])
