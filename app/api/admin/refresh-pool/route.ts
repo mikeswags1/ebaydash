@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   // Call our own cron with the internal CRON_SECRET
   const cronSecret = process.env.CRON_SECRET || ''
   const host = new URL(req.url).origin
-  const param = mode === 'catalog' ? '?catalog=1' : '?sourceOnly=1'
+  const param = mode === 'catalog' ? '?catalog=1&wait=1' : '?sourceOnly=1'
 
   const res = await fetch(`${host}/api/cron/refresh-products${param}`, {
     headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {},

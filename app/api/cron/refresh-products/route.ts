@@ -572,32 +572,47 @@ async function refreshNiche(niche: string, rapidKey: string, options: RefreshOpt
 // ── Refresh one niche using direct Amazon scraping (no API key needed) ───────
 async function refreshNicheScrape(niche: string, options: RefreshOptions = {}): Promise<number> {
   const target = Math.max(30, Math.min(CATALOG_NICHE_TARGET, options.target || STANDARD_NICHE_TARGET))
-  const queries = buildCatalogQueries(niche).slice(0, options.queryLimit || 3)
-  const pages = options.pages?.length ? options.pages : [1]
+  const allQueries = buildCatalogQueries(niche)
+  const queries = allQueries.slice(0, options.queryLimit || Math.min(allQueries.length, 20))
+  const pages = options.pages?.length ? options.pages : [1, 2]
   const timeoutMs = options.timeoutMs || 6000
   const results: Record<string, unknown>[] = []
   const seen = new Set<string>()
 
+  // Build all tasks then run in parallel batches of 3
+  const tasks: Array<{ query: string; page: number }> = []
   for (const query of queries) {
+    for (const page of pages) {
+      tasks.push({ query, page })
+    }
+  }
+
+  const PARALLEL = 3
+  for (let i = 0; i < tasks.length; i += PARALLEL) {
     if (results.length >= target) break
-    try {
-      for (const page of pages) {
+    const batch = tasks.slice(i, i + PARALLEL)
+    const settled = await Promise.allSettled(
+      batch.map(({ query, page }) => scrapeAmazonSearch(query, page, timeoutMs))
+    )
+    for (const outcome of settled) {
+      if (results.length >= target) break
+      if (outcome.status !== 'fulfilled') continue
+      for (const p of outcome.value) {
+        if (!p.asin || seen.has(p.asin)) continue
+        seen.add(p.asin)
+        if (!p.price || p.price <= 0 || p.price > MAX_COST || !p.title || isRejected(p.title)) continue
+        const { ebayPrice, profit, roi } = calcMetrics(p.price)
+        if (profit < MIN_PROFIT) continue
+        const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
+        results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
+          imageUrl: p.imageUrl, risk, salesVolume: '', sourceNiche: niche, _rating: p.rating, _numRatings: p.reviewCount })
         if (results.length >= target) break
-        const scraped = await scrapeAmazonSearch(query, page, timeoutMs)
-        for (const p of scraped) {
-          if (!p.asin || seen.has(p.asin)) continue
-          seen.add(p.asin)
-          if (!p.price || p.price <= 0 || p.price > MAX_COST || !p.title || isRejected(p.title)) continue
-          const { ebayPrice, profit, roi } = calcMetrics(p.price)
-          if (profit < MIN_PROFIT) continue
-          const risk = p.price > 150 ? 'HIGH' : p.price > 60 || roi < 45 ? 'MEDIUM' : 'LOW'
-          results.push({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
-            imageUrl: p.imageUrl, risk, salesVolume: '', sourceNiche: niche, _rating: p.rating, _numRatings: p.reviewCount })
-          if (results.length >= target) break
-        }
-        if (scraped.length === 0) break
       }
-    } catch { continue }
+    }
+    // Small delay to avoid Amazon rate limiting
+    if (i + PARALLEL < tasks.length && results.length < target) {
+      await new Promise(r => setTimeout(r, 300))
+    }
   }
 
   if (results.length === 0) return 0

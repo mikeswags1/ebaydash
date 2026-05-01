@@ -13,7 +13,11 @@ function usePoolRefresh() {
       const res = await fetch('/api/admin/refresh-pool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) })
       const data = await res.json()
       setState(res.ok ? 'done' : 'error')
-      setMsg(res.ok ? `Done. ${JSON.stringify(data.result?.sourceProducts || data.result || '')}` : 'Error — check logs.')
+      const r = data.result || {}
+      const msg = res.ok
+        ? `Done. ${r.nichesRefreshed ?? 0} niches scraped, ${r.sourceProducts ?? 0} products in pool, ${r.continuousProducts ?? 0} in queue. Niches: ${(r.nichesAttempted || []).join(', ')}`
+        : 'Error — check logs.'
+      setMsg(msg)
     } catch { setState('error'); setMsg('Request failed.') }
   }
   return { state, msg, trigger }
@@ -156,10 +160,23 @@ export default function AdminPage() {
             <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--sil)', marginBottom: '12px' }}>
               COLLAB.md — Live
             </div>
-            <div className="card" style={{ padding: '24px' }}>
-              <pre style={{ fontSize: '11px', color: 'var(--sil)', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0, fontFamily: 'monospace', overflowX: 'auto' }}>
-                {collab}
-              </pre>
+            <div className="card" style={{ padding: '28px', lineHeight: 1.75, fontSize: '13px', color: 'var(--sil)' }}>
+              {collab.split('\n').map((line, i) => {
+                if (line.startsWith('# ')) return <div key={i} style={{ fontSize: '22px', fontWeight: 800, color: 'var(--txt)', marginBottom: '18px', marginTop: i > 0 ? '10px' : 0 }}>{line.slice(2)}</div>
+                if (line.startsWith('## ')) return <div key={i} style={{ fontSize: '14px', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '24px', marginBottom: '10px', borderBottom: '1px solid rgba(125,211,252,0.12)', paddingBottom: '6px' }}>{line.slice(3)}</div>
+                if (line.startsWith('### ')) return <div key={i} style={{ fontSize: '13px', fontWeight: 700, color: 'var(--plat)', marginTop: '14px', marginBottom: '6px' }}>{line.slice(4)}</div>
+                if (line.startsWith('- **')) return <div key={i} style={{ padding: '6px 0 6px 16px', borderLeft: '2px solid rgba(125,211,252,0.25)', marginBottom: '4px' }} dangerouslySetInnerHTML={{ __html: line.slice(2).replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#dff7ff">$1</strong>').replace(/`([^`]+)`/g, '<code style="background:rgba(125,211,252,0.08);padding:1px 5px;border-radius:3px;font-size:11px;font-family:monospace">$1</code>') }} />
+                if (line.startsWith('| ') && line.includes(' | ')) {
+                  const cells = line.split('|').filter(c => c.trim())
+                  const isHeader = collab.split('\n')[i+1]?.includes('---')
+                  if (line.includes('---')) return null
+                  return <div key={i} style={{ display: 'grid', gridTemplateColumns: `repeat(${cells.length}, 1fr)`, gap: '8px', padding: '6px 8px', background: isHeader ? 'rgba(125,211,252,0.06)' : 'transparent', borderBottom: '1px solid rgba(125,211,252,0.06)', fontSize: '11px' }}>
+                    {cells.map((cell, j) => <div key={j} style={{ color: isHeader ? 'var(--plat)' : 'var(--sil)', fontWeight: isHeader ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis' }}>{cell.trim()}</div>)}
+                  </div>
+                }
+                if (line.trim() === '' || line.startsWith('---')) return <div key={i} style={{ height: '8px' }} />
+                return <div key={i} style={{ marginBottom: '2px', color: 'var(--sil)' }} dangerouslySetInnerHTML={{ __html: line.replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#dff7ff">$1</strong>').replace(/`([^`]+)`/g, '<code style="background:rgba(125,211,252,0.08);padding:1px 5px;border-radius:3px;font-size:11px;font-family:monospace">$1</code>') }} />
+              })}
             </div>
           </div>
         )}
