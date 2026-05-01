@@ -732,7 +732,11 @@ export default function Dashboard() {
 
     const result = await listProductsInBatches({
       products,
-      publish: (product) => publishFinderProduct(product, { trusted: true }),
+      publish: (product) => {
+        // Skip trusted mode when images are sparse or niche needs full re-validation
+        const needsValidation = (product.images?.length ?? 0) < 2 || !product.images?.length
+        return publishFinderProduct(product, { trusted: !needsValidation })
+      },
       onProgress: (progress) => {
         setFinderState((prev) => ({ ...prev, listAllProgress: progress }))
       },
@@ -773,7 +777,10 @@ export default function Dashboard() {
 
     const result = await listProductsInBatches({
       products,
-      publish: (product) => publishFinderProduct(product, { trusted: true }),
+      publish: (product) => {
+        const needsValidation = (product.images?.length ?? 0) < 2 || !product.images?.length
+        return publishFinderProduct(product, { trusted: !needsValidation })
+      },
       onProgress: (progress) => {
         setContinuousFinderState((prev) => ({ ...prev, listAllProgress: progress }))
       },
