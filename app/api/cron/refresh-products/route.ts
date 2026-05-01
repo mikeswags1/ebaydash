@@ -779,22 +779,22 @@ export async function GET(req: NextRequest) {
   const defaultBatchSize = catalogRefresh ? CATALOG_NICHE_BATCH_SIZE : (fullRefresh ? allNiches.length : SCHEDULED_NICHE_BATCH_SIZE)
   const batchSize = Math.max(1, Math.min(allNiches.length, Number.isFinite(requestedBatchSize) && requestedBatchSize > 0 ? Math.floor(requestedBatchSize) : defaultBatchSize))
 
-  // For catalog refresh, pick the STALEST niches (least recently cached) so every
-  // click covers different niches instead of repeating the same 3.
+  // For catalog refresh: use a persistent cursor stored in DB so every click advances
+  // to the next 3 niches regardless of whether the scrape succeeded or got blocked.
   let niches: string[]
   if (catalogRefresh && !Number.isFinite(requestedStartIndex)) {
     try {
-      const cached = await queryRows<{ niche: string; cached_at: string }>`
-        SELECT niche, cached_at FROM product_cache ORDER BY cached_at ASC
+      const cursorRow = await queryRows<{ results: string }>`
+        SELECT results FROM product_cache WHERE niche = '__cursor__'
       `
-      const cachedMap = new Map(cached.map(r => [r.niche, r.cached_at]))
-      niches = [...allNiches]
-        .sort((a, b) => {
-          const aTime = cachedMap.has(a) ? new Date(cachedMap.get(a)!).getTime() : 0
-          const bTime = cachedMap.has(b) ? new Date(cachedMap.get(b)!).getTime() : 0
-          return aTime - bTime // oldest first
-        })
-        .slice(0, batchSize)
+      const cursor = cursorRow[0]?.results ? parseInt(String(cursorRow[0].results), 10) || 0 : 0
+      const nextCursor = (cursor + batchSize) % allNiches.length
+      niches = Array.from({ length: batchSize }, (_, i) => allNiches[(cursor + i) % allNiches.length])
+      // Advance cursor immediately so next click gets new niches
+      await sql`
+        INSERT INTO product_cache (niche, results, version) VALUES ('__cursor__', ${String(nextCursor)}, 0)
+        ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, cached_at = NOW()
+      `.catch(() => {})
     } catch {
       niches = allNiches.slice(0, batchSize)
     }
