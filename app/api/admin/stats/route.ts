@@ -3,7 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import { queryRows } from '@/lib/db'
 
-const ADMIN_EMAILS = ['msawaged12@gmail.com']
+const ADMIN_EMAILS = ['msawaged12@gmail.com', 'mikeswags1@gmail.com']
 
 export async function GET() {
   const session = await getServerSession(authOptions)
