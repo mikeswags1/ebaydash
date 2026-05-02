@@ -8,11 +8,11 @@ import { queryRows } from '@/lib/db'
 const MARKETING_BASE = 'https://api.ebay.com/sell/marketing/v1'
 
 // Add all active eBay listings to this campaign
-export async function POST(req: NextRequest, { params }: { params: { campaignId: string } }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ campaignId: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
-  const { campaignId } = params
+  const { campaignId } = await context.params
   const body = await req.json().catch(() => ({})) as { adRate?: string | number }
 
   const credentials = await getValidEbayAccessToken(session.user.id)

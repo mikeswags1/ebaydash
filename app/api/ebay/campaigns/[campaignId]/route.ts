@@ -7,7 +7,7 @@ import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 const MARKETING_BASE = 'https://api.ebay.com/sell/marketing/v1'
 
 // Pause or resume a campaign
-export async function PATCH(req: NextRequest, { params }: { params: { campaignId: string } }) {
+export async function PATCH(req: NextRequest, context: { params: Promise<{ campaignId: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
@@ -21,7 +21,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { campaignId
     return apiError('Your eBay session expired. Reconnect in Settings.', { status: 401, code: 'RECONNECT_REQUIRED' })
   }
 
-  const { campaignId } = params
+  const { campaignId } = await context.params
 
   try {
     const res = await fetch(`${MARKETING_BASE}/ad_campaign/${campaignId}/${action}`, {
