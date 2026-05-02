@@ -20,6 +20,7 @@ export async function GET() {
       headers: {
         Authorization: `Bearer ${credentials.accessToken}`,
         'Content-Type': 'application/json',
+        'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
       },
       signal: AbortSignal.timeout(12000),
     })
@@ -57,7 +58,8 @@ export async function POST(req: NextRequest) {
     return apiError('Your eBay session expired. Reconnect in Settings.', { status: 401, code: 'RECONNECT_REQUIRED' })
   }
 
-  const today = new Date().toISOString().split('T')[0]
+  // eBay Marketing API requires full ISO 8601 timestamp for startDate
+  const startDate = new Date().toISOString().replace(/\.\d{3}Z$/, '.000Z')
 
   try {
     const res = await fetch(`${MARKETING_BASE}/ad_campaign`, {
@@ -65,6 +67,7 @@ export async function POST(req: NextRequest) {
       headers: {
         Authorization: `Bearer ${credentials.accessToken}`,
         'Content-Type': 'application/json',
+        'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
       },
       body: JSON.stringify({
         campaignName: name.trim(),
@@ -73,21 +76,28 @@ export async function POST(req: NextRequest) {
           bidPercentage: rate.toFixed(1),
           fundingModel: 'COST_PER_SALE',
         },
-        startDate: today,
+        budgetType: 'UNLIMITED',
+        startDate,
         marketplaceId: 'EBAY_US',
       }),
       signal: AbortSignal.timeout(12000),
     })
 
+    const text = await res.text()
     if (!res.ok) {
-      const text = await res.text()
-      const msg = text.match(/"message"\s*:\s*"([^"]+)"/)?.[1]
-        || text.match(/<message>(.*?)<\/message>/i)?.[1]
-        || `Failed to create campaign (${res.status})`
+      // Return full eBay error message for debugging
+      let msg = `Failed to create campaign (${res.status})`
+      try {
+        const parsed = JSON.parse(text)
+        const errors = parsed.errors || []
+        msg = errors.map((e: { message?: string; longMessage?: string }) =>
+          e.longMessage || e.message || ''
+        ).filter(Boolean).join(' ') || parsed.message || msg
+      } catch { /* use default msg */ }
       return apiError(msg, { status: res.status })
     }
 
-    const data = await res.json() as { campaignId?: string }
+    const data = JSON.parse(text) as { campaignId?: string }
     return apiOk({ campaignId: data.campaignId, message: `Campaign "${name.trim()}" created.` })
   } catch {
     return apiError('Failed to create campaign. Check your eBay connection.', { status: 500 })
