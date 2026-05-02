@@ -7,9 +7,13 @@ export const EBAY_OAUTH_SCOPES = [
   'https://api.ebay.com/oauth/api_scope/sell.finances',
   'https://api.ebay.com/oauth/api_scope/sell.analytics.readonly',
   'https://api.ebay.com/oauth/api_scope/sell.account.readonly',
+  'https://api.ebay.com/oauth/api_scope/sell.marketing',
+  'https://api.ebay.com/oauth/api_scope/sell.marketing.readonly',
 ]
 
-const EBAY_REFRESH_FALLBACK_SCOPES = EBAY_OAUTH_SCOPES.filter((scope) => !scope.includes('/sell.analytics.readonly'))
+const EBAY_REFRESH_FALLBACK_SCOPES = EBAY_OAUTH_SCOPES.filter(
+  (scope) => !scope.includes('/sell.analytics.readonly') && !scope.includes('/sell.marketing')
+)
 
 export const EBAY_MINIMAL_OAUTH_SCOPES = [
   'https://api.ebay.com/oauth/api_scope',

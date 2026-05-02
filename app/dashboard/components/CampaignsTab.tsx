@@ -73,6 +73,10 @@ export function CampaignsTab({ connected }: { connected: boolean }) {
     }
   }, [])
 
+  const needsReconnect = error?.toLowerCase().includes('access denied') ||
+    error?.toLowerCase().includes('access_denied') ||
+    createError?.toLowerCase().includes('access denied')
+
   useEffect(() => {
     if (connected) void loadCampaigns()
   }, [connected, loadCampaigns])
@@ -233,10 +237,16 @@ export function CampaignsTab({ connected }: { connected: boolean }) {
           </div>
         )}
 
-        {/* Error */}
+        {/* Error — special case for missing Marketing scope */}
         {error && (
-          <div style={{ fontSize: '13px', color: 'var(--red)', padding: '12px 16px', borderRadius: '10px', background: 'rgba(248,81,73,0.08)', marginBottom: '20px', border: '1px solid rgba(248,81,73,0.25)' }}>
-            {error}
+          <div style={{ fontSize: '13px', color: needsReconnect ? 'var(--gold)' : 'var(--red)', padding: '14px 16px', borderRadius: '10px', background: needsReconnect ? 'rgba(250,204,21,0.08)' : 'rgba(248,81,73,0.08)', marginBottom: '20px', border: `1px solid ${needsReconnect ? 'rgba(250,204,21,0.3)' : 'rgba(248,81,73,0.25)'}` }}>
+            {needsReconnect ? (
+              <>
+                <strong>eBay Marketing access not enabled.</strong> Your current eBay connection was made before Campaigns were added and is missing the Marketing API permission.
+                <br /><br />
+                Go to <strong>Settings → Disconnect eBay → Reconnect eBay</strong> to grant the new permission. This takes about 30 seconds and does not affect your listings.
+              </>
+            ) : error}
           </div>
         )}
 
