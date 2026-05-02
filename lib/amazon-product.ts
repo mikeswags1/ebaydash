@@ -360,7 +360,7 @@ async function fetchProductDetailsFromApi(asin: string, fallbackImage?: string) 
     if (quotaMsg.match(/limit|quota|exceed/)) return null
 
     const rawPhotos: unknown[] = Array.isArray(data.product_photos) ? data.product_photos : []
-    const images = dedupeImages([
+    const realImages = dedupeImages([
       ...rawPhotos.flatMap((photo: unknown) => {
         if (typeof photo === 'string') return [photo]
         if (photo && typeof photo === 'object') {
@@ -376,8 +376,11 @@ async function fetchProductDetailsFromApi(asin: string, fallbackImage?: string) 
         return []
       }),
       normalizeImageUrl(data.product_photo),
-      normalizeImageUrl(fallbackImage),
     ])
+    // Only use fallbackImage when the API returned no images for this ASIN.
+    // Mixing a pool fallbackImage with real API images contaminates the gallery
+    // when the pool image belongs to a different product (ASIN cross-mapping).
+    const images = realImages.length > 0 ? realImages : dedupeImages([normalizeImageUrl(fallbackImage)])
 
     return toProduct({
       asin,
@@ -433,14 +436,12 @@ async function fetchProductFromSearch(asin: string, fallbackImage?: string) {
     const match = products.find((product) => String(product.asin || '').toUpperCase() === asin)
     if (!match) return null
 
+    const matchPhoto = normalizeImageUrl(match.product_photo)
     return toProduct({
       asin,
       title: String(match.product_title || ''),
       amazonPrice: parseAmazonPrice(match.product_price || match.product_original_price),
-      images: [
-        normalizeImageUrl(match.product_photo),
-        normalizeImageUrl(fallbackImage),
-      ],
+      images: matchPhoto ? [matchPhoto] : dedupeImages([normalizeImageUrl(fallbackImage)]),
       brand: sanitizeText(match.product_byline || ''),
       available: parseAmazonPrice(match.product_price || match.product_original_price) > 0,
       source: 'search',
@@ -458,7 +459,7 @@ async function fetchProductFromScrape(asin: string, fallbackImage?: string) {
     asin,
     title: scraped.title,
     amazonPrice: scraped.price,
-    images: [...scraped.images, normalizeImageUrl(fallbackImage)],
+    images: scraped.images.length > 0 ? scraped.images : dedupeImages([normalizeImageUrl(fallbackImage)]),
     features: scraped.features,
     description: scraped.description,
     specs: scraped.specs,

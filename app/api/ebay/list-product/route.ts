@@ -1316,6 +1316,27 @@ export async function POST(req: NextRequest) {
       })
     }
     validatedAmazon = fetched
+
+    // ASIN cross-mapping guard: if the live Amazon title is completely different from
+    // the queued title, the ASIN has drifted to a different product. Block the listing
+    // before it creates a keyboard-sold-as-eye-mask situation.
+    if (validatedAmazon.source !== 'fallback' && title) {
+      const queuedWords = new Set(
+        String(title).toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length > 2)
+      )
+      const validatedWords = new Set(
+        validatedAmazon.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length > 2)
+      )
+      let overlap = 0
+      for (const word of queuedWords) { if (validatedWords.has(word)) overlap++ }
+      const similarity = queuedWords.size > 0 ? overlap / queuedWords.size : 1
+      if (similarity < 0.25) {
+        return apiError(
+          `ASIN ${asin} now maps to a different product on Amazon ("${validatedAmazon.title.slice(0, 60)}"). Remove this from your queue and reload for fresh products.`,
+          { status: 400, code: 'ASIN_MISMATCH' }
+        )
+      }
+    }
   }
 
   // Supplement sparse data from amazon_product_cache (DB-only, no extra API calls).
@@ -1390,9 +1411,12 @@ export async function POST(req: NextRequest) {
     if (cleanTitle.length <= 80) return cleanTitle
     // Remove last partial word after slicing to 80 chars
     let t = cleanTitle.slice(0, 80).replace(/\s+\S*$/, '').trim()
-    // Also strip trailing prepositions/connectors that leave a dangling incomplete phrase
+    // Strip trailing prepositions/connectors that leave a dangling incomplete phrase
     // e.g. "...Sleep Mask with Zero" → "...Sleep Mask"
     t = t.replace(/\s+(?:with|for|in|to|of|and|or|a|an|the|by|at|from|as|into|zero|one|two|three|four|five|&|\+)$/i, '').trim()
+    // Strip trailing punctuation left over from comma-separated Amazon titles
+    // e.g. "...with 18 Backlight Modes," → "...with 18 Backlight Modes"
+    t = t.replace(/[\s,;:\-|]+$/, '').trim()
     return t
   })()
 
