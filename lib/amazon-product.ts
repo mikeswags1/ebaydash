@@ -305,7 +305,7 @@ export async function loadCachedAmazonProduct(asin: string): Promise<ValidatedAm
   })
 }
 
-async function saveCachedAmazonProduct(product: ValidatedAmazonProduct) {
+export async function saveCachedAmazonProduct(product: ValidatedAmazonProduct) {
   await ensureAmazonProductCacheTable()
   await sql`
     INSERT INTO amazon_product_cache (asin, title, amazon_price, primary_image, images, features, description, specs, brand, available, source, updated_at)

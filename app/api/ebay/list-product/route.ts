@@ -5,7 +5,7 @@ import { apiError, apiOk } from '@/lib/api-response'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { sql } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
-import { fetchAmazonProductByAsin, loadCachedAmazonProduct } from '@/lib/amazon-product'
+import { fetchAmazonProductByAsin, loadCachedAmazonProduct, saveCachedAmazonProduct } from '@/lib/amazon-product'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getPricingRecommendation, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 import { getListingPolicyBlockReason, getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
@@ -1330,7 +1330,9 @@ export async function POST(req: NextRequest) {
       let overlap = 0
       for (const word of queuedWords) { if (validatedWords.has(word)) overlap++ }
       const similarity = queuedWords.size > 0 ? overlap / queuedWords.size : 1
-      if (similarity < 0.25) {
+      // 0.55 threshold: strict enough to catch "keyboard" vs "eye mask" (0% overlap),
+      // loose enough to allow for shortened/variant titles ("TKL Keyboard" vs "87-Key TKL Keyboard")
+      if (similarity < 0.55) {
         return apiError(
           `ASIN ${asin} now maps to a different product on Amazon ("${validatedAmazon.title.slice(0, 60)}"). Remove this from your queue and reload for fresh products.`,
           { status: 400, code: 'ASIN_MISMATCH' }
@@ -1368,6 +1370,9 @@ export async function POST(req: NextRequest) {
           validatedAmazon = { ...validatedAmazon, available: false }
         }
       }
+      // Persist the supplemented data back to the cache so the next listing of this
+      // ASIN doesn't need to re-fetch. This progressively enriches the cache over time.
+      saveCachedAmazonProduct(validatedAmazon).catch(() => {})
     } catch { /* cache lookup is best-effort — never block on failure */ }
   }
 
@@ -1595,10 +1600,22 @@ export async function POST(req: NextRequest) {
           .filter((value) => (validatedRich ? !isGenericFeature(value) : true))
       )
     ).slice(0, 10),
-    description: sanitizeDescriptionText(chooseBestDescription(
-      validatedAmazon.description,
-      fetchedAmazon.description,
-    )),
+    description: (() => {
+      const d = sanitizeDescriptionText(chooseBestDescription(
+        validatedAmazon.description,
+        fetchedAmazon.description,
+      ))
+      if (d) return d
+      // Fallback: synthesise a description from features so the listing is never
+      // product-detail-empty. buildOriginalFeatureBullets covers it in the HTML,
+      // but having description text improves eBay search indexing too.
+      const featureFallback = (validatedAmazon.features.length > 0 ? validatedAmazon.features : preferredFeatureSources)
+        .slice(0, 5)
+        .map(f => sanitizeContent(String(f || '')))
+        .filter(f => f.length > 10)
+        .join(' ')
+      return featureFallback || ''
+    })(),
     specs: [
       ...validatedAmazon.specs,
       ...(validatedRich ? [] : fetchedAmazon.specs),
