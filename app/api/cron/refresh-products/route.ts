@@ -757,7 +757,7 @@ async function syncUnavailableListings(): Promise<{ ended: number; failed: numbe
   let ended = 0, failed = 0, skipped = 0
 
   for (const [userId, listings] of byUser) {
-    const credentials = await getValidEbayAccessToken(userId).catch(() => null)
+    const credentials = await getValidEbayAccessToken(String(userId)).catch(() => null)
     if (!credentials?.accessToken) {
       skipped += listings.length
       continue
