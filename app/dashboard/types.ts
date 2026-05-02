@@ -1,4 +1,4 @@
-export type Tab = 'overview' | 'orders' | 'financials' | 'performance' | 'scripts' | 'asin' | 'product' | 'continuous' | 'settings'
+export type Tab = 'overview' | 'orders' | 'financials' | 'performance' | 'scripts' | 'asin' | 'product' | 'continuous' | 'campaigns' | 'settings'
 
 export interface AsinResult {
   asin: string

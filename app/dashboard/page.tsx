@@ -13,6 +13,7 @@ import { ScriptsTab } from './components/ScriptsTab'
 import { AsinLookupTab } from './components/AsinLookupTab'
 import { ProductListingTab } from './components/ProductListingTab'
 import { ContinuousListingTab } from './components/ContinuousListingTab'
+import { CampaignsTab } from './components/CampaignsTab'
 import { SettingsTab } from './components/SettingsTab'
 import { SellOnEbayModal } from './components/SellOnEbayModal'
 import type { BannerState, EbayCredentialsSummary, FinancialItem, FinancialSummary, FinderProduct, ListProgress, OrderAsinMap, PerformanceData, ProductSourceHealth, ScriptMessage, Tab } from './types'
@@ -1040,6 +1041,9 @@ export default function Dashboard() {
               listAllProgress={continuousFinderState.listAllProgress}
               connected={connectionState.ebayConnected}
             />
+          ) : null}
+          {tab === 'campaigns' ? (
+            <CampaignsTab connected={connectionState.ebayConnected} />
           ) : null}
           {tab === 'settings' ? (
             <SettingsTab

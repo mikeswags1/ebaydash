@@ -10,6 +10,7 @@ export const NAV_ITEMS: Array<{ id: Tab; label: string; badge?: 'orders' }> = [
   { id: 'asin', label: '🔍 ASIN Lookup' },
   { id: 'product', label: '🛒 Product Listing' },
   { id: 'continuous', label: '🔄 Continuous Listing' },
+  { id: 'campaigns', label: '📢 Campaigns' },
   { id: 'settings', label: '⚙️ Settings' },
 ]
 
