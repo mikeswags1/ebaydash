@@ -1,4 +1,5 @@
 {
+  "alias": ["stackpilot-app.vercel.app"],
   "functions": {
     "app/api/ebay/list-product/route.ts": {
       "maxDuration": 60
