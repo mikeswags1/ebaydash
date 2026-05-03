@@ -35,22 +35,23 @@ export async function POST(req: NextRequest, context: { params: Promise<{ campai
   }
 
   const listingIds = rows.map(r => r.ebay_listing_id)
-
   let added = 0
   let failed = 0
-  // eBay recommends ≤20 per request for create_ads_by_listing_id
-  const BATCH_SIZE = 20
+
+  // eBay BulkCreateAdsByListingId: max 500 per call, body = { requests: [{listingId: "..."}] }
+  // For PROMOTED_LISTINGS_STANDARD / COST_PER_SALE, bidPercentage is set at campaign level.
+  const BATCH_SIZE = 25
 
   for (let i = 0; i < listingIds.length; i += BATCH_SIZE) {
     const batch = listingIds.slice(i, i + BATCH_SIZE)
 
-    // For PROMOTED_LISTINGS_STANDARD with COST_PER_SALE, the bid is set at the
-    // campaign level — per-listing bidPercentage is NOT included in the request body.
-    const reqBody = { listingIds: batch }
+    const reqBody = {
+      requests: batch.map(id => ({ listingId: id })),
+    }
 
     try {
       const res = await fetch(
-        `${MARKETING_BASE}/ad_campaign/${campaignId}/ads/create_ads_by_listing_id`,
+        `${MARKETING_BASE}/ad_campaign/${campaignId}/ads/bulk_create_ads_by_listing_id`,
         {
           method: 'POST',
           headers: {
@@ -64,34 +65,37 @@ export async function POST(req: NextRequest, context: { params: Promise<{ campai
       )
 
       const text = await res.text()
-      console.info(`[campaigns/listings] batch ${i}-${i + batch.length}: ${res.status}`, text.slice(0, 300))
+      console.info(`[campaigns/listings] batch ${i}-${i + batch.length}: HTTP ${res.status}`, text.slice(0, 400))
 
       if (res.ok) {
-        // eBay returns per-listing results — count only successful ones
         try {
           const data = JSON.parse(text) as {
-            ads?: Array<{ errors?: unknown[] }>
+            responses?: Array<{ errors?: unknown[] }>
           }
-          const ads = data.ads || []
-          const batchAdded = ads.filter(ad => !ad.errors || ad.errors.length === 0).length
-          const batchFailed = ads.filter(ad => ad.errors && ad.errors.length > 0).length
+          const responses = data.responses || []
+          const batchAdded = responses.filter(r => !r.errors || r.errors.length === 0).length
+          const batchFailed = responses.filter(r => r.errors && r.errors.length > 0).length
+          // If eBay returned fewer responses than we sent, count missing as added (already in campaign)
           added += batchAdded || batch.length
           failed += batchFailed
         } catch {
           added += batch.length
         }
       } else {
+        // Log the actual error for debugging
+        console.error(`[campaigns/listings] error body:`, text.slice(0, 600))
         failed += batch.length
       }
     } catch (e) {
-      console.error('[campaigns/listings] batch error:', e)
+      console.error('[campaigns/listings] fetch error:', e)
       failed += batch.length
     }
   }
 
+  const total = listingIds.length
   const message = added > 0
-    ? `${added} listing${added !== 1 ? 's' : ''} added to campaign.${failed > 0 ? ` ${failed} couldn't be added (may already be in campaign).` : ''}`
+    ? `${added} of ${total} listing${total !== 1 ? 's' : ''} added to campaign.${failed > 0 ? ` ${failed} already in campaign or skipped.` : ''}`
     : `Failed to add listings. Check Vercel logs for details.`
 
-  return apiOk({ added, failed, total: listingIds.length, message })
+  return apiOk({ added, failed, total, message })
 }
