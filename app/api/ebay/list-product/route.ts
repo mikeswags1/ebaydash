@@ -1341,38 +1341,65 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Supplement sparse data from amazon_product_cache (DB-only, no extra API calls).
-  // Catalog-crawl products enter the pool with only imageUrl and no images array,
-  // features, or description. If the ASIN was ever validated before, the cache has the full set.
+  // Cache lookup: runs for ALL trusted listings + non-trusted sparse listings.
+  // Trusted mode always checks the cache — we need to detect ASIN cross-mapping even when
+  // the pool product has rich images (those images may be from the WRONG product).
   const isDataSparse =
     validatedAmazon.images.length < 3 ||
     !validatedAmazon.description ||
     validatedAmazon.features.length === 0
 
-  if (isDataSparse) {
+  if (isDataSparse || trusted) {
     try {
       const cached = await loadCachedAmazonProduct(asin)
       if (cached) {
-        if (cached.images.length > validatedAmazon.images.length) {
-          validatedAmazon = { ...validatedAmazon, images: cached.images, imageUrl: cached.imageUrl || validatedAmazon.imageUrl }
+
+        // ── ASIN cross-mapping guard (trusted mode) ──────────────────────────
+        // Runs unconditionally for every trusted/bulk listing.
+        // When an ASIN drifts to a completely different product (e.g. iPad → iPhone,
+        // JETech → Uyiton), the pool title and cache title will have low word overlap.
+        // This catches it before wrong-product images and a loss-making price go live.
+        if (trusted && cached.title && title) {
+          const toWords = (s: string) => new Set(
+            s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length > 2)
+          )
+          const poolWords = toWords(String(title))
+          const cacheWords = toWords(cached.title)
+          let overlap = 0
+          for (const word of poolWords) { if (cacheWords.has(word)) overlap++ }
+          const similarity = poolWords.size > 0 ? overlap / poolWords.size : 1
+          if (similarity < 0.45) {
+            return apiError(
+              `ASIN ${asin} now maps to a different product ("${cached.title.slice(0, 60)}"). Queue entry is stale — remove it and reload for fresh products.`,
+              { status: 400, code: 'ASIN_MISMATCH' }
+            )
+          }
         }
-        if (!validatedAmazon.description && cached.description) {
-          validatedAmazon = { ...validatedAmazon, description: cached.description }
+
+        // ── Sparse data supplement ───────────────────────────────────────────
+        if (isDataSparse) {
+          if (cached.images.length > validatedAmazon.images.length) {
+            validatedAmazon = { ...validatedAmazon, images: cached.images, imageUrl: cached.imageUrl || validatedAmazon.imageUrl }
+          }
+          if (!validatedAmazon.description && cached.description) {
+            validatedAmazon = { ...validatedAmazon, description: cached.description }
+          }
+          if (validatedAmazon.features.length === 0 && cached.features.length > 0) {
+            validatedAmazon = { ...validatedAmazon, features: cached.features }
+          }
+          if (validatedAmazon.specs.length === 0 && cached.specs.length > 0) {
+            validatedAmazon = { ...validatedAmazon, specs: cached.specs }
+          }
         }
-        if (validatedAmazon.features.length === 0 && cached.features.length > 0) {
-          validatedAmazon = { ...validatedAmazon, features: cached.features }
-        }
-        if (validatedAmazon.specs.length === 0 && cached.specs.length > 0) {
-          validatedAmazon = { ...validatedAmazon, specs: cached.specs }
-        }
-        // If cache explicitly confirms the product is unavailable with no price, trust it
+
+        // Availability: if cache confirms out-of-stock, trust it
         if (!cached.available && cached.amazonPrice === 0) {
           validatedAmazon = { ...validatedAmazon, available: false }
         }
+
+        // Persist the merged result so future lookups hit the cache
+        saveCachedAmazonProduct(validatedAmazon).catch(() => {})
       }
-      // Persist the supplemented data back to the cache so the next listing of this
-      // ASIN doesn't need to re-fetch. This progressively enriches the cache over time.
-      saveCachedAmazonProduct(validatedAmazon).catch(() => {})
     } catch { /* cache lookup is best-effort — never block on failure */ }
   }
 
