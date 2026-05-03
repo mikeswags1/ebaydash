@@ -1376,6 +1376,26 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        // ── Title accuracy: use cache title in trusted mode ──────────────────
+        // Pool titles come from scrapeAmazonSearch which can return stale/wrong titles.
+        // The amazon_product_cache has the most recently verified Amazon title for this ASIN.
+        // Since we've already passed the mismatch check (>= 0.45 similarity), the cache
+        // title is the same product — use it as it's more accurate and up-to-date.
+        if (trusted && cached.title && cached.title.length > 10) {
+          validatedAmazon = { ...validatedAmazon, title: cached.title }
+        }
+
+        // ── Price accuracy: use cache price in trusted mode if significantly newer ─
+        // If the cache has a price that differs by >10% from the pool price, use it.
+        // The cache is populated by live Amazon API/scrape calls during finder runs,
+        // so it reflects the current Amazon price more accurately than the pool.
+        if (trusted && cached.amazonPrice > 0) {
+          const priceDrift = Math.abs(cached.amazonPrice - validatedAmazon.amazonPrice) / Math.max(validatedAmazon.amazonPrice, 1)
+          if (priceDrift > 0.10) {
+            validatedAmazon = { ...validatedAmazon, amazonPrice: cached.amazonPrice }
+          }
+        }
+
         // ── Sparse data supplement ───────────────────────────────────────────
         if (isDataSparse) {
           if (cached.images.length > validatedAmazon.images.length) {
