@@ -1530,23 +1530,32 @@ export async function POST(req: NextRequest) {
       ? pricingRecommendation.price
       : Math.max(parsedEbayPrice, pricingRecommendation.minimumViablePrice)
 
-  // Market sanity check for trusted high-price listings.
-  // When a cached Amazon cost is stale/wrong (e.g. $50 cached when actual is $9.99),
-  // the engine correctly prices to ~$68 based on that wrong cost — and it looks valid.
-  // For any trusted listing above $40, compare against live eBay competitor prices.
-  // If our price is >1.4x the competitor median, cap it to market level.
-  if (trusted && finalEbayPrice > 40) {
+  // Market sanity check — runs for ALL trusted listings above $18 (covers most products).
+  // Two failure modes this catches:
+  //   1. OVERPRICED: cached Amazon cost too HIGH → our price inflated vs market → cap it down
+  //   2. UNDERPRICED: cached Amazon cost too LOW → our price below market → block it
+  //      (e.g. Amazon lock cached at $25, actual $52.96, we list at $36.99 = $21 loss per sale)
+  if (trusted && finalEbayPrice > 18) {
     try {
       const marketCheck = await getComparableEbayPrices(safeTitle, credentials.accessToken, listingAmazonPrice)
       if (marketCheck.count >= 3) {
         const sorted = [...marketCheck.prices].sort((a, b) => a - b)
         const median = sorted[Math.floor(sorted.length / 2)]
-        if (median > 0 && finalEbayPrice > median * 1.4) {
-          // Significantly above market — use market-anchored price, never below minimum viable
-          finalEbayPrice = Number(Math.max(pricingRecommendation.minimumViablePrice, median * 1.1).toFixed(2))
+        if (median > 0) {
+          if (finalEbayPrice > median * 1.4) {
+            // Too expensive vs market — cap to market level
+            finalEbayPrice = Number(Math.max(pricingRecommendation.minimumViablePrice, median * 1.1).toFixed(2))
+          } else if (finalEbayPrice < median * 0.62) {
+            // Our price is 38%+ below what every competitor charges — cached Amazon cost is
+            // almost certainly stale or wrong. Listing at this price means buying at a loss.
+            return apiError(
+              `Blocked — your listing price ($${finalEbayPrice.toFixed(2)}) is well below similar eBay listings (~$${median.toFixed(2)}). The Amazon cost in your queue is likely outdated. Remove this product and reload your queue to get a fresh price.`,
+              { status: 400, code: 'PRICE_BELOW_MARKET' }
+            )
+          }
         }
       }
-    } catch { /* market check is best-effort — never block a listing on failure */ }
+    } catch { /* market check is best-effort — never block a listing on lookup failure */ }
   }
 
   // Hard backstop — catches stale cache where Amazon raised their price after queuing
