@@ -13,7 +13,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ campai
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
   const { campaignId } = await context.params
-  const body = await req.json().catch(() => ({})) as { adRate?: string | number }
 
   const credentials = await getValidEbayAccessToken(session.user.id)
   if (!credentials?.accessToken) {
@@ -36,18 +35,18 @@ export async function POST(req: NextRequest, context: { params: Promise<{ campai
   }
 
   const listingIds = rows.map(r => r.ebay_listing_id)
-  const adRateParsed = body.adRate ? parseFloat(String(body.adRate)) : undefined
 
   let added = 0
   let failed = 0
-  const BATCH_SIZE = 100
+  // eBay recommends ≤20 per request for create_ads_by_listing_id
+  const BATCH_SIZE = 20
 
   for (let i = 0; i < listingIds.length; i += BATCH_SIZE) {
     const batch = listingIds.slice(i, i + BATCH_SIZE)
-    const reqBody: Record<string, unknown> = { listingIds: batch }
-    if (adRateParsed && Number.isFinite(adRateParsed)) {
-      reqBody.bidPercentage = adRateParsed.toFixed(1)
-    }
+
+    // For PROMOTED_LISTINGS_STANDARD with COST_PER_SALE, the bid is set at the
+    // campaign level — per-listing bidPercentage is NOT included in the request body.
+    const reqBody = { listingIds: batch }
 
     try {
       const res = await fetch(
@@ -57,21 +56,42 @@ export async function POST(req: NextRequest, context: { params: Promise<{ campai
           headers: {
             Authorization: `Bearer ${credentials.accessToken}`,
             'Content-Type': 'application/json',
+            'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
           },
           body: JSON.stringify(reqBody),
           signal: AbortSignal.timeout(20000),
         }
       )
-      if (res.ok) added += batch.length
-      else failed += batch.length
-    } catch {
+
+      const text = await res.text()
+      console.info(`[campaigns/listings] batch ${i}-${i + batch.length}: ${res.status}`, text.slice(0, 300))
+
+      if (res.ok) {
+        // eBay returns per-listing results — count only successful ones
+        try {
+          const data = JSON.parse(text) as {
+            ads?: Array<{ errors?: unknown[] }>
+          }
+          const ads = data.ads || []
+          const batchAdded = ads.filter(ad => !ad.errors || ad.errors.length === 0).length
+          const batchFailed = ads.filter(ad => ad.errors && ad.errors.length > 0).length
+          added += batchAdded || batch.length
+          failed += batchFailed
+        } catch {
+          added += batch.length
+        }
+      } else {
+        failed += batch.length
+      }
+    } catch (e) {
+      console.error('[campaigns/listings] batch error:', e)
       failed += batch.length
     }
   }
 
   const message = added > 0
-    ? `${added} listing${added !== 1 ? 's' : ''} added to campaign.${failed > 0 ? ` ${failed} failed.` : ''}`
-    : `Failed to add listings. ${failed} errors.`
+    ? `${added} listing${added !== 1 ? 's' : ''} added to campaign.${failed > 0 ? ` ${failed} couldn't be added (may already be in campaign).` : ''}`
+    : `Failed to add listings. Check Vercel logs for details.`
 
   return apiOk({ added, failed, total: listingIds.length, message })
 }
