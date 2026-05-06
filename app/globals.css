@@ -30,6 +30,15 @@ body{
   overflow-x:hidden;
 }
 
+@supports (min-height:100svh){
+  body{min-height:100svh}
+}
+
+@media (display-mode: standalone){
+  body{background:#06111f}
+  .home-page,.access-page,.dashboard-shell,.admin-page{min-height:100svh}
+}
+
 /* ── ATMOSPHERE — calm night-sky wash ── */
 body::before{
   content:'';position:fixed;inset:0;z-index:0;pointer-events:none;

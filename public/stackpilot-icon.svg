@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">StackPilot app icon</title>
+  <desc id="desc">A dark rounded app icon with a cyan StackPilot flight mark.</desc>
+  <defs>
+    <linearGradient id="bg" x1="72" y1="44" x2="456" y2="492" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0b2a42"/>
+      <stop offset="0.46" stop-color="#071827"/>
+      <stop offset="1" stop-color="#020712"/>
+    </linearGradient>
+    <linearGradient id="wing" x1="104" y1="136" x2="432" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7dd3fc"/>
+      <stop offset="0.45" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.08 0 0 0 0 0.73 0 0 0 0 1 0 0 0 0.55 0"/>
+      <feBlend in="SourceGraphic" mode="screen"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <path d="M72 344C158 216 286 136 432 96c-72 84-104 164-96 240 2 22-19 38-39 30l-71-28-64 72c-15 17-43 8-45-15l-6-78-39 27Z" fill="url(#wing)" filter="url(#glow)"/>
+  <path d="M178 283c47-45 105-80 174-104-44 44-76 91-96 141l-78-37Z" fill="#e0f7ff" opacity="0.92"/>
+  <path d="M103 380h166" stroke="#7dd3fc" stroke-width="14" stroke-linecap="round" opacity="0.45"/>
+  <path d="M138 412h96" stroke="#34d399" stroke-width="10" stroke-linecap="round" opacity="0.55"/>
+</svg>
