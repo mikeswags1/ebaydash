@@ -217,10 +217,10 @@ export default function AdminPage() {
     return { label: 'Attention', detail: 'Fix the highlighted items before wider launch.' }
   }, [stats])
 
-  const runTool = async (id: string, label: string, url: string) => {
+  const runTool = async (id: string, label: string, url: string, method: 'GET' | 'POST' = 'GET') => {
     setToolState({ active: id, tone: 'info', message: `${label} running...` })
     try {
-      const data = await readJson(await fetch(url))
+      const data = await readJson(await fetch(url, { method }))
       setToolState({
         active: null,
         tone: 'success',
@@ -313,6 +313,16 @@ export default function AdminPage() {
                 ))}
               </div>
             )}
+            <div className="admin-warning-actions">
+              <button
+                className="btn btn-solid btn-sm"
+                disabled={toolState.active !== null}
+                onClick={() => runTool('repair-listings', 'Fix All listing warnings', '/api/admin/repair-listings', 'POST')}
+              >
+                {toolState.active === 'repair-listings' ? 'Fixing...' : 'Fix All'}
+              </button>
+              <span>Repairs stored listing images and category data across every account.</span>
+            </div>
           </div>
 
           <div className="admin-panel">
