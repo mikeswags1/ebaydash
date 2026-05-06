@@ -109,9 +109,29 @@ type ListingState = {
 }
 
 const FINDER_STOCK_TARGET = 30
+const FINDER_ROTATION_POOL_TARGET = 60
 
 function tagFinderProducts(products: FinderProduct[], sourceMode: 'niche' | 'continuous') {
   return products.map((product) => ({ ...product, sourceMode }))
+}
+
+function getStableShuffleScore(product: FinderProduct, tick: number, index: number) {
+  const text = `${product.asin}:${product.sourceNiche || ''}:${tick}:${index}`
+  let hash = 2166136261
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
+function getRotatingFinderProducts(products: FinderProduct[] | null, tick: number, limit = FINDER_STOCK_TARGET) {
+  if (!products || products.length <= 1) return products || null
+  return [...products]
+    .map((product, index) => ({ product, score: getStableShuffleScore(product, tick, index) }))
+    .sort((a, b) => a.score - b.score)
+    .slice(0, limit)
+    .map((entry) => entry.product)
 }
 
 function mergeRefilledProducts(current: FinderProduct[] | null, incoming: FinderProduct[], listedAsins: string[], sourceMode: 'niche' | 'continuous') {
@@ -125,7 +145,7 @@ function mergeRefilledProducts(current: FinderProduct[] | null, incoming: Finder
     return true
   })
 
-  return tagFinderProducts([...kept, ...additions].slice(0, FINDER_STOCK_TARGET), sourceMode)
+  return tagFinderProducts([...kept, ...additions].slice(0, FINDER_ROTATION_POOL_TARGET), sourceMode)
 }
 
 export default function Dashboard() {
@@ -202,6 +222,16 @@ export default function Dashboard() {
   })
   const [scriptRunning, setScriptRunning] = useState<string | null>(null)
   const [scriptMessage, setScriptMessage] = useState<ScriptMessage | null>(null)
+  const [finderRotationTick, setFinderRotationTick] = useState(0)
+
+  const visibleFinderResults = useMemo(
+    () => getRotatingFinderProducts(finderState.results, finderRotationTick),
+    [finderRotationTick, finderState.results]
+  )
+  const visibleContinuousResults = useMemo(
+    () => getRotatingFinderProducts(continuousFinderState.results, finderRotationTick),
+    [continuousFinderState.results, finderRotationTick]
+  )
 
   const validateListingProduct = useCallback(async (product: FinderProduct) => {
     const originalPrice = product.ebayPrice.toFixed(2)
@@ -296,6 +326,39 @@ export default function Dashboard() {
       router.replace('/login')
     }
   }, [router, status])
+
+  useEffect(() => {
+    const productListingActive = !!finderState.listAllProgress && finderState.listAllProgress.done < finderState.listAllProgress.total
+    const continuousListingActive = !!continuousFinderState.listAllProgress && continuousFinderState.listAllProgress.done < continuousFinderState.listAllProgress.total
+    const activeResults = tab === 'product'
+      ? finderState.results
+      : tab === 'continuous'
+        ? continuousFinderState.results
+        : null
+
+    if (
+      !activeResults ||
+      activeResults.length <= 1 ||
+      listingState.modal ||
+      (tab === 'product' && productListingActive) ||
+      (tab === 'continuous' && continuousListingActive)
+    ) {
+      return
+    }
+
+    const timer = window.setInterval(() => {
+      setFinderRotationTick((tick) => tick + 1)
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [
+    continuousFinderState.listAllProgress,
+    continuousFinderState.results,
+    finderState.listAllProgress,
+    finderState.results,
+    listingState.modal,
+    tab,
+  ])
 
   const getEbayConnectionState = useCallback((credentials: EbayCredentialsSummary | null) => {
     const hasToken = Boolean(credentials?.has_token)
@@ -607,7 +670,7 @@ export default function Dashboard() {
     setBanner((prev) => (prev?.tone === 'error' ? null : prev))
 
     try {
-      const data = await fetchFinderProducts(nicheState.value, false, { limit: FINDER_STOCK_TARGET })
+      const data = await fetchFinderProducts(nicheState.value, false, { limit: FINDER_ROTATION_POOL_TARGET })
       setFinderState((prev) => ({ ...prev, results: tagFinderProducts(data.results || [], 'niche') }))
     } catch (error) {
       setFinderState((prev) => ({ ...prev, error: getErrorMessage(error, 'Product search failed.') }))
@@ -622,7 +685,7 @@ export default function Dashboard() {
 
     try {
       const shouldForceRefresh = Boolean(continuousFinderState.results?.length)
-      const data = await fetchFinderProducts('', shouldForceRefresh, { mode: 'continuous', limit: FINDER_STOCK_TARGET })
+      const data = await fetchFinderProducts('', shouldForceRefresh, { mode: 'continuous', limit: FINDER_ROTATION_POOL_TARGET })
       setContinuousFinderState((prev) => ({ ...prev, results: tagFinderProducts(data.results || [], 'continuous') }))
     } catch (error) {
       setContinuousFinderState((prev) => ({ ...prev, results: prev.results || [], error: getErrorMessage(error, 'Continuous product search failed.') }))
@@ -681,7 +744,7 @@ export default function Dashboard() {
 
       try {
         const refreshed = await fetchFinderProducts(nicheState.value, true, {
-          limit: FINDER_STOCK_TARGET,
+          limit: FINDER_ROTATION_POOL_TARGET,
           excludeAsins: [...remainingAsins, ...removeAsins],
         })
         setFinderState((prev) => ({
@@ -710,7 +773,7 @@ export default function Dashboard() {
       try {
         const refreshed = await fetchFinderProducts('', true, {
           mode: 'continuous',
-          limit: FINDER_STOCK_TARGET,
+          limit: FINDER_ROTATION_POOL_TARGET,
           excludeAsins: [...remainingAsins, ...removeAsins],
         })
         setContinuousFinderState((prev) => ({
@@ -733,7 +796,7 @@ export default function Dashboard() {
       return
     }
 
-    const products = finderState.results || []
+    const products = visibleFinderResults || []
     if (products.length === 0) return
 
     const result = await listProductsInBatches({
@@ -773,7 +836,7 @@ export default function Dashboard() {
       tone: 'success',
       text: summarizeBulkListResult(result),
     })
-  }, [connectionState.ebayConnected, finderState.results, publishFinderProduct, refillNicheFinderProducts])
+  }, [connectionState.ebayConnected, publishFinderProduct, refillNicheFinderProducts, visibleFinderResults])
 
   const handleContinuousListAll = useCallback(async () => {
     if (!connectionState.ebayConnected) {
@@ -781,7 +844,7 @@ export default function Dashboard() {
       return
     }
 
-    const products = tagFinderProducts(continuousFinderState.results || [], 'continuous')
+    const products = tagFinderProducts(visibleContinuousResults || [], 'continuous')
     if (products.length === 0) return
 
     const result = await listProductsInBatches({
@@ -819,7 +882,7 @@ export default function Dashboard() {
       tone: 'success',
       text: summarizeBulkListResult(result),
     })
-  }, [connectionState.ebayConnected, continuousFinderState.results, publishFinderProduct, refillContinuousProducts])
+  }, [connectionState.ebayConnected, publishFinderProduct, refillContinuousProducts, visibleContinuousResults])
 
   const handleRunScript = useCallback(async (file: string) => {
     setScriptRunning(file)
@@ -1024,7 +1087,7 @@ export default function Dashboard() {
                 setFinderState({ loading: false, results: null, error: null, view: 'cards', listAllProgress: null })
               }}
               finderLoading={finderState.loading}
-              finderResults={finderState.results}
+              finderResults={visibleFinderResults}
               finderError={finderState.error}
               finderView={finderState.view}
               onFinderViewChange={(view) => setFinderState((prev) => ({ ...prev, view }))}
@@ -1040,7 +1103,7 @@ export default function Dashboard() {
           {tab === 'continuous' ? (
             <ContinuousListingTab
               finderLoading={continuousFinderState.loading}
-              finderResults={continuousFinderState.results}
+              finderResults={visibleContinuousResults}
               finderError={continuousFinderState.error}
               finderView={continuousFinderState.view}
               onFinderViewChange={(view) => setContinuousFinderState((prev) => ({ ...prev, view }))}

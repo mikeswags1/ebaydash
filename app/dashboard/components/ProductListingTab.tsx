@@ -277,7 +277,7 @@ export function FinderResults({
             {results.length} products found — {niche}
           </div>
           <div style={{ fontSize: '10px', color: 'var(--dim)', marginTop: '3px' }}>
-            Sorted by profit potential · Click any card to review before publishing
+            Live-rotating every second from the safe product pool · Click any card to review before publishing
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
