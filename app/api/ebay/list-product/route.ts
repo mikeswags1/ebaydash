@@ -166,6 +166,8 @@ interface AmazonDetails {
   specs: Array<[string, string]>
 }
 
+const MIN_LISTING_IMAGES = 2
+
 function isGenericFeature(value: string) {
   const normalized = value.toLowerCase()
   return (
@@ -1722,10 +1724,10 @@ export async function POST(req: NextRequest) {
     .filter((u): u is string => typeof u === 'string' && u.startsWith('https://'))
     .slice(0, 6)
 
-  if (filteredImages.length === 0) {
+  if (filteredImages.length < MIN_LISTING_IMAGES) {
     return apiError(
-      'No product images could be found for this ASIN. eBay requires at least one photo — try a different ASIN or check that this product is still available on Amazon.',
-      { status: 400, code: 'NO_LISTING_IMAGES' }
+      `Only ${filteredImages.length} usable product image${filteredImages.length === 1 ? '' : 's'} could be found for this ASIN. StackPilot requires at least ${MIN_LISTING_IMAGES} real product photos before publishing, so reload the queue or choose a different product.`,
+      { status: 400, code: filteredImages.length === 0 ? 'NO_LISTING_IMAGES' : 'INSUFFICIENT_LISTING_IMAGES' }
     )
   }
 
@@ -1761,6 +1763,19 @@ export async function POST(req: NextRequest) {
     usablePictureList.push(
       badgeUrl,
       ...filteredImages.slice(1).filter((u) => u.length <= 500).slice(0, 5)
+    )
+  }
+  if (usablePictureList.length < MIN_LISTING_IMAGES) {
+    for (const fallbackUrl of [badgeUrl, ...filteredImages.slice(1)]) {
+      if (usablePictureList.length >= MIN_LISTING_IMAGES) break
+      if (fallbackUrl.length > 500 || usablePictureList.includes(fallbackUrl)) continue
+      usablePictureList.push(fallbackUrl)
+    }
+  }
+  if (usablePictureList.length < MIN_LISTING_IMAGES) {
+    return apiError(
+      `This product only produced ${usablePictureList.length} publishable image${usablePictureList.length === 1 ? '' : 's'} after eBay image processing. StackPilot requires at least ${MIN_LISTING_IMAGES} photos, so reload the queue or choose a different product.`,
+      { status: 400, code: 'INSUFFICIENT_LISTING_IMAGES' }
     )
   }
 
