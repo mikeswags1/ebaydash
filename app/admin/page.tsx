@@ -1,189 +1,593 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import Link from 'next/link'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-
-function usePoolRefresh() {
-  const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
-  const [msg, setMsg] = useState('')
-  const trigger = async (mode: 'catalog' | 'sourceOnly') => {
-    setState('running')
-    setMsg(mode === 'catalog' ? 'Deep catalog crawl running — this takes 3–5 minutes...' : 'Quick refresh running...')
-    try {
-      const res = await fetch('/api/admin/refresh-pool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) })
-      const data = await res.json()
-      setState(res.ok ? 'done' : 'error')
-      const r = data.result || {}
-      const msg = res.ok
-        ? `Done. ${r.nichesRefreshed ?? 0} niches scraped, ${r.sourceProducts ?? 0} products in pool, ${r.continuousProducts ?? 0} in queue. Niches: ${(r.nichesAttempted || []).join(', ')}`
-        : 'Error — check logs.'
-      setMsg(msg)
-    } catch { setState('error'); setMsg('Request failed.') }
-  }
-  return { state, msg, trigger }
-}
 
 type Customer = {
   id: number
   email: string
   name: string
-  joined: string
+  joined: string | null
   ebayConnected: boolean
+  ebayUpdatedAt: string | null
+  ebayTokenExpiresAt: string | null
   totalListings: number
+  activeListings: number
+  activeProfit: number
+  lastListingAt: string | null
   activeRecently: boolean
 }
 
+type RecentListing = {
+  id: number
+  userId: number
+  sellerName: string
+  sellerEmail: string
+  asin: string
+  title: string
+  ebayListingId: string
+  listedAt: string | null
+  amazonPrice: number
+  ebayPrice: number
+  niche: string
+  categoryId: string
+  imageCount: number
+}
+
+type SourceNiche = {
+  name: string
+  count: number
+  averageScore: number
+  maxScore: number
+  newestSeenAt: string | null
+}
+
+type NichePerformance = {
+  niche: string
+  listings: number
+  sellers: number
+  revenue: number
+  profit: number
+}
+
 type Stats = {
+  ok?: boolean
+  generatedAt: string
+  status: 'healthy' | 'watch' | 'attention'
+  warnings: string[]
   totalUsers: number
   ebayConnected: number
   activeRecently: number
   customers: Customer[]
+  listingSummary: {
+    totalListings: number
+    activeListings: number
+    listed7Days: number
+    listed30Days: number
+    lowImageActive: number
+    missingCategoryActive: number
+    activeRevenue: number
+    activeCost: number
+    activeProfit: number
+    averageRoi: number
+  }
+  sourceHealth: {
+    sourceEngine: {
+      totalProducts: number
+      niches: number
+      staleProducts: number
+      missingImages: number
+      highRiskProducts: number
+      averageScore: number
+      newestSeenAt: string | null
+    }
+    cache: {
+      totalNiches: number
+      readyNiches: number
+      staleNiches: number
+      totalProducts: number
+    }
+    continuous: {
+      products: number
+      version: number
+      cachedAt: string | null
+    }
+    topNiches: SourceNiche[]
+  }
+  recentListings: RecentListing[]
+  nichePerformance: NichePerformance[]
+}
+
+type ToolState = {
+  active: string | null
+  tone: 'info' | 'success' | 'error'
+  message: string
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat('en-US').format(Math.round(value || 0))
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(value || 0)
+}
+
+function formatDate(value: string | null) {
+  if (!value) return 'Never'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Unknown'
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return 'Never'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Unknown'
+  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
+function truncate(value: string, length = 58) {
+  if (!value) return '-'
+  return value.length > length ? `${value.slice(0, length - 1)}...` : value
+}
+
+async function readJson(res: Response) {
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || data?.ok === false) {
+    throw new Error(data?.error?.message || data?.message || `Request failed (${res.status})`)
+  }
+  return data
+}
+
+function usePoolRefresh(onDone: () => void) {
+  const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [msg, setMsg] = useState('')
+
+  const trigger = async (mode: 'catalog' | 'sourceOnly') => {
+    setState('running')
+    setMsg(mode === 'catalog' ? 'Deep catalog crawl running. This can take a few minutes.' : 'Quick refresh running.')
+    try {
+      const res = await fetch('/api/admin/refresh-pool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      })
+      const data = await readJson(res)
+      const result = data.result || {}
+      setState('done')
+      setMsg(
+        `Done. ${result.nichesRefreshed ?? 0} niches refreshed, ${formatNumber(result.sourceProducts ?? 0)} products in source pool, ${formatNumber(result.continuousProducts ?? 0)} in continuous queue.`
+      )
+      onDone()
+    } catch (error) {
+      setState('error')
+      setMsg(error instanceof Error ? error.message : 'Refresh failed.')
+    }
+  }
+
+  return { state, msg, trigger }
 }
 
 export default function AdminPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [stats, setStats] = useState<Stats | null>(null)
+  const [collab, setCollab] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [collab, setCollab] = useState<string>('')
-  const pool = usePoolRefresh()
+  const [toolState, setToolState] = useState<ToolState>({ active: null, tone: 'info', message: '' })
+
+  const loadAdmin = useCallback(async () => {
+    setError(null)
+    const [statsRes, collabRes] = await Promise.all([
+      fetch('/api/admin/stats').then(readJson),
+      fetch('/api/admin/collab').then(readJson),
+    ])
+    setStats(statsRes as Stats)
+    setCollab(String(collabRes?.content || ''))
+  }, [])
+
+  const pool = usePoolRefresh(() => {
+    loadAdmin().catch(() => {})
+  })
 
   useEffect(() => {
-    if (status === 'unauthenticated') { router.replace('/login'); return }
+    if (status === 'unauthenticated') {
+      router.replace('/login')
+      return
+    }
     if (status !== 'authenticated') return
-    Promise.all([
-      fetch('/api/admin/stats').then(r => r.json()),
-      fetch('/api/admin/collab').then(r => r.json()),
-    ]).then(([statsData, collabData]) => {
-      setStats(statsData)
-      setCollab(collabData?.content || '')
-      setLoading(false)
-    }).catch(() => { setError('Failed to load.'); setLoading(false) })
-  }, [status, router])
 
-  if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', color: 'var(--sil)', fontSize: '14px' }}>
-      Loading...
-    </div>
-  )
+    setLoading(true)
+    loadAdmin()
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load admin dashboard.'))
+      .finally(() => setLoading(false))
+  }, [loadAdmin, router, status])
 
-  if (error || !stats) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', color: 'var(--red)', fontSize: '14px' }}>
-      {error || 'Access denied.'}
-    </div>
-  )
+  const statusCopy = useMemo(() => {
+    if (!stats) return { label: 'Loading', detail: 'Checking launch status.' }
+    if (stats.status === 'healthy') return { label: 'Healthy', detail: 'Core launch systems look ready.' }
+    if (stats.status === 'watch') return { label: 'Watch', detail: 'A few items need monitoring before launch.' }
+    return { label: 'Attention', detail: 'Fix the highlighted items before wider launch.' }
+  }, [stats])
+
+  const runTool = async (id: string, label: string, url: string) => {
+    setToolState({ active: id, tone: 'info', message: `${label} running...` })
+    try {
+      const data = await readJson(await fetch(url))
+      setToolState({
+        active: null,
+        tone: 'success',
+        message: data.message || data.result?.message || `${label} completed.`,
+      })
+      await loadAdmin()
+    } catch (err) {
+      setToolState({
+        active: null,
+        tone: 'error',
+        message: err instanceof Error ? err.message : `${label} failed.`,
+      })
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="admin-loading">
+        Loading StackPilot Admin...
+      </div>
+    )
+  }
+
+  if (error || !stats) {
+    return (
+      <div className="admin-loading admin-loading-error">
+        {error || 'Access denied.'}
+      </div>
+    )
+  }
+
+  const listingSummary = stats.listingSummary
+  const source = stats.sourceHealth.sourceEngine
+  const cache = stats.sourceHealth.cache
+  const continuous = stats.sourceHealth.continuous
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', padding: '40px 32px' }}>
-      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: '32px', fontWeight: 700, color: 'var(--txt)', marginBottom: '8px' }}>
-          StackPilot Admin
+    <main className="admin-page">
+      <header className="admin-topbar">
+        <Link href="/" className="home-brand" aria-label="StackPilot home">
+          Stack<span>Pilot</span>
+        </Link>
+        <div className="admin-topbar-actions">
+          <span>{session?.user?.email}</span>
+          <Link href="/dashboard" className="btn btn-ghost btn-sm">Dashboard</Link>
         </div>
-        <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '36px' }}>
-          Signed in as {session?.user?.email}
+      </header>
+
+      <section className="admin-shell">
+        <div className="admin-hero">
+          <div>
+            <div className="admin-kicker">Admin Control Center</div>
+            <h1>Launch operations</h1>
+            <p>
+              The admin page now shows account health, listing health, product pool depth,
+              continuous queue readiness, recent listings, and the tools you need to keep StackPilot stable.
+            </p>
+          </div>
+          <div className={`admin-status-card admin-status-${stats.status}`}>
+            <span>System status</span>
+            <strong>{statusCopy.label}</strong>
+            <p>{statusCopy.detail}</p>
+            <small>Updated {formatDateTime(stats.generatedAt)}</small>
+          </div>
         </div>
 
-        {/* Product pool controls */}
-        <div className="card" style={{ padding: '24px', marginBottom: '28px' }}>
-          <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--sil)', marginBottom: '14px' }}>Product Pool</div>
-          <div style={{ fontSize: '12px', color: 'var(--sil)', lineHeight: 1.6, marginBottom: '14px', maxWidth: '720px' }}>
-            Deep Catalog Crawl adds fresh Amazon candidates across rotating niches. Quick Refresh reprices/enriches the existing pool and rebuilds the ready queues. Crawling is normal; wait for the done message before starting another refresh.
-          </div>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <button className="btn btn-solid btn-sm" disabled={pool.state === 'running'} onClick={() => pool.trigger('catalog')}>
-              {pool.state === 'running' ? 'Crawling...' : '🚀 Deep Catalog Crawl (100K products)'}
-            </button>
-            <button className="btn btn-gold btn-sm" disabled={pool.state === 'running'} onClick={() => pool.trigger('sourceOnly')}>
-              Quick Refresh
-            </button>
-          </div>
-          {pool.msg && (
-            <div style={{ marginTop: '12px', fontSize: '12px', color: pool.state === 'error' ? 'var(--red)' : pool.state === 'done' ? 'var(--grn)' : 'var(--gold)' }}>
-              {pool.msg}
+        <div className="admin-metrics-grid">
+          <MetricCard label="Accounts" value={formatNumber(stats.totalUsers)} detail={`${stats.ebayConnected} eBay connected`} />
+          <MetricCard label="Active Listings" value={formatNumber(listingSummary.activeListings)} detail={`${formatNumber(listingSummary.listed30Days)} listed in 30 days`} />
+          <MetricCard label="Active Profit" value={formatMoney(listingSummary.activeProfit)} detail={`${Math.round(listingSummary.averageRoi || 0)}% average ROI`} />
+          <MetricCard label="Source Pool" value={formatNumber(source.totalProducts)} detail={`${source.niches} niches tracked`} />
+          <MetricCard label="Continuous Queue" value={formatNumber(continuous.products)} detail={`Version ${continuous.version || 0}`} />
+          <MetricCard label="Niche Caches" value={`${cache.readyNiches}/${cache.totalNiches}`} detail={`${cache.staleNiches} stale caches`} />
+        </div>
+
+        <section className="admin-grid admin-grid-2">
+          <div className="admin-panel">
+            <div className="admin-panel-head">
+              <div>
+                <span>Launch warnings</span>
+                <h2>What needs attention</h2>
+              </div>
             </div>
-          )}
-        </div>
+            {stats.warnings.length === 0 ? (
+              <div className="admin-empty">No current launch warnings.</div>
+            ) : (
+              <div className="admin-warning-list">
+                {stats.warnings.map((warning) => (
+                  <div key={warning}>{warning}</div>
+                ))}
+              </div>
+            )}
+          </div>
 
-        {/* Summary cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '36px' }}>
-          {[
-            { label: 'Total Accounts', value: stats.totalUsers, color: 'var(--gold)' },
-            { label: 'eBay Connected', value: stats.ebayConnected, color: 'var(--grn)' },
-            { label: 'Active (30 days)', value: stats.activeRecently, color: 'var(--gld2)' },
-          ].map(card => (
-            <div key={card.label} className="card" style={{ padding: '24px' }}>
-              <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--sil)', marginBottom: '10px' }}>{card.label}</div>
-              <div style={{ fontFamily: 'var(--serif)', fontSize: '42px', fontWeight: 700, color: card.color, lineHeight: 1 }}>{card.value}</div>
+          <div className="admin-panel">
+            <div className="admin-panel-head">
+              <div>
+                <span>Admin tools</span>
+                <h2>Actions</h2>
+              </div>
+            </div>
+            <div className="admin-tool-grid">
+              <button className="admin-tool" disabled={pool.state === 'running'} onClick={() => pool.trigger('sourceOnly')}>
+                <strong>Quick Refresh</strong>
+                <span>Reprice, enrich, and rebuild ready queues.</span>
+              </button>
+              <button className="admin-tool" disabled={pool.state === 'running'} onClick={() => pool.trigger('catalog')}>
+                <strong>Deep Catalog Crawl</strong>
+                <span>Run the heavier rotating source-pool crawl.</span>
+              </button>
+              <button className="admin-tool" disabled={toolState.active !== null} onClick={() => runTool('setup', 'Database setup', '/api/setup-db')}>
+                <strong>Repair Database</strong>
+                <span>Ensure required tables and columns exist.</span>
+              </button>
+              <button className="admin-tool" disabled={toolState.active !== null} onClick={() => runTool('audit', 'Listing audit', '/api/scripts/run?script=listing-audit.js')}>
+                <strong>Listing Audit</strong>
+                <span>Check your active listings for local quality issues.</span>
+              </button>
+              <button className="admin-tool" disabled={toolState.active !== null} onClick={() => runTool('orders', 'Order check', '/api/scripts/run?script=check-orders.js')}>
+                <strong>Check Orders</strong>
+                <span>Check eBay orders needing shipment.</span>
+              </button>
+              <Link className="admin-tool" href="/dashboard">
+                <strong>Open Dashboard</strong>
+                <span>Jump back into the main app.</span>
+              </Link>
+            </div>
+            {(pool.msg || toolState.message) && (
+              <div className={`admin-tool-message admin-tool-${pool.state === 'error' || toolState.tone === 'error' ? 'error' : pool.state === 'done' || toolState.tone === 'success' ? 'success' : 'info'}`}>
+                {pool.msg || toolState.message}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="admin-grid admin-grid-2">
+          <div className="admin-panel">
+            <div className="admin-panel-head">
+              <div>
+                <span>Product source health</span>
+                <h2>Pool readiness</h2>
+              </div>
+            </div>
+            <div className="admin-health-grid">
+              <SmallStat label="Average score" value={source.averageScore.toFixed(1)} />
+              <SmallStat label="Stale products" value={formatNumber(source.staleProducts)} />
+              <SmallStat label="Missing images" value={formatNumber(source.missingImages)} />
+              <SmallStat label="High risk" value={formatNumber(source.highRiskProducts)} />
+            </div>
+            <div className="admin-subtle-line">
+              Newest product seen {formatDateTime(source.newestSeenAt)}. Continuous queue cached {formatDateTime(continuous.cachedAt)}.
+            </div>
+          </div>
+
+          <div className="admin-panel">
+            <div className="admin-panel-head">
+              <div>
+                <span>Listing quality</span>
+                <h2>Stored listing checks</h2>
+              </div>
+            </div>
+            <div className="admin-health-grid">
+              <SmallStat label="Total listed" value={formatNumber(listingSummary.totalListings)} />
+              <SmallStat label="Listed 7 days" value={formatNumber(listingSummary.listed7Days)} />
+              <SmallStat label="Low-image active" value={formatNumber(listingSummary.lowImageActive)} />
+              <SmallStat label="Missing category" value={formatNumber(listingSummary.missingCategoryActive)} />
+            </div>
+            <div className="admin-subtle-line">
+              Active revenue {formatMoney(listingSummary.activeRevenue)} against {formatMoney(listingSummary.activeCost)} stored cost basis.
+            </div>
+          </div>
+        </section>
+
+        <section className="admin-grid admin-grid-2">
+          <AdminList
+            title="Top source niches"
+            eyebrow="Pool depth"
+            items={stats.sourceHealth.topNiches.map((niche) => ({
+              key: niche.name,
+              left: niche.name,
+              right: `${formatNumber(niche.count)} items`,
+              meta: `Avg score ${Math.round(niche.averageScore)} - max ${Math.round(niche.maxScore)}`,
+            }))}
+          />
+          <AdminList
+            title="Best listing niches"
+            eyebrow="Last 90 days"
+            items={stats.nichePerformance.map((niche) => ({
+              key: niche.niche,
+              left: niche.niche,
+              right: formatMoney(niche.profit),
+              meta: `${formatNumber(niche.listings)} listings - ${formatNumber(niche.sellers)} seller(s)`,
+            }))}
+          />
+        </section>
+
+        <section className="admin-panel">
+          <div className="admin-panel-head">
+            <div>
+              <span>Recent listings</span>
+              <h2>Latest published products</h2>
+            </div>
+          </div>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Seller</th>
+                  <th>Prices</th>
+                  <th>Images</th>
+                  <th>Category</th>
+                  <th>Listed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.recentListings.length === 0 ? (
+                  <tr><td colSpan={6}>No listings recorded yet.</td></tr>
+                ) : stats.recentListings.map((listing) => (
+                  <tr key={listing.id}>
+                    <td>
+                      <strong>{truncate(listing.title, 70)}</strong>
+                      <span>{listing.asin}{listing.ebayListingId ? ` - eBay ${listing.ebayListingId}` : ''}</span>
+                    </td>
+                    <td>
+                      <strong>{listing.sellerName || listing.sellerEmail}</strong>
+                      <span>{listing.sellerEmail}</span>
+                    </td>
+                    <td>
+                      <strong>{formatMoney(listing.ebayPrice)}</strong>
+                      <span>Cost {formatMoney(listing.amazonPrice)}</span>
+                    </td>
+                    <td>{listing.imageCount}</td>
+                    <td>
+                      <strong>{listing.categoryId || '-'}</strong>
+                      <span>{listing.niche}</span>
+                    </td>
+                    <td>{formatDate(listing.listedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="admin-panel">
+          <div className="admin-panel-head">
+            <div>
+              <span>Accounts</span>
+              <h2>Customer health</h2>
+            </div>
+          </div>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>eBay</th>
+                  <th>Listings</th>
+                  <th>Profit</th>
+                  <th>Last listing</th>
+                  <th>Joined</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.customers.length === 0 ? (
+                  <tr><td colSpan={6}>No customer accounts yet.</td></tr>
+                ) : stats.customers.map((customer) => (
+                  <tr key={customer.id}>
+                    <td>
+                      <strong>{customer.name || customer.email}</strong>
+                      <span>{customer.email}</span>
+                    </td>
+                    <td>
+                      <StatusPill active={customer.ebayConnected} activeText="Connected" inactiveText="Missing" />
+                      <span>{formatDate(customer.ebayUpdatedAt)}</span>
+                    </td>
+                    <td>
+                      <strong>{formatNumber(customer.activeListings)} active</strong>
+                      <span>{formatNumber(customer.totalListings)} total</span>
+                    </td>
+                    <td>{formatMoney(customer.activeProfit)}</td>
+                    <td>
+                      <StatusPill active={customer.activeRecently} activeText="Recent" inactiveText="Quiet" />
+                      <span>{formatDate(customer.lastListingAt)}</span>
+                    </td>
+                    <td>{formatDate(customer.joined)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="admin-panel">
+          <details>
+            <summary>
+              <span>Collaboration log</span>
+              <strong>COLLAB.md live notes</strong>
+            </summary>
+            <pre className="admin-collab">{collab || 'COLLAB.md not loaded.'}</pre>
+          </details>
+        </section>
+      </section>
+    </main>
+  )
+}
+
+function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="admin-metric-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </div>
+  )
+}
+
+function SmallStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="admin-small-stat">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  )
+}
+
+function StatusPill({ active, activeText, inactiveText }: { active: boolean; activeText: string; inactiveText: string }) {
+  return (
+    <span className={`admin-pill ${active ? 'admin-pill-good' : 'admin-pill-muted'}`}>
+      {active ? activeText : inactiveText}
+    </span>
+  )
+}
+
+function AdminList({
+  eyebrow,
+  title,
+  items,
+}: {
+  eyebrow: string
+  title: string
+  items: Array<{ key: string; left: string; right: string; meta: string }>
+}) {
+  return (
+    <div className="admin-panel">
+      <div className="admin-panel-head">
+        <div>
+          <span>{eyebrow}</span>
+          <h2>{title}</h2>
+        </div>
+      </div>
+      {items.length === 0 ? (
+        <div className="admin-empty">No data yet.</div>
+      ) : (
+        <div className="admin-list">
+          {items.map((item) => (
+            <div key={item.key}>
+              <div>
+                <strong>{item.left}</strong>
+                <span>{item.meta}</span>
+              </div>
+              <em>{item.right}</em>
             </div>
           ))}
         </div>
-
-        {/* Customer table */}
-        <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--sil)', marginBottom: '12px' }}>
-          All Accounts
-        </div>
-        <div className="card" style={{ overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid rgba(125,211,252,0.12)' }}>
-                {['Name', 'Email', 'Joined', 'eBay', 'Listings', 'Active'].map(h => (
-                  <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--dim)' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {stats.customers.map((c, i) => (
-                <tr key={c.id} style={{ borderBottom: '1px solid rgba(125,211,252,0.06)', background: i % 2 === 0 ? 'transparent' : 'rgba(125,211,252,0.02)' }}>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: 'var(--txt)', fontWeight: 500 }}>{c.name || '—'}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--sil)', fontFamily: 'monospace' }}>{c.email}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '11px', color: 'var(--dim)' }}>
-                    {new Date(c.joined).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '9px', fontWeight: 700, background: c.ebayConnected ? 'rgba(52,211,153,0.12)' : 'rgba(255,255,255,0.05)', color: c.ebayConnected ? 'var(--grn)' : 'var(--dim)', border: `1px solid ${c.ebayConnected ? 'rgba(52,211,153,0.3)' : 'rgba(255,255,255,0.08)'}` }}>
-                      {c.ebayConnected ? 'Yes' : 'No'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: 'var(--gold)', fontWeight: 600 }}>{c.totalListings}</td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '9px', fontWeight: 700, background: c.activeRecently ? 'rgba(56,189,248,0.10)' : 'transparent', color: c.activeRecently ? 'var(--gold)' : 'var(--dim)', border: `1px solid ${c.activeRecently ? 'rgba(56,189,248,0.25)' : 'rgba(255,255,255,0.08)'}` }}>
-                      {c.activeRecently ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* COLLAB.md live viewer */}
-        {collab && (
-          <div style={{ marginTop: '36px' }}>
-            <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--sil)', marginBottom: '12px' }}>
-              COLLAB.md — Live
-            </div>
-            <div className="card" style={{ padding: '28px', lineHeight: 1.75, fontSize: '13px', color: 'var(--sil)' }}>
-              {collab.split('\n').map((line, i) => {
-                if (line.startsWith('# ')) return <div key={i} style={{ fontSize: '22px', fontWeight: 800, color: 'var(--txt)', marginBottom: '18px', marginTop: i > 0 ? '10px' : 0 }}>{line.slice(2)}</div>
-                if (line.startsWith('## ')) return <div key={i} style={{ fontSize: '14px', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '24px', marginBottom: '10px', borderBottom: '1px solid rgba(125,211,252,0.12)', paddingBottom: '6px' }}>{line.slice(3)}</div>
-                if (line.startsWith('### ')) return <div key={i} style={{ fontSize: '13px', fontWeight: 700, color: 'var(--plat)', marginTop: '14px', marginBottom: '6px' }}>{line.slice(4)}</div>
-                if (line.startsWith('- **')) return <div key={i} style={{ padding: '6px 0 6px 16px', borderLeft: '2px solid rgba(125,211,252,0.25)', marginBottom: '4px' }} dangerouslySetInnerHTML={{ __html: line.slice(2).replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#dff7ff">$1</strong>').replace(/`([^`]+)`/g, '<code style="background:rgba(125,211,252,0.08);padding:1px 5px;border-radius:3px;font-size:11px;font-family:monospace">$1</code>') }} />
-                if (line.startsWith('| ') && line.includes(' | ')) {
-                  const cells = line.split('|').filter(c => c.trim())
-                  const isHeader = collab.split('\n')[i+1]?.includes('---')
-                  if (line.includes('---')) return null
-                  return <div key={i} style={{ display: 'grid', gridTemplateColumns: `repeat(${cells.length}, 1fr)`, gap: '8px', padding: '6px 8px', background: isHeader ? 'rgba(125,211,252,0.06)' : 'transparent', borderBottom: '1px solid rgba(125,211,252,0.06)', fontSize: '11px' }}>
-                    {cells.map((cell, j) => <div key={j} style={{ color: isHeader ? 'var(--plat)' : 'var(--sil)', fontWeight: isHeader ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis' }}>{cell.trim()}</div>)}
-                  </div>
-                }
-                if (line.trim() === '' || line.startsWith('---')) return <div key={i} style={{ height: '8px' }} />
-                return <div key={i} style={{ marginBottom: '2px', color: 'var(--sil)' }} dangerouslySetInnerHTML={{ __html: line.replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#dff7ff">$1</strong>').replace(/`([^`]+)`/g, '<code style="background:rgba(125,211,252,0.08);padding:1px 5px;border-radius:3px;font-size:11px;font-family:monospace">$1</code>') }} />
-              })}
-            </div>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }
