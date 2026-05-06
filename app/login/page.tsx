@@ -39,7 +39,7 @@ export default function Login() {
         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
           <Link href="/" style={{ textDecoration: 'none', display: 'inline-block', marginBottom: '32px' }}>
             <div style={{ fontFamily: 'var(--serif)', fontSize: '28px', fontWeight: 700, color: 'var(--txt)' }}>
-              Ebay<span style={{ background: 'linear-gradient(135deg,var(--gold),var(--gld2))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Dash</span>
+              Stack<span style={{ background: 'linear-gradient(135deg,var(--gold),var(--gld2))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Pilot</span>
             </div>
           </Link>
           <h1 style={{ fontFamily: 'var(--serif)', fontSize: '36px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px' }}>Welcome back</h1>
