@@ -1,59 +1,45 @@
 import Link from 'next/link'
 
-const featureCards = [
+const pillars = [
   {
-    label: 'Product Finder',
+    label: 'Source',
     title: 'Find products worth listing',
-    desc: 'Build 30-item queues from a scored Amazon source pool using profit, ROI, demand signals, image readiness, and seller performance.',
+    desc: 'StackPilot keeps a scored product pool ready, then ranks items by profit, ROI, demand signals, image readiness, and seller fit.',
   },
   {
-    label: 'Listing Guard',
-    title: 'Skip risky listings before they post',
-    desc: 'Weak titles, one-image products, bad prices, duplicate ASINs, restricted items, and low-profit products are blocked or replaced.',
+    label: 'Protect',
+    title: 'Review before anything goes live',
+    desc: 'Weak titles, bad pricing, duplicate ASINs, restricted products, low-profit items, and thin image sets are blocked or replaced.',
   },
   {
-    label: 'Continuous Mode',
-    title: 'Keep fresh items ready',
-    desc: 'A randomized queue keeps sellers moving, replaces listed products, and helps different users see different product mixes.',
-  },
-  {
-    label: 'Orders',
-    title: 'Track what needs action',
-    desc: 'See live orders, shipment status, refunds, and fulfillment context from one organized operations screen.',
-  },
-  {
-    label: 'Financials',
-    title: 'Know the real money',
-    desc: 'Review revenue, fees, product cost, refunds, ROI, and profit across flexible date ranges.',
-  },
-  {
-    label: 'Performance',
-    title: 'Learn what to list next',
-    desc: 'Use sales, profit, views, watchers, and category trends to spot winning niches and avoid weak ones.',
+    label: 'Operate',
+    title: 'Run the whole seller workflow',
+    desc: 'Track orders, refunds, profit, active listings, category performance, and what to list next from one clean dashboard.',
   },
 ]
 
-const flow = [
+const workflow = [
   'Connect eBay',
-  'Choose a niche or continuous queue',
+  'Load 30 product candidates',
   'Review price, profit, images, and policy checks',
-  'Publish listings and track performance',
+  'Publish and let the queue refill',
 ]
 
-const previewRows = [
-  { name: 'Phone accessories', profit: '$24.29', roi: '97%', tone: 'green' },
-  { name: 'Home organization', profit: '$18.40', roi: '62%', tone: 'blue' },
-  { name: 'Low image item', profit: 'Skipped', roi: 'Needs review', tone: 'amber' },
+const checks = [
+  { label: 'Product source', value: 'Fresh pool' },
+  { label: 'Listing safety', value: 'Preflight checks' },
+  { label: 'Pricing', value: 'Dynamic ROI' },
+  { label: 'Performance', value: 'Learns by seller' },
 ]
 
 export default function Landing() {
   return (
-    <main className="landing-page">
-      <nav className="landing-nav">
-        <Link href="/" className="landing-brand" aria-label="StackPilot home">
+    <main className="home-page">
+      <nav className="home-nav">
+        <Link href="/" className="home-brand" aria-label="StackPilot home">
           Stack<span>Pilot</span>
         </Link>
-        <div className="landing-nav-actions">
+        <div className="home-nav-actions">
           <Link href="/login" className="btn btn-ghost btn-sm">
             Sign In
           </Link>
@@ -63,22 +49,23 @@ export default function Landing() {
         </div>
       </nav>
 
-      <section className="landing-hero">
-        <div className="landing-plane-wrap" aria-hidden="true">
-          <img className="landing-plane" src="/stackpilot-plane.svg" alt="" />
-          <span className="landing-plane-trail" />
+      <section className="home-hero">
+        <div className="home-plane-wrap" aria-hidden="true">
+          <span className="home-flight-path" />
+          <img className="home-plane" src="/stackpilot-plane.svg" alt="" />
         </div>
-        <div className="landing-hero-inner">
-          <div className="landing-kicker">
+
+        <div className="home-hero-copy">
+          <div className="home-kicker">
             <span />
-            eBay listing command center
+            eBay seller operations
           </div>
-          <h1>Find better products. List with guardrails. Run eBay calmly.</h1>
+          <h1>Source, list, and manage eBay with more control.</h1>
           <p>
-            StackPilot helps sellers source profitable Amazon products, review listing safety,
-            publish to eBay, and track orders, refunds, and profit from one clean dashboard.
+            StackPilot helps sellers find profitable Amazon products, avoid bad listings,
+            publish faster, and understand what is actually making money.
           </p>
-          <div className="landing-actions">
+          <div className="home-actions">
             <Link href="/signup" className="btn btn-solid">
               Request Access
             </Link>
@@ -86,76 +73,56 @@ export default function Landing() {
               Sign In
             </Link>
           </div>
+        </div>
 
-          <div className="landing-preview" aria-label="StackPilot product listing preview">
-            <div className="landing-preview-header">
-              <div>
-                <span className="landing-preview-label">Live workflow</span>
-                <strong>30-product listing queue</strong>
-              </div>
-              <span className="landing-preview-pill">Auto-refill on</span>
+        <div className="home-status-panel" aria-label="StackPilot workflow summary">
+          <div className="home-status-header">
+            <div>
+              <span>Product queue</span>
+              <strong>30 ready items</strong>
             </div>
-            <div className="landing-preview-grid">
-              <div className="landing-preview-main">
-                <div className="landing-card-title">Ready to list</div>
-                <div className="landing-big-number">30</div>
-                <div className="landing-muted">Products ranked by profit, ROI, demand, and safety.</div>
+            <em>Auto-refill</em>
+          </div>
+          <div className="home-status-grid">
+            {checks.map((item) => (
+              <div key={item.label}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
               </div>
-              <div className="landing-preview-main">
-                <div className="landing-card-title">Source pool</div>
-                <div className="landing-big-number">13.9K</div>
-                <div className="landing-muted">Fresh Amazon candidates scored in the background.</div>
-              </div>
-              <div className="landing-preview-main">
-                <div className="landing-card-title">Quality checks</div>
-                <div className="landing-check-list">
-                  <span>2+ images</span>
-                  <span>Profit floor</span>
-                  <span>Policy guard</span>
-                </div>
-              </div>
-            </div>
-            <div className="landing-preview-table">
-              {previewRows.map((row) => (
-                <div className="landing-preview-row" key={row.name}>
-                  <span>{row.name}</span>
-                  <strong>{row.profit}</strong>
-                  <em data-tone={row.tone}>{row.roi}</em>
-                </div>
-              ))}
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
-      <section className="landing-section landing-plain">
-        <div className="landing-section-copy">
-          <span className="landing-section-label">What customers get</span>
-          <h2>A dashboard that explains what to list, what to skip, and what needs attention.</h2>
+      <section className="home-section">
+        <div className="home-section-heading">
+          <span>What it does</span>
+          <h2>A cleaner command center for listing decisions.</h2>
           <p>
-            StackPilot is built for sellers who want sourcing, listing, orders, financials,
-            and performance learning in one place without guessing from scattered tabs.
+            The dashboard is built around the real daily workflow: find good products,
+            list safely, watch the money, and double down on what performs.
           </p>
         </div>
-        <div className="landing-feature-grid">
-          {featureCards.map((feature) => (
-            <article className="landing-feature-card" key={feature.title}>
-              <span>{feature.label}</span>
-              <h3>{feature.title}</h3>
-              <p>{feature.desc}</p>
+
+        <div className="home-pillars">
+          {pillars.map((pillar) => (
+            <article key={pillar.title} className="home-pillar">
+              <span>{pillar.label}</span>
+              <h3>{pillar.title}</h3>
+              <p>{pillar.desc}</p>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="landing-section landing-flow">
-        <div className="landing-section-copy">
-          <span className="landing-section-label">How it works</span>
-          <h2>From product idea to live listing in a simple review flow.</h2>
+      <section className="home-section home-flow-section">
+        <div className="home-section-heading">
+          <span>How listing works</span>
+          <h2>Simple enough to move fast, strict enough to avoid bad posts.</h2>
         </div>
-        <div className="landing-flow-grid">
-          {flow.map((step, index) => (
-            <div className="landing-flow-step" key={step}>
+        <div className="home-flow">
+          {workflow.map((step, index) => (
+            <div key={step} className="home-flow-step">
               <strong>{String(index + 1).padStart(2, '0')}</strong>
               <span>{step}</span>
             </div>
@@ -163,27 +130,27 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="landing-cta">
+      <section className="home-cta">
         <div>
-          <span className="landing-section-label">Private beta</span>
-          <h2>Built for sellers who want cleaner operations and smarter listing decisions.</h2>
-          <p>Sign in if you already have access, or request access when the next beta seats open.</p>
+          <span>Private beta</span>
+          <h2>Built for sellers who want smarter sourcing and cleaner operations.</h2>
+          <p>Existing users can sign in now. New access opens as the beta expands.</p>
         </div>
-        <div className="landing-actions">
+        <div className="home-actions">
           <Link href="/signup" className="btn btn-solid">
             Request Access
           </Link>
           <Link href="/login" className="btn btn-ghost">
-            Existing Seller Sign In
+            Sign In
           </Link>
         </div>
       </section>
 
-      <footer className="landing-footer">
-        <Link href="/" className="landing-brand" aria-label="StackPilot home">
+      <footer className="home-footer">
+        <Link href="/" className="home-brand" aria-label="StackPilot home">
           Stack<span>Pilot</span>
         </Link>
-        <div>&copy; 2026 StackPilot. Seller operations, product sourcing, and listing intelligence.</div>
+        <div>&copy; 2026 StackPilot. Product sourcing, listing safety, and seller operations.</div>
       </footer>
     </main>
   )
