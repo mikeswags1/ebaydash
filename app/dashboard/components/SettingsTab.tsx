@@ -119,7 +119,12 @@ function ProductSourceHealthCard({
   const imageCoverage = health && health.sourceEngine.totalProducts > 0
     ? Math.round(((health.sourceEngine.totalProducts - health.sourceEngine.missingImages) / health.sourceEngine.totalProducts) * 100)
     : 0
-  const readyNicheLabel = health ? `${health.cache.readyNiches}/${health.cache.totalNiches}` : '--'
+  const readyNicheLabel = health
+    ? health.cache.totalNiches > 0 ? `${health.cache.readyNiches}/${health.cache.totalNiches}` : 'Direct'
+    : '--'
+  const readyNicheDetail = health?.cache.totalNiches
+    ? `${formatNumber(health.cache.totalProducts)} cached products`
+    : 'Finder reads source pool directly'
 
   return (
     <div className="card" style={{ padding: '28px' }}>
@@ -128,6 +133,9 @@ function ProductSourceHealthCard({
           <div style={{ color: 'var(--sky)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 800, marginBottom: '8px' }}>Product Source Health</div>
           <div style={{ color: 'var(--sil)', fontSize: '13px', lineHeight: 1.6 }}>
             Tracks source pool depth, niche cache readiness, and Continuous Listing stock.
+          </div>
+          <div style={{ color: 'var(--dim)', fontSize: '12px', lineHeight: 1.6, marginTop: '8px', maxWidth: '620px' }}>
+            Source Pool is the big Amazon product warehouse. Niche Pools are saved 30-item category queues. Continuous Queue is the randomized ready-to-list pool. Crawling means StackPilot is adding fresh products in the background.
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -156,7 +164,7 @@ function ProductSourceHealthCard({
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', border: '1px solid rgba(125,211,252,0.14)', borderRadius: '10px', overflow: 'hidden', marginBottom: '18px' }}>
             <HealthMetric label="Source Pool" value={formatNumber(health.sourceEngine.totalProducts)} detail={`${formatNumber(health.sourceEngine.niches)} niches`} />
-            <HealthMetric label="Niche Pools Ready" value={readyNicheLabel} detail={`${formatNumber(health.cache.totalProducts)} cached products`} />
+            <HealthMetric label="Niche Pools Ready" value={readyNicheLabel} detail={readyNicheDetail} />
             <HealthMetric label="Continuous Queue" value={formatNumber(health.continuous.products)} detail={`Version ${health.continuous.version || 0}`} />
             <HealthMetric label="Image Coverage" value={`${imageCoverage}%`} detail={`${formatNumber(health.sourceEngine.missingImages)} missing`} />
           </div>

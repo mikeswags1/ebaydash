@@ -221,6 +221,16 @@ export interface ListProgress {
   done: number
   total: number
   errors: number
+  skipped?: number
+  failures?: BulkListFailure[]
+}
+
+export interface BulkListFailure {
+  asin: string
+  title: string
+  code: string
+  message: string
+  skipped?: boolean
 }
 
 export interface BannerState {

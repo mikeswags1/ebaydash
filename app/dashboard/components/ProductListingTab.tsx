@@ -48,6 +48,10 @@ export function ProductListingTab({
 }) {
   const isListing = !!listAllProgress && listAllProgress.done < listAllProgress.total
   const listingDone = !!listAllProgress && listAllProgress.done === listAllProgress.total
+  const failurePreview = listAllProgress?.failures?.slice(0, 3) || []
+  const skippedCount = listAllProgress?.skipped || 0
+  const failedCount = listAllProgress ? Math.max(0, listAllProgress.errors - skippedCount) : 0
+  const listedCount = listAllProgress ? Math.max(0, listAllProgress.total - listAllProgress.errors) : 0
 
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
@@ -169,7 +173,7 @@ export function ProductListingTab({
               ) : null}
               {listingDone ? (
                 <div style={{ padding: '13px 18px', borderRadius: '10px', background: 'rgba(46,207,118,0.08)', border: '1px solid rgba(46,207,118,0.2)', fontSize: '12px', color: 'var(--grn)', fontWeight: 600, flex: '1 1 140px' }}>
-                  ✓ {listAllProgress!.total - listAllProgress!.errors} listed{listAllProgress!.errors > 0 ? ` · ${listAllProgress!.errors} failed` : ''}
+                  Done: {listedCount} listed{skippedCount > 0 ? ` · ${skippedCount} skipped` : ''}{failedCount > 0 ? ` · ${failedCount} failed` : ''}
                 </div>
               ) : null}
               <button className="btn btn-ghost" onClick={onOpenAsinLookup} style={{ padding: '13px 18px', fontSize: '12px' }}>
@@ -184,6 +188,15 @@ export function ProductListingTab({
             {finderError ? (
               <div style={{ marginBottom: '20px', padding: '14px 16px', borderRadius: '10px', background: 'rgba(232,63,80,0.07)', border: '1px solid rgba(232,63,80,0.18)', fontSize: '12px', color: 'var(--red)', lineHeight: 1.6 }}>
                 {finderError}
+              </div>
+            ) : null}
+
+            {listingDone && failurePreview.length > 0 ? (
+              <div style={{ marginBottom: '20px', padding: '14px 16px', borderRadius: '10px', background: 'rgba(199,160,82,0.08)', border: '1px solid rgba(199,160,82,0.22)', fontSize: '12px', color: 'var(--sil)', lineHeight: 1.6 }}>
+                <div style={{ color: 'var(--gold)', fontWeight: 800, marginBottom: '6px' }}>Skipped or failed items were removed and replaced.</div>
+                {failurePreview.map((failure) => (
+                  <div key={`${failure.asin}-${failure.code}`}>{failure.asin}: {failure.message}</div>
+                ))}
               </div>
             ) : null}
 
@@ -250,6 +263,10 @@ export function FinderResults({
 }) {
   const isListing = !!listAllProgress && listAllProgress.done < listAllProgress.total
   const listingDone = !!listAllProgress && listAllProgress.done === listAllProgress.total
+  const failurePreview = listAllProgress?.failures?.slice(0, 3) || []
+  const skippedCount = listAllProgress?.skipped || 0
+  const failedCount = listAllProgress ? Math.max(0, listAllProgress.errors - skippedCount) : 0
+  const listedCount = listAllProgress ? Math.max(0, listAllProgress.total - listAllProgress.errors) : 0
 
   return (
     <div>
@@ -277,7 +294,7 @@ export function FinderResults({
           ) : null}
           {listingDone ? (
             <div style={{ fontSize: '11px', color: 'var(--grn)', padding: '5px 12px', borderRadius: '8px', background: 'rgba(46,207,118,0.08)', border: '1px solid rgba(46,207,118,0.2)' }}>
-              ✓ {listAllProgress!.total - listAllProgress!.errors} listed
+              Done: {listedCount} listed{skippedCount > 0 ? ` · ${skippedCount} skipped` : ''}{failedCount > 0 ? ` · ${failedCount} failed` : ''}
             </div>
           ) : null}
           {(['cards', 'list'] as const).map(opt => (
@@ -291,6 +308,13 @@ export function FinderResults({
           ))}
         </div>
       </div>
+
+      {listingDone && failurePreview.length > 0 ? (
+        <div style={{ marginBottom: '14px', padding: '12px 14px', borderRadius: '10px', background: 'rgba(199,160,82,0.08)', border: '1px solid rgba(199,160,82,0.2)', color: 'var(--sil)', fontSize: '12px', lineHeight: 1.55 }}>
+          <strong style={{ color: 'var(--gold)' }}>Preflight/listing notes:</strong>{' '}
+          {failurePreview.map((failure) => `${failure.asin}: ${failure.message}`).join(' ')}
+        </div>
+      ) : null}
 
       {view === 'cards' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: '14px' }}>

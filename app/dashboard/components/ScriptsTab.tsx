@@ -4,6 +4,7 @@ import { SectionIntro } from './shared'
 
 const SCRIPT_CARDS = [
   { title: 'Check Orders', file: 'check-orders.js', desc: 'Review all orders and surface any that need immediate action or follow-up.', badge: 'Operations' },
+  { title: 'Listing Audit', file: 'listing-audit.js', desc: 'Scan live StackPilot listings for weak titles, one-image records, stale prices, unavailable Amazon sources, and margin risk.', badge: 'Quality' },
   { title: 'Delete Dead Listings', file: 'delete-dead-listings.js', desc: 'Review listings with zero views or watchers after 14+ days and remove the ones with no traction.', badge: 'Cleanup' },
   { title: 'Product Finder', file: 'product-finder.js', desc: 'Open the sourcing workflow to find profitable products to list.', badge: 'Research' },
 ]

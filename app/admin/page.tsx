@@ -87,6 +87,9 @@ export default function AdminPage() {
         {/* Product pool controls */}
         <div className="card" style={{ padding: '24px', marginBottom: '28px' }}>
           <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--sil)', marginBottom: '14px' }}>Product Pool</div>
+          <div style={{ fontSize: '12px', color: 'var(--sil)', lineHeight: 1.6, marginBottom: '14px', maxWidth: '720px' }}>
+            Deep Catalog Crawl adds fresh Amazon candidates across rotating niches. Quick Refresh reprices/enriches the existing pool and rebuilds the ready queues. Crawling is normal; wait for the done message before starting another refresh.
+          </div>
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
             <button className="btn btn-solid btn-sm" disabled={pool.state === 'running'} onClick={() => pool.trigger('catalog')}>
               {pool.state === 'running' ? 'Crawling...' : '🚀 Deep Catalog Crawl (100K products)'}

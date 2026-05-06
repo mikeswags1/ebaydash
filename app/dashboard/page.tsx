@@ -28,6 +28,7 @@ import {
   fetchOrders,
   fetchProductSourceHealth,
   fetchUserNiche,
+  DashboardApiError,
   getErrorMessage,
   isReconnectError,
   lookupAsinByItemId,
@@ -38,7 +39,7 @@ import {
   validateAmazonAsin,
 } from './api'
 import { EBAY_FEE_RATE } from './constants'
-import { getGrossRevenue, getListingPreview, getRecommendedEbayPrice, listProductsInBatches, parseDashboardSearchMessage } from './utils'
+import { getBulkPreflightIssue, getGrossRevenue, getListingPreview, getRecommendedEbayPrice, listProductsInBatches, parseDashboardSearchMessage, summarizeBulkListResult } from './utils'
 import { isRefundedOrder } from './order-status'
 
 type ConnectionState = {
@@ -659,17 +660,21 @@ export default function Dashboard() {
         return { asin: data.listingId ? product.asin : undefined }
       } catch (error) {
         if (isReconnectError(error)) return { reconnectRequired: true }
-        return {}
+        const code = error instanceof DashboardApiError ? error.code : undefined
+        return {
+          errorCode: code || 'LISTING_FAILED',
+          errorMessage: getErrorMessage(error, 'Listing failed.'),
+        }
       }
     },
     [nicheState.value]
   )
 
   const refillNicheFinderProducts = useCallback(
-    async (listedAsins: string[]) => {
-      if (!nicheState.value || listedAsins.length === 0) return
+    async (removeAsins: string[]) => {
+      if (!nicheState.value || removeAsins.length === 0) return
 
-      const listed = new Set(listedAsins.map((asin) => asin.toUpperCase()))
+      const listed = new Set(removeAsins.map((asin) => asin.toUpperCase()))
       const remainingAsins = (finderState.results || [])
         .filter((product) => !listed.has(product.asin.toUpperCase()))
         .map((product) => product.asin)
@@ -677,11 +682,11 @@ export default function Dashboard() {
       try {
         const refreshed = await fetchFinderProducts(nicheState.value, true, {
           limit: FINDER_STOCK_TARGET,
-          excludeAsins: remainingAsins,
+          excludeAsins: [...remainingAsins, ...removeAsins],
         })
         setFinderState((prev) => ({
           ...prev,
-          results: mergeRefilledProducts(prev.results || finderState.results, refreshed.results || [], listedAsins, 'niche'),
+          results: mergeRefilledProducts(prev.results || finderState.results, refreshed.results || [], removeAsins, 'niche'),
         }))
       } catch {
         setFinderState((prev) => ({
@@ -694,10 +699,10 @@ export default function Dashboard() {
   )
 
   const refillContinuousProducts = useCallback(
-    async (listedAsins: string[]) => {
-      if (listedAsins.length === 0) return
+    async (removeAsins: string[]) => {
+      if (removeAsins.length === 0) return
 
-      const listed = new Set(listedAsins.map((asin) => asin.toUpperCase()))
+      const listed = new Set(removeAsins.map((asin) => asin.toUpperCase()))
       const remainingAsins = (continuousFinderState.results || [])
         .filter((product) => !listed.has(product.asin.toUpperCase()))
         .map((product) => product.asin)
@@ -706,11 +711,11 @@ export default function Dashboard() {
         const refreshed = await fetchFinderProducts('', true, {
           mode: 'continuous',
           limit: FINDER_STOCK_TARGET,
-          excludeAsins: remainingAsins,
+          excludeAsins: [...remainingAsins, ...removeAsins],
         })
         setContinuousFinderState((prev) => ({
           ...prev,
-          results: mergeRefilledProducts(prev.results || continuousFinderState.results, refreshed.results || [], listedAsins, 'continuous'),
+          results: mergeRefilledProducts(prev.results || continuousFinderState.results, refreshed.results || [], removeAsins, 'continuous'),
         }))
       } catch {
         setContinuousFinderState((prev) => ({
@@ -738,6 +743,7 @@ export default function Dashboard() {
         const needsValidation = (product.images?.length ?? 0) < 2 || !product.images?.length
         return publishFinderProduct(product, { trusted: !needsValidation })
       },
+      preflight: getBulkPreflightIssue,
       onProgress: (progress) => {
         setFinderState((prev) => ({ ...prev, listAllProgress: progress }))
       },
@@ -751,20 +757,21 @@ export default function Dashboard() {
       return
     }
 
+    const terminalAsins = [...result.listedAsins, ...result.failedAsins, ...result.skippedAsins]
     if (result.errors > 0) {
-      await refillNicheFinderProducts(result.listedAsins)
+      await refillNicheFinderProducts(terminalAsins)
       setBanner({
         tone: 'error',
-        text: `${result.listedAsins.length} product${result.listedAsins.length === 1 ? '' : 's'} listed, ${result.errors} failed. Review the remaining items and try again.`,
+        text: summarizeBulkListResult(result),
       })
       return
     }
 
-    await refillNicheFinderProducts(result.listedAsins)
+    await refillNicheFinderProducts(terminalAsins)
 
     setBanner({
       tone: 'success',
-      text: `${result.listedAsins.length} product${result.listedAsins.length === 1 ? '' : 's'} listed successfully.`,
+      text: summarizeBulkListResult(result),
     })
   }, [connectionState.ebayConnected, finderState.results, publishFinderProduct, refillNicheFinderProducts])
 
@@ -783,6 +790,7 @@ export default function Dashboard() {
         const needsValidation = (product.images?.length ?? 0) < 2 || !product.images?.length
         return publishFinderProduct(product, { trusted: !needsValidation })
       },
+      preflight: getBulkPreflightIssue,
       onProgress: (progress) => {
         setContinuousFinderState((prev) => ({ ...prev, listAllProgress: progress }))
       },
@@ -796,19 +804,20 @@ export default function Dashboard() {
       return
     }
 
+    const terminalAsins = [...result.listedAsins, ...result.failedAsins, ...result.skippedAsins]
     if (result.errors > 0) {
-      await refillContinuousProducts(result.listedAsins)
+      await refillContinuousProducts(terminalAsins)
       setBanner({
         tone: 'error',
-        text: `${result.listedAsins.length} product${result.listedAsins.length === 1 ? '' : 's'} listed, ${result.errors} failed. Review the remaining items and try again.`,
+        text: summarizeBulkListResult(result),
       })
       return
     }
 
-    await refillContinuousProducts(result.listedAsins)
+    await refillContinuousProducts(terminalAsins)
     setBanner({
       tone: 'success',
-      text: `${result.listedAsins.length} product${result.listedAsins.length === 1 ? '' : 's'} listed successfully.`,
+      text: summarizeBulkListResult(result),
     })
   }, [connectionState.ebayConnected, continuousFinderState.results, publishFinderProduct, refillContinuousProducts])
 
