@@ -18,6 +18,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-06 | Codex | Added Problem Listings visibility to `/admin`, including the exact all-account rows behind low-image/category warnings, issue tags, seller/account, ASIN/eBay links, prices, image counts, category info, and repair hints | `app/admin/page.tsx`, `app/api/admin/stats/route.ts`, `app/globals.css` |
 | 2026-05-06 | Codex | Added admin "Fix All" under launch warnings plus a protected all-account listing repair endpoint that backfills low-image records from Amazon cache/live ASIN lookup/eBay active listings and fills missing stored category ids from eBay active listing metadata or niche fallback mapping | `app/admin/page.tsx`, `app/api/admin/repair-listings/route.ts`, `app/globals.css` |
 | 2026-05-06 | Codex | Expanded `/admin` into a full StackPilot control center with launch warnings, account/customer health, listing quality checks, recent listings, source-pool/continuous-queue readiness, top niche visibility, admin tools, and a cleaner COLLAB.md viewer | `app/admin/page.tsx`, `app/api/admin/stats/route.ts`, `app/globals.css` |
 | 2026-05-06 | Codex | Polished the private beta signup/request-access page to match the premium public homepage, kept public copy discreet around catalog research/listing operations, changed login copy from "Create one" to "Request access", and fixed mobile wrapping/overflow | `app/signup/page.tsx`, `app/login/page.tsx`, `app/globals.css` |

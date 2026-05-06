@@ -59,6 +59,13 @@ type RecentListingRow = {
   image_count: string | number | null
 }
 
+type ProblemListingRow = RecentListingRow & {
+  category_name: string | null
+  cache_image_count: string | number | null
+  cache_updated_at: string | null
+  cache_available: boolean | null
+}
+
 type NichePerformanceRow = {
   niche: string | null
   listings: string | number
@@ -126,6 +133,7 @@ export async function GET() {
     listingRows,
     listingSummaryRows,
     recentListingRows,
+    problemListingRows,
     nichePerformanceRows,
     sourceRows,
     sourceNicheRows,
@@ -214,6 +222,54 @@ export async function GET() {
       JOIN users u ON u.id = la.user_id
       ORDER BY la.listed_at DESC
       LIMIT 12
+    `.catch(() => []),
+    queryRows<ProblemListingRow>`
+      SELECT
+        la.id,
+        la.user_id,
+        u.name AS seller_name,
+        u.email AS seller_email,
+        la.asin,
+        la.title,
+        la.ebay_listing_id,
+        la.listed_at,
+        la.amazon_price,
+        la.ebay_price,
+        la.niche,
+        la.category_id,
+        la.category_name,
+        CASE
+          WHEN la.amazon_images IS NULL OR jsonb_typeof(la.amazon_images) <> 'array' THEN 0
+          ELSE jsonb_array_length(la.amazon_images)
+        END AS image_count,
+        CASE
+          WHEN apc.images IS NULL OR jsonb_typeof(apc.images) <> 'array' THEN 0
+          ELSE jsonb_array_length(apc.images)
+        END AS cache_image_count,
+        apc.updated_at AS cache_updated_at,
+        apc.available AS cache_available
+      FROM listed_asins la
+      JOIN users u ON u.id = la.user_id
+      LEFT JOIN amazon_product_cache apc ON UPPER(apc.asin) = UPPER(la.asin)
+      WHERE la.ended_at IS NULL
+        AND (
+          la.category_id IS NULL
+          OR la.category_id = ''
+          OR la.amazon_images IS NULL
+          OR jsonb_typeof(la.amazon_images) <> 'array'
+          OR jsonb_array_length(la.amazon_images) < 2
+        )
+      ORDER BY
+        CASE
+          WHEN la.category_id IS NULL OR la.category_id = '' THEN 0
+          ELSE 1
+        END,
+        CASE
+          WHEN la.amazon_images IS NULL OR jsonb_typeof(la.amazon_images) <> 'array' OR jsonb_array_length(la.amazon_images) < 2 THEN 0
+          ELSE 1
+        END,
+        la.listed_at DESC NULLS LAST
+      LIMIT 100
     `.catch(() => []),
     queryRows<NichePerformanceRow>`
       SELECT
@@ -404,6 +460,40 @@ export async function GET() {
       categoryId: row.category_id || '',
       imageCount: toNumber(row.image_count),
     })),
+    problemListings: problemListingRows.map((row) => {
+      const imageCount = toNumber(row.image_count)
+      const cacheImageCount = toNumber(row.cache_image_count)
+      const issues: string[] = []
+      if (imageCount < 2) issues.push('Low stored images')
+      if (!row.category_id) issues.push('Missing category id')
+      if (row.cache_available === false) issues.push('Amazon unavailable in cache')
+
+      return {
+        id: row.id,
+        userId: row.user_id,
+        sellerName: row.seller_name || '',
+        sellerEmail: row.seller_email,
+        asin: row.asin || '',
+        title: row.title || '',
+        ebayListingId: row.ebay_listing_id || '',
+        listedAt: toIso(row.listed_at),
+        amazonPrice: toNumber(row.amazon_price),
+        ebayPrice: toNumber(row.ebay_price),
+        niche: row.niche || 'Unassigned',
+        categoryId: row.category_id || '',
+        categoryName: row.category_name || '',
+        imageCount,
+        cacheImageCount,
+        cacheUpdatedAt: toIso(row.cache_updated_at),
+        cacheAvailable: row.cache_available,
+        issues,
+        repairHint: cacheImageCount >= 2
+          ? 'Amazon cache has images ready'
+          : row.ebay_listing_id
+            ? 'Can try eBay active listing data'
+            : 'Needs fresh Amazon lookup',
+      }
+    }),
     nichePerformance: nichePerformanceRows.map((row) => ({
       niche: row.niche || 'Unassigned',
       listings: toNumber(row.listings),

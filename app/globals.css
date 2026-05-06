@@ -1795,6 +1795,39 @@ textarea{resize:vertical;min-height:100px}
   line-height:1.35;
   margin-top:4px;
 }
+.admin-problem-table a{
+  color:#6dd3ff;
+  text-decoration:none;
+}
+.admin-problem-table a:hover{
+  text-decoration:underline;
+}
+.admin-issue-stack{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:6px;
+}
+.admin-issue-stack small{
+  color:#86a9bf;
+  font-size:11px;
+  line-height:1.35;
+}
+.admin-issue{
+  display:inline-flex!important;
+  width:max-content;
+  max-width:220px;
+  border:1px solid rgba(251,191,36,0.24);
+  border-radius:999px;
+  background:rgba(251,191,36,0.08);
+  color:#fde68a!important;
+  padding:4px 9px;
+  font-size:10px!important;
+  font-weight:850;
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+  margin-top:0!important;
+}
 .admin-pill{
   display:inline-flex!important;
   width:max-content;

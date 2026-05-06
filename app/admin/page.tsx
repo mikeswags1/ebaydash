@@ -36,6 +36,15 @@ type RecentListing = {
   imageCount: number
 }
 
+type ProblemListing = RecentListing & {
+  categoryName: string
+  cacheImageCount: number
+  cacheUpdatedAt: string | null
+  cacheAvailable: boolean | null
+  issues: string[]
+  repairHint: string
+}
+
 type SourceNiche = {
   name: string
   count: number
@@ -97,6 +106,7 @@ type Stats = {
     topNiches: SourceNiche[]
   }
   recentListings: RecentListing[]
+  problemListings: ProblemListing[]
   nichePerformance: NichePerformance[]
 }
 
@@ -425,6 +435,80 @@ export default function AdminPage() {
               meta: `${formatNumber(niche.listings)} listings - ${formatNumber(niche.sellers)} seller(s)`,
             }))}
           />
+        </section>
+
+        <section className="admin-panel">
+          <div className="admin-panel-head">
+            <div>
+              <span>Problem listings</span>
+              <h2>Exact listings behind the warnings</h2>
+            </div>
+          </div>
+          <div className="admin-table-wrap">
+            <table className="admin-table admin-problem-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Seller</th>
+                  <th>Issues</th>
+                  <th>Images</th>
+                  <th>Category</th>
+                  <th>Price</th>
+                  <th>Listed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.problemListings.length === 0 ? (
+                  <tr><td colSpan={7}>No problem listings found.</td></tr>
+                ) : stats.problemListings.map((listing) => (
+                  <tr key={listing.id}>
+                    <td>
+                      <strong>{truncate(listing.title, 74)}</strong>
+                      <span>
+                        {listing.asin || 'No ASIN'}
+                        {listing.ebayListingId ? (
+                          <>
+                            {' - '}
+                            <a href={`https://www.ebay.com/itm/${listing.ebayListingId}`} target="_blank" rel="noreferrer">
+                              eBay {listing.ebayListingId}
+                            </a>
+                          </>
+                        ) : ''}
+                      </span>
+                    </td>
+                    <td>
+                      <strong>{listing.sellerName || listing.sellerEmail}</strong>
+                      <span>{listing.sellerEmail}</span>
+                    </td>
+                    <td>
+                      <div className="admin-issue-stack">
+                        {listing.issues.map((issue) => (
+                          <span className="admin-issue" key={`${listing.id}-${issue}`}>{issue}</span>
+                        ))}
+                        <small>{listing.repairHint}</small>
+                      </div>
+                    </td>
+                    <td>
+                      <strong>{listing.imageCount}</strong>
+                      <span>{listing.cacheImageCount} cached</span>
+                    </td>
+                    <td>
+                      <strong>{listing.categoryId || '-'}</strong>
+                      <span>{listing.categoryName || listing.niche}</span>
+                    </td>
+                    <td>
+                      <strong>{formatMoney(listing.ebayPrice)}</strong>
+                      <span>Cost {formatMoney(listing.amazonPrice)}</span>
+                    </td>
+                    <td>{formatDate(listing.listedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {stats.problemListings.length >= 100 ? (
+            <div className="admin-subtle-line">Showing the first 100 problem listings. Run Fix All, refresh, then review the remaining rows.</div>
+          ) : null}
         </section>
 
         <section className="admin-panel">
