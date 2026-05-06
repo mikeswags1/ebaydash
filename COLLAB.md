@@ -18,6 +18,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-06 | Codex | Reworked the public homepage into a cleaner premium StackPilot landing page, removed direct Amazon/dropshipping/sourcing wording from public copy and metadata, and tightened the mobile layout so the hero and preview do not overflow | `app/page.tsx`, `app/globals.css`, `app/layout.tsx` |
 | 2026-05-06 | Codex | Added live queue rotation for Product Listing and Continuous Listing: tabs now fetch a 60-product safe pool, display/list 30 at a time, reshuffle the visible order every second, and pause rotation while a listing modal or bulk listing is active | `app/dashboard/page.tsx`, `app/dashboard/components/ProductListingTab.tsx` |
 | 2026-05-06 | Codex | Refined the StackPilot homepage again after feedback: simplified the public landing page into a cleaner professional hero, tighter value pillars, clearer listing workflow, and a smoother/more detailed airplane animation | `app/page.tsx`, `app/globals.css`, `public/stackpilot-plane.svg` |
 | 2026-05-06 | Codex | Rebuilt the public home screen around StackPilot branding, clearer customer-facing product/listing workflow copy, a friendlier dashboard preview, responsive landing styles, and an animated passenger-plane visual layer | `app/page.tsx`, `app/globals.css`, `app/login/page.tsx`, `public/stackpilot-plane.svg` |

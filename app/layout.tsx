@@ -4,7 +4,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'StackPilot | Professional eBay Operations Platform',
-  description: 'Real-time eBay order management, listing workflows, sourcing tools, and automation for serious sellers.',
+  description: 'Real-time eBay order management, listing workflows, catalog research, and performance tools for serious sellers.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
