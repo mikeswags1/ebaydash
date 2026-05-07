@@ -20,6 +20,13 @@ async function fetchPayload({ stackpilotOrigin, token }) {
     const message = data?.error?.message || 'Failed to fetch fulfillment payload.'
     throw new Error(message)
   }
+  await chrome.storage.local.set({
+    stackPilotFulfillment: {
+      shipTo: data.shipTo || {},
+      orderId: data.orderId || '',
+      savedAt: Date.now(),
+    },
+  })
   return data
 }
 

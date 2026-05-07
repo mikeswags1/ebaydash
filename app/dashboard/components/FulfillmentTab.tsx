@@ -19,8 +19,9 @@ function FulfillmentSimpleTip() {
       }}
     >
       <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.65 }}>
-        <strong style={{ color: 'var(--plat)' }}>Simple flow (phone or laptop):</strong> click <strong style={{ color: 'var(--gold)' }}>Fulfill</strong> on a row — we copy the buyer&apos;s ship-to address and open the Amazon product.
-        Paste the address at Amazon checkout. No download or extension required.
+        <strong style={{ color: 'var(--plat)' }}>Works on phone and laptop:</strong> click <strong style={{ color: 'var(--gold)' }}>Fulfill</strong> — we copy the buyer&apos;s ship-to and open Amazon with the same secure link the optional Chrome helper uses.
+        Paste the address at Amazon checkout (browsers can&apos;t fill Amazon&apos;s forms for you without that helper).{' '}
+        <strong style={{ color: 'var(--plat)' }}>No install needed.</strong>
       </div>
     </div>
   )
@@ -43,7 +44,7 @@ function FulfillmentOptionalExtension({ origin }: { origin: string }) {
         Optional: Chrome / Edge autofill (desktop only)
       </summary>
       <p style={{ margin: '12px 0 10px', fontSize: '12px', color: 'var(--dim)', lineHeight: 1.6 }}>
-        After you install the extension, use <strong style={{ color: 'var(--sil)' }}>Chrome autofill</strong> on a row to open Amazon with a token so the helper can try to fill address fields. You still place the order on Amazon.
+        The <strong style={{ color: 'var(--sil)' }}>Fulfill</strong> button already opens Amazon with the token link. With this extension on Chrome/Edge, it also tries <strong style={{ color: 'var(--sil)' }}>Buy Now</strong> on the product page and fills checkout address fields when they appear. You still place the order on Amazon.
       </p>
       <ol style={{ margin: '0 0 10px', paddingLeft: '18px', fontSize: '11px', color: 'var(--dim)', lineHeight: 1.65 }}>
         <li>Unzip the download. In <code>chrome://extensions</code>, enable Developer mode → Load unpacked → select the <code>stackpilot-fulfillment-extension</code> folder.</li>
@@ -110,7 +111,7 @@ export function FulfillmentTab({
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [fulfillFlash, setFulfillFlash] = useState<string | null>(null)
   const [fulfillStatus, setFulfillStatus] = useState<Record<string, FulfillmentStatusRow>>({})
-  const [extensionStartingKey, setExtensionStartingKey] = useState<string | null>(null)
+  const [fulfillSubmitKey, setFulfillSubmitKey] = useState<string | null>(null)
   const [origin, setOrigin] = useState('')
 
   useEffect(() => {
@@ -264,7 +265,9 @@ export function FulfillmentTab({
                             {row.asin}
                           </a>
                         ) : (
-                          <span style={{ color: 'var(--dim)' }}>Missing</span>
+                          <span style={{ color: 'var(--dim)' }} title="Map an ASIN in ASIN Lookup to open the product from Fulfill.">
+                            Missing
+                          </span>
                         )}
                       </td>
 
@@ -276,11 +279,24 @@ export function FulfillmentTab({
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <button
                             className="btn btn-gold btn-sm"
+                            disabled={fulfillSubmitKey === copyKey}
                             onClick={async () => {
+                              setFulfillSubmitKey(copyKey)
                               try {
                                 await navigator.clipboard.writeText(line)
                                 if (row.amazonUrl) {
-                                  window.open(row.amazonUrl, '_blank', 'noreferrer')
+                                  try {
+                                    const started = await startFulfillment({
+                                      orderId: row.order.orderId,
+                                      legacyItemId: row.legacyItemId || null,
+                                      asin: row.asin || null,
+                                      amazonUrl: row.amazonUrl,
+                                      shipTo: row.shipTo,
+                                    })
+                                    window.open(started.fulfillUrl, '_blank', 'noreferrer')
+                                  } catch {
+                                    window.open(row.amazonUrl, '_blank', 'noreferrer')
+                                  }
                                 }
                                 setFulfillFlash(copyKey)
                                 window.setTimeout(() => {
@@ -288,14 +304,18 @@ export function FulfillmentTab({
                                 }, 2600)
                               } catch {
                                 setFulfillFlash(null)
+                              } finally {
+                                setFulfillSubmitKey(null)
                               }
                             }}
                           >
-                            {fulfillFlash === copyKey
-                              ? row.amazonUrl
-                                ? 'Copied · opened Amazon'
-                                : 'Address copied'
-                              : 'Fulfill'}
+                            {fulfillSubmitKey === copyKey
+                              ? 'Working…'
+                              : fulfillFlash === copyKey
+                                ? row.amazonUrl
+                                  ? 'Copied · opened Amazon'
+                                  : 'Address copied'
+                                : 'Fulfill'}
                           </button>
 
                           <button
@@ -313,32 +333,10 @@ export function FulfillmentTab({
                             {copiedId === copyKey ? 'Copied' : 'Copy only'}
                           </button>
 
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            disabled={!row.amazonUrl || extensionStartingKey === copyKey}
-                            onClick={async () => {
-                              if (!row.amazonUrl) return
-                              setExtensionStartingKey(copyKey)
-                              try {
-                                const started = await startFulfillment({
-                                  orderId: row.order.orderId,
-                                  legacyItemId: row.legacyItemId || null,
-                                  asin: row.asin || null,
-                                  amazonUrl: row.amazonUrl,
-                                  shipTo: row.shipTo,
-                                })
-                                window.open(started.fulfillUrl, '_blank', 'noreferrer')
-                              } finally {
-                                setExtensionStartingKey(null)
-                              }
-                            }}
-                          >
-                            {extensionStartingKey === copyKey ? 'Opening…' : 'Chrome autofill'}
-                          </button>
-
-                          {!row.asin ? (
-                            <span style={{ color: 'var(--dim)', fontSize: '11px' }}>Map ASIN in ASIN Lookup</span>
+                          {!row.amazonUrl ? (
+                            <span style={{ color: 'var(--dim)', fontSize: '11px', lineHeight: 1.45 }}>
+                              Map ASIN in <strong style={{ color: 'rgba(148,212,255,0.85)' }}>ASIN Lookup</strong> so Fulfill can open the product page (same link the Chrome helper needs).
+                            </span>
                           ) : null}
 
                           {status?.state === 'ISSUE' && status.last_error ? (

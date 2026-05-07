@@ -21,10 +21,17 @@ This extension is **autofill-only**:
 
 The dashboard app adds `stackpilotOrigin` and `fulfillToken` to the Amazon URL hash so the extension can call your StackPilot server (localhost or Vercel) to load the ship-to payload. After updating the extension, use **Reload** on `chrome://extensions`.
 
+### What it does (v0.2+)
+
+1. After you use **Fulfill** in StackPilot, Amazon opens with a token in the URL. The extension saves the ship-to payload and stays active as you move through Amazon’s pages (hash may drop after redirects).
+2. On the product page it tries to click **Buy Now** so you move toward checkout.
+3. On checkout / address screens it fills Amazon’s shipping fields when possible (Amazon changes their site often — you may still need to paste or fix fields manually).
+4. It does **not** click **Place your order** for you.
+
 ### Use
 1. In StackPilot, open **Dashboard → Fulfillment**.
-2. Click **Fulfill (auto-fill)** on an order row.
-3. A new Amazon tab opens. If Amazon shows an address form, the extension will attempt to fill it.
+2. Click **Fulfill** on an order row (same link as the dashboard — extension enhances the flow on Chrome/Edge).
+3. The extension tries **Buy Now** on the product page, then fills the shipping form on checkout when it appears. You verify and place the order on Amazon.
 
 ### Notes / limitations
 - Amazon changes DOM frequently; this MVP uses **heuristics** (label/name matching). Some flows won’t autofill on first try.
