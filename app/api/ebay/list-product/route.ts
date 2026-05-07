@@ -81,36 +81,36 @@ const NICHE_FALLBACK_LEAF_CATEGORY: Record<string, string> = {
   'Kitchen Gadgets':        '20625',
   'Home Decor':             '10033',
   'Furniture & Lighting':   '95672',
-  'Cleaning Supplies':      '26677',
-  'Storage & Organization': '26677',
+  'Cleaning Supplies':      '26677',   // Cleaning Supplies & Products
+  'Storage & Organization': '26677',   // Cleaning Supplies & Products (closest match)
   'Camping & Hiking':       '16034',
-  'Garden & Tools':         '2032',
-  'Sporting Goods':         '15273',
-  'Fishing & Hunting':      '1492',
+  'Garden & Tools':         '2032',    // Garden
+  'Sporting Goods':         '15273',   // Sporting Goods
+  'Fishing & Hunting':      '1492',    // Fishing
   'Cycling':                '2904',
-  'Fitness Equipment':      '15273',
+  'Fitness Equipment':      '15273',   // Sporting Goods
   'Personal Care':          '26248',
   'Supplements & Vitamins': '180960',
-  'Medical Supplies':       '51148',
-  'Mental Wellness':        '26395',
-  'Car Parts':              '6030',
+  'Medical Supplies':       '51148',   // Medical, Mobility & Disability Equipment
+  'Mental Wellness':        '26395',   // Vitamins & Lifestyle Supplements (closest wellness match)
+  'Car Parts':              '6030',    // Car & Truck Parts & Accessories
   'Car Accessories':        '14946',
-  'Motorcycle Gear':        '10063',
-  'Truck & Towing':         '6030',
-  'Car Care':               '179716',
+  'Motorcycle Gear':        '10063',   // Motorcycle Parts
+  'Truck & Towing':         '6030',    // Car & Truck Parts & Accessories
+  'Car Care':               '179716',  // Car Care
   'Pet Supplies':           '1281',
   'Baby & Kids':            '2984',
   'Toys & Games':           '19169',
-  'Clothing & Accessories': '11450',
-  'Jewelry & Watches':      '281',
+  'Clothing & Accessories': '11450',   // Clothing, Shoes & Accessories
+  'Jewelry & Watches':      '281',     // Jewelry & Watches
   'Office Supplies':        '26215',
-  'Industrial Equipment':   '12576',
-  'Safety Gear':            '177742',
-  'Janitorial & Cleaning':  '26677',
-  'Packaging Materials':    '26677',
+  'Industrial Equipment':   '12576',   // Industrial Equipment & Supplies
+  'Safety Gear':            '177742',  // Safety & Security
+  'Janitorial & Cleaning':  '26677',   // Cleaning Supplies & Products
+  'Packaging Materials':    '26677',   // Cleaning Supplies & Products (closest match)
   'Trading Cards':          '183050',
-  'Vintage & Antiques':     '20081',
-  'Coins & Currency':       '11116',
+  'Vintage & Antiques':     '20081',   // Antiques
+  'Coins & Currency':       '11116',   // Coins & Paper Money
   'Comics & Manga':         '259104',
   'Sports Memorabilia':     '64482',
 }
