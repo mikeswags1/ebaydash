@@ -115,6 +115,52 @@ const NICHE_FALLBACK_LEAF_CATEGORY: Record<string, string> = {
   'Sports Memorabilia':     '64482',
 }
 
+const DEFAULT_LEAF_CATEGORY = '26677'
+
+const TITLE_FALLBACK_CATEGORY_RULES: Array<{ categoryId: string; keywords: string[] }> = [
+  { categoryId: '9394', keywords: ['phone', 'iphone', 'galaxy', 'samsung', 'magsafe', 'charger', 'charging case', 'screen protector'] },
+  { categoryId: '58058', keywords: ['computer', 'laptop', 'keyboard', 'mouse', 'usb', 'monitor', 'webcam', 'ssd', 'hard drive'] },
+  { categoryId: '14985', keywords: ['headphone', 'earbud', 'speaker', 'audio', 'bluetooth', 'microphone', 'soundbar'] },
+  { categoryId: '183406', keywords: ['smart home', 'wifi', 'wi-fi', 'alexa', 'google home', 'security camera', 'smart plug'] },
+  { categoryId: '139971', keywords: ['gaming', 'controller', 'xbox', 'playstation', 'switch', 'rgb', 'gamepad'] },
+  { categoryId: '20625', keywords: ['kitchen', 'cookware', 'utensil', 'knife', 'coffee', 'pan', 'baking', 'food storage'] },
+  { categoryId: '10033', keywords: ['decor', 'wall art', 'vase', 'candle', 'pillow cover', 'throw pillow', 'curtain'] },
+  { categoryId: '95672', keywords: ['lamp', 'lighting', 'table', 'desk', 'chair', 'shelf', 'furniture', 'nightstand'] },
+  { categoryId: '26677', keywords: ['cleaning', 'towel', 'paper towel', 'trash bag', 'storage', 'organizer', 'box', 'bin', 'tape', 'packaging'] },
+  { categoryId: '16034', keywords: ['camping', 'hiking', 'tent', 'cooler', 'backpack', 'outdoor'] },
+  { categoryId: '2032', keywords: ['garden', 'tool', 'hose', 'plant', 'lawn', 'yard', 'drill', 'wrench'] },
+  { categoryId: '15273', keywords: ['fitness', 'workout', 'yoga', 'exercise', 'sporting', 'sports', 'brace', 'resistance band'] },
+  { categoryId: '1492', keywords: ['fishing', 'hunting', 'tackle', 'lure', 'reel', 'rod'] },
+  { categoryId: '2904', keywords: ['bike', 'bicycle', 'cycling', 'helmet', 'pedal'] },
+  { categoryId: '26248', keywords: ['personal care', 'beauty', 'hair', 'skin', 'grooming', 'toothbrush'] },
+  { categoryId: '51148', keywords: ['medical', 'health', 'bandage', 'first aid', 'mobility', 'support'] },
+  { categoryId: '6030', keywords: ['car', 'auto', 'automotive', 'truck', 'vehicle', 'obd', 'towing'] },
+  { categoryId: '1281', keywords: ['pet', 'dog', 'cat', 'aquarium', 'leash', 'collar'] },
+  { categoryId: '2984', keywords: ['baby', 'toddler', 'kids', 'child', 'diaper', 'stroller'] },
+  { categoryId: '19169', keywords: ['toy', 'game', 'puzzle', 'doll', 'playset'] },
+  { categoryId: '11450', keywords: ['clothing', 'shirt', 'pants', 'sock', 'jacket', 'hoodie', 'hat', 'shoe'] },
+  { categoryId: '281', keywords: ['jewelry', 'watch', 'necklace', 'bracelet', 'earring', 'ring'] },
+  { categoryId: '26215', keywords: ['office', 'desk', 'pen', 'paper', 'printer', 'label', 'folder'] },
+  { categoryId: '12576', keywords: ['industrial', 'commercial', 'safety sign', 'warehouse'] },
+  { categoryId: '177742', keywords: ['safety', 'ppe', 'glove', 'goggles', 'hard hat', 'reflective'] },
+  { categoryId: '183050', keywords: ['trading card', 'pokemon card', 'sports card'] },
+  { categoryId: '20081', keywords: ['vintage', 'antique', 'collectible'] },
+  { categoryId: '11116', keywords: ['coin', 'currency', 'silver round', 'banknote'] },
+  { categoryId: '259104', keywords: ['comic', 'manga', 'graphic novel'] },
+  { categoryId: '64482', keywords: ['memorabilia', 'signed', 'autograph', 'jersey'] },
+]
+
+function inferFallbackCategoryFromTitle(title: string, niche: string | null | undefined) {
+  const nicheCategory = NICHE_FALLBACK_LEAF_CATEGORY[niche || ''] || NICHE_CATEGORY[niche || '']
+  if (nicheCategory) return nicheCategory
+
+  const normalized = title.toLowerCase()
+  const match = TITLE_FALLBACK_CATEGORY_RULES.find((rule) =>
+    rule.keywords.some((keyword) => normalized.includes(keyword))
+  )
+  return match?.categoryId || DEFAULT_LEAF_CATEGORY
+}
+
 const NICHE_SPECIFICS: Record<string, Array<[string, string]>> = {
   'Audio & Headphones':    [['Connectivity', 'Wireless'], ['Type', 'Bluetooth Speaker']],
   'Phone Accessories':     [['Compatible Brand', 'Universal'], ['Type', 'Phone Accessory']],
@@ -1806,8 +1852,9 @@ export async function POST(req: NextRequest) {
         getSuggestedCategoryIds(titleQuery, appId, credentials.accessToken),
       ])
 
-  // Niche map as absolute last resort
-  const nicheFallback = NICHE_FALLBACK_LEAF_CATEGORY[niche || ''] || nicheCategoryId
+  // Last-resort fallback still tries to land in a real leaf category instead of eBay's generic bucket.
+  const titleFallback = inferFallbackCategoryFromTitle(safeTitle, niche)
+  const nicheFallback = NICHE_FALLBACK_LEAF_CATEGORY[niche || ''] || titleFallback || nicheCategoryId || DEFAULT_LEAF_CATEGORY
 
   const categorySourceById = new Map<string, string[]>()
   const addCategorySource = (categoryId: string | null | undefined, source: string) => {
@@ -1818,22 +1865,24 @@ export async function POST(req: NextRequest) {
   addCategorySource(comparableCategory, 'comparable-listings')
   taxonomyIds.forEach((categoryId) => addCategorySource(categoryId, 'taxonomy'))
   legacySuggestions.forEach((categoryId) => addCategorySource(categoryId, 'legacy-suggested'))
+  addCategorySource(titleFallback, 'title-fallback')
   addCategorySource(nicheFallback, 'niche-fallback')
   addCategorySource(nicheCategoryId, 'niche-default')
-  addCategorySource('29223', 'default-everything-else')
+  addCategorySource(DEFAULT_LEAF_CATEGORY, 'default-leaf-fallback')
 
-  // Priority: exact/similar real listing signals → semantic Taxonomy → legacy keyword → niche → Everything Else.
+  // Priority: real listing signals -> semantic Taxonomy -> legacy keyword -> niche/title fallback.
   const categoryCandidateIds = [
     asinCategory,
     comparableCategory,
     ...taxonomyIds,
     ...legacySuggestions,
+    titleFallback,
     nicheFallback,
     nicheCategoryId,
-    '29223',
+    DEFAULT_LEAF_CATEGORY,
   ]
   const categoryCandidates = Array.from(new Set(categoryCandidateIds.filter(Boolean) as string[]))
-  const preferredCategoryId = categoryCandidates[0] || '29223'
+  const preferredCategoryId = categoryCandidates[0] || DEFAULT_LEAF_CATEGORY
   const leafSuggestedCategoryIds = Array.from(new Set([asinCategory, comparableCategory, ...taxonomyIds, ...legacySuggestions].filter(Boolean) as string[])).slice(0, 8)
   const xmlParams = { token: credentials.accessToken, safeTitle, description, categoryId: preferredCategoryId, price, pictureXml, itemSpecificsXml, sourceAsin: String(asin).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) }
 

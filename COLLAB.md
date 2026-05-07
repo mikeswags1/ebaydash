@@ -1,7 +1,13 @@
 # StackPilot — Agent Collaboration Log
 
-This file is shared between **Claude** and **Codex**.
+This file is shared between **Claude**, **Codex**, **Cursor**, and **Antigravity**.
 Read it before starting any work. Update it when you finish.
+
+## Agent Workflow
+
+1. Read `COLLAB.md` before starting work.
+2. Keep edits scoped and avoid overwriting another agent's active files.
+3. Update `COLLAB.md` after finishing important changes, deploys, or blockers.
 
 ---
 
@@ -18,6 +24,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-06 | Codex | Finished the remaining launch polish queued in COLLAB: removed the final generic `29223` category publish fallback in favor of niche/title-based real leaf categories, and added a personalized first-name greeting on the Overview tab | `app/api/ebay/list-product/route.ts`, `app/dashboard/components/OverviewTab.tsx`, `app/dashboard/page.tsx` |
 | 2026-05-06 | Codex | Added first-pass StackPilot PWA support so the dashboard can be installed like a mobile app: web manifest, standalone app metadata, generated app icons, service worker shell cache, and standalone-mode sizing polish | `app/layout.tsx`, `app/manifest.ts`, `app/pwa-registration.tsx`, `app/globals.css`, `public/stackpilot-icon.svg`, `public/stackpilot-icon-192.png`, `public/stackpilot-icon-512.png`, `public/apple-touch-icon.png`, `public/sw.js` |
 | 2026-05-06 | Codex | Added Problem Listings visibility to `/admin`, including the exact all-account rows behind low-image/category warnings, issue tags, seller/account, ASIN/eBay links, prices, image counts, category info, and repair hints | `app/admin/page.tsx`, `app/api/admin/stats/route.ts`, `app/globals.css` |
 | 2026-05-06 | Codex | Added admin "Fix All" under launch warnings plus a protected all-account listing repair endpoint that backfills low-image records from Amazon cache/live ASIN lookup/eBay active listings and fills missing stored category ids from eBay active listing metadata or niche fallback mapping | `app/admin/page.tsx`, `app/api/admin/repair-listings/route.ts`, `app/globals.css` |
@@ -152,21 +159,19 @@ Dashboard is functionally complete. Core flows confirmed working:
 - Mobile layout responsive via `--xpad` CSS variable
 - `stackpilot-app.vercel.app` is canonical URL
 
-**Remaining before ship:** Scripts tab cleanup (Mike is reviewing), category fallback fix (see flags), personalized greeting on Overview.
+**Remaining before ship:** Scripts tab cleanup (Mike is reviewing).
 
 ## 📋 Queued Tasks from Mike
 
 | Priority | Task | Notes |
 |----------|------|-------|
 | 🔴 HIGH | Scripts tab — Mike is reviewing what to change | Awaiting direction |
-| 🔴 HIGH | Fix NICHE_FALLBACK_LEAF_CATEGORY in `list-product/route.ts` | All `29223` fallbacks need real IDs — see flags for full mapping |
-| 🟡 MED | Add personalized greeting to Overview tab | "Good morning, Mike 👋" using `session.user.name` split on space, passed as `userName` prop |
 
 ---
 
 ## 📌 Architecture Notes
 
-- **Category selection chain**: Taxonomy REST API → ASIN Browse API → Legacy Trading API → NICHE_FALLBACK_LEAF_CATEGORY → `29223`
+- **Category selection chain**: Taxonomy REST API → ASIN Browse API → Legacy Trading API → NICHE_FALLBACK_LEAF_CATEGORY → title-based real leaf fallback
 - **Image chain**: `validatedAmazon.images` + `fetchedAmazon.images` + `imageUrl` merged → deduplicated → badge stamped on first image → EPS upload
 - **Shipping**: FedEx2Day, ExpeditedService=true, FreeShipping=true, DispatchTimeMax=0
 - **Pricing**: `lib/listing-pricing.ts` — dynamic cost-band ROI targets, eBay variable fee + fixed fee + operating buffer, psychological endings, and competitor-aware final publish price.

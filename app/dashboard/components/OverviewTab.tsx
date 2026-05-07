@@ -5,17 +5,21 @@ export function OverviewTab({
   connected,
   orders,
   awaitingCount,
+  userName,
   onOpenSettings,
 }: {
   connected: boolean
   orders: EbayOrder[]
   awaitingCount: number
   grossRevenue: number // kept in type for prop compatibility
+  userName?: string | null
   onOpenSettings: () => void
 }) {
   const recentOrders = orders.slice(0, 5)
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const firstName = getFirstName(userName)
+  const greetingLabel = firstName ? `${greeting}, ${firstName}` : greeting
 
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
@@ -26,7 +30,7 @@ export function OverviewTab({
           StackPilot / Operations
         </div>
         <div style={{ fontFamily: 'var(--serif)', fontSize: '38px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
-          {greeting} 👋
+          {greetingLabel} <span aria-hidden="true">{'\u{1F44B}'}</span>
         </div>
         <div style={{ fontSize: '14px', color: 'var(--sil)', lineHeight: 1.6 }}>
           {connected
@@ -159,6 +163,15 @@ export function OverviewTab({
 
     </div>
   )
+}
+
+function getFirstName(userName?: string | null) {
+  const raw = String(userName || '').trim()
+  if (!raw) return ''
+  const localPart = raw.includes('@') ? raw.split('@')[0] : raw
+  const cleaned = localPart.replace(/[._-]+/g, ' ').trim()
+  const first = cleaned.split(/\s+/)[0] || ''
+  return first ? first.charAt(0).toUpperCase() + first.slice(1) : ''
 }
 
 function MetricCard({ label, value, hint, tone, pulse = false }: { label: string; value: string; hint: string; tone: string; pulse?: boolean }) {

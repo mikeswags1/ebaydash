@@ -1026,7 +1026,7 @@ export default function Dashboard() {
 
         <div className="dashboard-content" style={{ flex: 1, overflowY: 'auto' }}>
           {tab === 'overview' ? (
-            <OverviewTab connected={connectionState.ebayConnected} orders={orderState.orders} awaitingCount={orderState.awaiting.length} grossRevenue={grossRevenue} onOpenSettings={() => setTab('settings')} />
+            <OverviewTab connected={connectionState.ebayConnected} orders={orderState.orders} awaitingCount={orderState.awaiting.length} grossRevenue={grossRevenue} userName={session?.user?.name || session?.user?.email} onOpenSettings={() => setTab('settings')} />
           ) : null}
           {tab === 'orders' ? (
             <OrdersTab connected={connectionState.ebayConnected} orders={orderState.orders} awaiting={orderState.awaiting} grossRevenue={grossRevenue} onOpenSettings={() => setTab('settings')} />
