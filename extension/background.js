@@ -1,10 +1,11 @@
-function parseFulfillTokenFromUrl(urlString) {
+function parseFulfillParamsFromUrl(urlString) {
   try {
     const url = new URL(urlString)
     const hash = (url.hash || '').replace(/^#/, '')
     const params = new URLSearchParams(hash)
     const token = (params.get('fulfillToken') || '').trim()
-    return token || null
+    const stackpilotOrigin = (params.get('stackpilotOrigin') || '').trim()
+    return token ? { token, stackpilotOrigin } : null
   } catch {
     return null
   }
@@ -27,11 +28,15 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   const url = tab.url || changeInfo.url
   if (!url) return
 
-  const token = parseFulfillTokenFromUrl(url)
-  if (!token) return
+  const parsed = parseFulfillParamsFromUrl(url)
+  if (!parsed) return
 
-  // Default to current StackPilot host (the dashboard opened Amazon from this origin)
-  const stackpilotOrigin = new URL(tab.pendingUrl || tab.url || url).origin
+  const { token, stackpilotOrigin: originFromHash } = parsed
+  const stackpilotOrigin = originFromHash || ''
+  if (!stackpilotOrigin) {
+    console.warn('StackPilot fulfillment: missing stackpilotOrigin in URL hash — reinstall extension and use Fulfill from the dashboard.')
+    return
+  }
 
   try {
     const payload = await fetchPayload({ stackpilotOrigin, token })

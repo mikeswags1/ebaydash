@@ -29,7 +29,18 @@ export async function POST(req: NextRequest) {
       ttlMinutes: 15,
     })
 
-    const fulfillUrl = `${amazonUrl}${amazonUrl.includes('#') ? '' : '#'}fulfillToken=${job.token}`
+    const forwardedProto = req.headers.get('x-forwarded-proto')
+    const forwardedHost = req.headers.get('x-forwarded-host')
+    const host = forwardedHost || req.headers.get('host') || req.nextUrl.host
+    const proto = forwardedProto || (req.nextUrl.protocol.replace(':', '') || 'https')
+    const stackpilotOrigin = `${proto}://${host}`
+
+    const amazon = new URL(amazonUrl)
+    const hashParams = new URLSearchParams(amazon.hash.replace(/^#/, ''))
+    hashParams.set('fulfillToken', job.token)
+    hashParams.set('stackpilotOrigin', stackpilotOrigin)
+    amazon.hash = hashParams.toString()
+    const fulfillUrl = amazon.toString()
 
     return apiOk({
       orderId,
@@ -37,6 +48,7 @@ export async function POST(req: NextRequest) {
       amazonUrl: job.amazonUrl,
       fulfillToken: job.token,
       fulfillUrl,
+      stackpilotOrigin,
       jobId: job.jobId,
     })
   } catch (error) {

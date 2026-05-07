@@ -125,7 +125,7 @@ export async function startFulfillment(input: {
   amazonUrl: string
   shipTo: unknown
 }) {
-  return requestJson<{ ok: true; fulfillToken: string; fulfillUrl: string; jobId: string }>(
+  return requestJson<{ ok: true; fulfillToken: string; fulfillUrl: string; jobId: string; stackpilotOrigin?: string }>(
     '/api/fulfillment/start',
     {
       method: 'POST',

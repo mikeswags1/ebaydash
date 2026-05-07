@@ -1,10 +1,16 @@
 {
   "manifest_version": 3,
   "name": "StackPilot Fulfillment Autofill",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Opens Amazon checkout and auto-fills the eBay buyer ship-to address from StackPilot.",
   "permissions": ["tabs", "scripting"],
-  "host_permissions": ["https://www.amazon.com/*", "https://*.amazon.com/*"],
+  "host_permissions": [
+    "https://www.amazon.com/*",
+    "https://*.amazon.com/*",
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"

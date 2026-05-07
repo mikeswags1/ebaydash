@@ -12,6 +12,8 @@ This extension is **autofill-only**:
 3. Click **Load unpacked**.
 4. Select this folder: `EbayDash/extension/`.
 
+The dashboard app adds `stackpilotOrigin` and `fulfillToken` to the Amazon URL hash so the extension can call your StackPilot server (localhost or Vercel) to load the ship-to payload. After updating the extension, use **Reload** on `chrome://extensions`.
+
 ### Use
 1. In StackPilot, open **Dashboard → Fulfillment**.
 2. Click **Fulfill (auto-fill)** on an order row.

@@ -5,6 +5,99 @@ import type { EbayOrder, EbayShipToAddress, OrderAsinMap } from '../types'
 import { EmptyState, SectionIntro } from './shared'
 import { fetchFulfillmentStatuses, startFulfillment, type FulfillmentStatusRow } from '../api'
 
+const EXTENSION_HELP_STORAGE = 'stackpilot_fulfillment_extension_help'
+const DEFAULT_EXTENSION_SOURCE_URL = 'https://github.com/mikeswags1/ebaydash/tree/master/extension'
+
+function FulfillmentExtensionSetup() {
+  const [visible, setVisible] = useState(true)
+  const [origin, setOrigin] = useState('')
+  const sourceUrl = process.env.NEXT_PUBLIC_STACKPILOT_EXTENSION_SOURCE_URL || DEFAULT_EXTENSION_SOURCE_URL
+
+  useEffect(() => {
+    setOrigin(typeof window !== 'undefined' ? window.location.origin : '')
+    try {
+      if (localStorage.getItem(EXTENSION_HELP_STORAGE) === 'hidden') {
+        setVisible(false)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  function dismiss() {
+    try {
+      localStorage.setItem(EXTENSION_HELP_STORAGE, 'hidden')
+    } catch {
+      /* ignore */
+    }
+    setVisible(false)
+  }
+
+  function showAgain() {
+    try {
+      localStorage.removeItem(EXTENSION_HELP_STORAGE)
+    } catch {
+      /* ignore */
+    }
+    setVisible(true)
+  }
+
+  if (!visible) {
+    return (
+      <button type="button" className="btn btn-ghost btn-sm" onClick={showAgain} style={{ marginBottom: '16px', alignSelf: 'flex-start' }}>
+        Show Amazon autofill extension setup
+      </button>
+    )
+  }
+
+  return (
+    <div
+      className="card"
+      style={{
+        marginBottom: '24px',
+        padding: '22px 26px',
+        border: '1px solid rgba(56,189,248,0.22)',
+        background: 'linear-gradient(135deg, rgba(56,189,248,0.08), rgba(14,27,44,0.65))',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: '18px', fontWeight: 600, color: 'var(--plat)', marginBottom: '8px' }}>
+            Amazon autofill (browser extension)
+          </div>
+          <p style={{ margin: 0, fontSize: '13px', color: 'var(--dim)', lineHeight: 1.6, maxWidth: '820px' }}>
+            <strong style={{ color: 'var(--sil)' }}>Fulfill (auto-fill)</strong> opens Amazon with a short-lived token. The StackPilot extension on your computer
+            calls <span style={{ color: 'var(--gold)' }}>{origin || 'this site'}</span> to load the buyer ship-to and tries to fill Amazon&apos;s address fields.
+            You still click <strong>Place your order</strong> on Amazon.
+          </p>
+        </div>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={dismiss} style={{ flexShrink: 0 }}>
+          Dismiss
+        </button>
+      </div>
+
+      <ol style={{ margin: '16px 0 0', paddingLeft: '20px', fontSize: '12px', color: 'var(--sil)', lineHeight: 1.7 }}>
+        <li>Clone or download the repo and locate the <code style={{ color: 'var(--gold)' }}>extension</code> folder (same files as on GitHub).</li>
+        <li>Chrome: open <code>chrome://extensions</code> · Edge: <code>edge://extensions</code>. Turn on <strong>Developer mode</strong>.</li>
+        <li>Click <strong>Load unpacked</strong> and choose the <code>extension</code> folder.</li>
+        <li>Return here, map ASINs if needed, then click <strong>Fulfill (auto-fill)</strong> on a row.</li>
+      </ol>
+
+      <div style={{ marginTop: '14px', display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
+        <a
+          href={sourceUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="btn btn-solid btn-sm"
+        >
+          Extension folder on GitHub
+        </a>
+        <span style={{ fontSize: '11px', color: 'var(--dim)' }}>Reload the extension after you update files (chrome://extensions → Reload).</span>
+      </div>
+    </div>
+  )
+}
+
 function formatShipTo(shipTo?: EbayShipToAddress | null) {
   if (!shipTo) return { oneLine: 'No ship-to address found.', lines: ['No ship-to address found.'] }
 
@@ -122,6 +215,7 @@ export function FulfillmentTab({
           subtitle="Copy the buyer ship-to address and the mapped ASIN while you place the Amazon order."
         />
         <div className="dashboard-section" style={{ padding: '0 52px 72px' }}>
+          <FulfillmentExtensionSetup />
           <EmptyState connected={false} onConnect={onOpenSettings} msg="Connect eBay in Settings to load your awaiting shipment queue." />
         </div>
       </>
@@ -136,7 +230,8 @@ export function FulfillmentTab({
         subtitle="Awaiting shipment orders with one-click copy of the buyer ship-to block for Amazon checkout."
       />
 
-      <div className="dashboard-section" style={{ padding: '0 52px 72px', maxWidth: '1200px' }}>
+      <div className="dashboard-section" style={{ padding: '0 52px 72px', maxWidth: '1200px', display: 'flex', flexDirection: 'column' }}>
+        <FulfillmentExtensionSetup />
         {rows.length === 0 ? (
           <EmptyState connected={true} onConnect={() => {}} msg="No awaiting shipment orders right now." />
         ) : (

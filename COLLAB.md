@@ -24,6 +24,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-08 | GPT-5.2 | Fulfillment tab: in-tab Amazon extension setup card; fulfill URLs carry `stackpilotOrigin` for the extension API; broader extension host permissions | `app/dashboard/components/FulfillmentTab.tsx`, `app/api/fulfillment/start/route.ts`, `extension/manifest.json`, `extension/background.js`, `extension/INSTALL.md` |
 | 2026-05-07 | GPT-5.2 | Started Amazon checkout automation (autofill-only): added Fulfill button + short-lived token payload endpoints + Chrome extension scaffold | `lib/fulfillment.ts`, `app/api/fulfillment/start/route.ts`, `app/api/fulfillment/payload/route.ts`, `app/api/fulfillment/status/route.ts`, `app/dashboard/api.ts`, `app/dashboard/components/FulfillmentTab.tsx`, `extension/*` |
 | 2026-05-07 | GPT-5.2 | Added Fulfillment Queue tab to speed Amazon checkout — shows awaiting shipment orders with ship-to block copy + mapped ASIN link | `app/dashboard/types.ts`, `app/dashboard/constants.ts`, `app/dashboard/components/FulfillmentTab.tsx`, `app/dashboard/page.tsx` |
 | 2026-05-06 | Codex | Finished remaining launch polish queued in COLLAB (removed last generic `29223` publish fallback; added personalized first-name greeting on Overview) | `app/api/ebay/list-product/route.ts`, `app/dashboard/components/OverviewTab.tsx`, `app/dashboard/page.tsx` |
