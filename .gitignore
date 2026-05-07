@@ -14,5 +14,5 @@ test-*.json
 tsconfig.tsbuildinfo
 .env.cron
 
-# Built on prebuild/dev — avoid committing binary
+# Legacy artifact if ever regenerated locally — do not commit
 public/stackpilot-fulfillment-extension.zip

@@ -1,40 +1,22 @@
-## StackPilot Amazon Autofill Extension (MVP)
+# StackPilot Fulfillment (Chrome / Edge, desktop)
 
-This extension is **autofill-only**:
-- You click **Fulfill (auto-fill)** in StackPilot.
-- It opens the Amazon product page with a short-lived token.
-- The extension fetches the buyer ship-to payload from StackPilot and **tries to fill** the shipping address fields.
-- It does **not** click “Place order”.
+1. Download **`/stackpilot-fulfillment-extension.zip`** from your StackPilot site (Fulfillment tab) or build locally after `npm install` — dev and build scripts place it under `public/`.
+2. Unzip to a folder (e.g. `stackpilot-fulfillment-extension`).
+3. Open **Chrome** → `chrome://extensions` (or Edge → `edge://extensions`).
+4. Enable **Developer mode**.
+5. Click **Load unpacked** and choose the unzipped folder.
 
-### Install (Chrome / Edge) — recommended
+## What you do on Amazon (this is the full workflow)
 
-1. In StackPilot, open **Dashboard → Fulfillment** and click **Download extension (.zip)** (hosted on your StackPilot domain — no GitHub login required).
-2. Unzip; use the folder **`stackpilot-fulfillment-extension`** (it must contain `manifest.json` at the top level).
-3. Go to `chrome://extensions` (Edge: `edge://extensions`), enable **Developer mode**, click **Load unpacked**, and select that folder.
+1. In StackPilot, map ASINs and click **Fulfill** — your buyer ship-to is copied and Amazon opens with a short-lived token in the URL hash.
+2. **Sign in** to Amazon (complete **2FA** if prompted). Stay in that tab through checkout.
+3. The extension tries **Buy Now** and prefills **shipping** when it can. If a screen changes, paste the address from your clipboard or edit fields by hand — you are still in charge.
+4. **Confirm** ship-to matches the eBay buyer, choose payment, and click **Place your order**.
 
-### Install from this repo (developers)
+StackPilot never replaces your login, your bank step, or the final purchase click. That keeps your account inside Amazon’s normal buyer flow.
 
-1. Go to `chrome://extensions` (Edge: `edge://extensions`).
-2. Enable **Developer mode**.
-3. Click **Load unpacked**.
-4. Select this folder: `EbayDash/extension/`.
+If Amazon’s page layout changes and autofill misses, use **Copy only** in the Fulfillment tab and paste the address on the checkout form yourself.
 
-The dashboard app adds `stackpilotOrigin` and `fulfillToken` to the Amazon URL hash so the extension can call your StackPilot server (localhost or Vercel) to load the ship-to payload. After updating the extension, use **Reload** on `chrome://extensions`.
+## Dimmed icon on the dashboard?
 
-### What it does (v0.2+)
-
-1. After you use **Fulfill** in StackPilot, Amazon opens with a token in the URL. The extension saves the ship-to payload and stays active as you move through Amazon’s pages (hash may drop after redirects).
-2. On the product page it tries to click **Buy Now** so you move toward checkout.
-3. On checkout / address screens it fills Amazon’s shipping fields when possible (Amazon changes their site often — you may still need to paste or fix fields manually).
-4. It does **not** click **Place your order** for you.
-
-### Use
-1. In StackPilot, open **Dashboard → Fulfillment**.
-2. Click **Fulfill** on an order row (same link as the dashboard — extension enhances the flow on Chrome/Edge).
-3. The extension tries **Buy Now** on the product page, then fills the shipping form on checkout when it appears. You verify and place the order on Amazon.
-
-### Notes / limitations
-- Amazon changes DOM frequently; this MVP uses **heuristics** (label/name matching). Some flows won’t autofill on first try.
-- If you are not signed into Amazon, sign in first and click Fulfill again.
-- Tokens are short-lived (15 minutes) and the payload token is single-use.
-
+Chrome often grays out an extension on a site unless that extension injects a content script there. StackPilot v0.2.1+ includes a tiny script on https pages so the toolbar icon looks normal on your dashboard; the real automation still runs on **amazon.com** after you use **Fulfill**.

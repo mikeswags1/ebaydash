@@ -63,22 +63,28 @@ export function normalizeShipTo(input: unknown): FulfillmentShipTo {
   const anyInput = input as Record<string, unknown>
 
   const fullName = String(anyInput.fullName || '').trim()
-  const contact = (anyInput.contactAddress && typeof anyInput.contactAddress === 'object')
-    ? anyInput.contactAddress as Record<string, unknown>
-    : {}
-  const primaryPhone = (anyInput.primaryPhone && typeof anyInput.primaryPhone === 'object')
-    ? anyInput.primaryPhone as Record<string, unknown>
-    : {}
+  const contact =
+    anyInput.contactAddress && typeof anyInput.contactAddress === 'object'
+      ? (anyInput.contactAddress as Record<string, unknown>)
+      : {}
+  const primaryPhone =
+    anyInput.primaryPhone && typeof anyInput.primaryPhone === 'object'
+      ? (anyInput.primaryPhone as Record<string, unknown>)
+      : {}
 
   return {
-    fullName: fullName || undefined,
-    addressLine1: String(contact.addressLine1 || '').trim() || undefined,
-    addressLine2: String(contact.addressLine2 || '').trim() || undefined,
-    city: String(contact.city || '').trim() || undefined,
-    stateOrProvince: String(contact.stateOrProvince || '').trim() || undefined,
-    postalCode: String(contact.postalCode || '').trim() || undefined,
-    countryCode: String(contact.countryCode || '').trim() || undefined,
-    phoneNumber: String(primaryPhone.phoneNumber || '').trim() || undefined,
+    fullName: fullName || String(anyInput.name || '').trim() || undefined,
+    addressLine1:
+      String(contact.addressLine1 || anyInput.addressLine1 || anyInput.line1 || '').trim() || undefined,
+    addressLine2:
+      String(contact.addressLine2 || anyInput.addressLine2 || anyInput.line2 || '').trim() || undefined,
+    city: String(contact.city || anyInput.city || '').trim() || undefined,
+    stateOrProvince:
+      String(contact.stateOrProvince || anyInput.state || anyInput.region || '').trim() || undefined,
+    postalCode: String(contact.postalCode || anyInput.postalCode || anyInput.zip || '').trim() || undefined,
+    countryCode: String(contact.countryCode || anyInput.countryCode || '').trim() || undefined,
+    phoneNumber:
+      String(primaryPhone.phoneNumber || anyInput.phone || anyInput.phoneNumber || '').trim() || undefined,
   }
 }
 
@@ -132,7 +138,11 @@ export async function createFulfillmentJob(args: {
   }
 }
 
-export async function consumeFulfillmentToken(token: string): Promise<FulfillmentJobRow | null> {
+/**
+ * Read job for extension (idempotent — does not burn the token).
+ * Single-use consumption was breaking retries, refresh, and race between document_start + idle.
+ */
+export async function getFulfillmentPayloadByToken(token: string): Promise<FulfillmentJobRow | null> {
   await ensureFulfillmentTables()
   const tokenHash = sha256Hex(token)
 
@@ -145,18 +155,8 @@ export async function consumeFulfillmentToken(token: string): Promise<Fulfillmen
 
   const job = rows[0]
   if (!job) return null
-
-  const used = Boolean(job.token_used_at)
   const expired = job.token_expires_at ? new Date(job.token_expires_at).getTime() < Date.now() : true
-  if (used || expired) return null
-
-  await sql`
-    UPDATE fulfillment_jobs
-    SET token_used_at = NOW(),
-        updated_at = NOW()
-    WHERE id = ${job.id}
-  `.catch(() => {})
-
+  if (expired) return null
   return job
 }
 
@@ -198,22 +198,19 @@ export async function setFulfillmentStateByToken(args: {
   `.catch(() => {})
 }
 
-export async function getFulfillmentStates(args: {
-  userId: string
-  orderIds: string[]
-}) {
+export async function getFulfillmentStates(args: { userId: string; orderIds: string[] }) {
   await ensureFulfillmentTables()
   const ids = (args.orderIds || []).map((id) => String(id || '').trim()).filter(Boolean)
   if (ids.length === 0) return []
 
   const rows = await queryRows<Pick<FulfillmentJobRow, 'order_id' | 'legacy_item_id' | 'state' | 'last_error' | 'updated_at'>>`
-    SELECT order_id, legacy_item_id, state, last_error, updated_at
+    SELECT DISTINCT ON (order_id, COALESCE(legacy_item_id, ''))
+      order_id, legacy_item_id, state, last_error, updated_at
     FROM fulfillment_jobs
     WHERE user_id = ${args.userId}
       AND order_id = ANY(${ids})
-    ORDER BY updated_at DESC
+    ORDER BY order_id, COALESCE(legacy_item_id, ''), updated_at DESC
   `.catch(() => [])
 
   return rows
 }
-

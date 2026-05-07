@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "zip-extension": "node scripts/zip-extension.mjs",
+    "zip:ext": "node scripts/zip-extension.mjs",
     "dev": "node scripts/zip-extension.mjs && next dev",
     "prebuild": "node scripts/zip-extension.mjs",
     "build": "next build",
@@ -21,7 +21,6 @@
     "sharp": "^0.34.5"
   },
   "devDependencies": {
-    "archiver": "^7.0.1",
     "@eslint/eslintrc": "^3.3.5",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
@@ -30,6 +29,7 @@
     "eslint": "^9",
     "eslint-config-next": "^16.2.4",
     "pg": "^8.20.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "archiver": "^7.0.1"
   }
 }

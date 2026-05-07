@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
   try {
-    const body = (await req.json().catch(() => null)) as any
+    const body = (await req.json().catch(() => null)) as Record<string, unknown>
     const orderId = String(body?.orderId || '').trim()
     const legacyItemId = body?.legacyItemId ? String(body.legacyItemId).trim() : null
     const asin = body?.asin ? String(body.asin).trim() : null
@@ -40,6 +40,9 @@ export async function POST(req: NextRequest) {
     hashParams.set('fulfillToken', job.token)
     hashParams.set('stackpilotOrigin', stackpilotOrigin)
     amazon.hash = hashParams.toString()
+    /** Query fallback: some Amazon redirects preserve query better than fragment. */
+    amazon.searchParams.set('fulfillToken', job.token)
+    amazon.searchParams.set('stackpilotOrigin', stackpilotOrigin)
     const fulfillUrl = amazon.toString()
 
     return apiOk({
@@ -55,4 +58,3 @@ export async function POST(req: NextRequest) {
     return apiError(getErrorText(error, 'Failed to start fulfillment.'), { status: 500, code: 'FULFILLMENT_START_FAILED' })
   }
 }
-

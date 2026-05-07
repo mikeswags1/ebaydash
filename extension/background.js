@@ -1,65 +1,89 @@
-function parseFulfillParamsFromUrl(urlString) {
+const STORAGE_KEY = 'stackpilotFulfillmentPayload'
+const LOG = (...a) => {
   try {
-    const url = new URL(urlString)
-    const hash = (url.hash || '').replace(/^#/, '')
-    const params = new URLSearchParams(hash)
-    const token = (params.get('fulfillToken') || '').trim()
-    const stackpilotOrigin = (params.get('stackpilotOrigin') || '').trim()
-    return token ? { token, stackpilotOrigin } : null
+    console.info('[StackPilot bg]', ...a)
   } catch {
-    return null
+    /* ignore */
   }
 }
 
-async function fetchPayload({ stackpilotOrigin, token }) {
-  const url = new URL('/api/fulfillment/payload', stackpilotOrigin)
-  url.searchParams.set('token', token)
-  const res = await fetch(url.toString(), { cache: 'no-store' })
+LOG('service worker ready', 'v' + (chrome.runtime.getManifest()?.version || '?'))
+
+async function fetchPayload(origin, token) {
+  const base = origin.replace(/\/$/, '')
+  const url = `${base}/api/fulfillment/payload?token=${encodeURIComponent(token)}`
+  LOG('GET', url)
+  const res = await fetch(url, { credentials: 'omit', cache: 'no-store' })
   const data = await res.json().catch(() => null)
-  if (!res.ok || !data || data.ok === false) {
-    const message = data?.error?.message || 'Failed to fetch fulfillment payload.'
-    throw new Error(message)
+  if (!res.ok || !data?.ok) {
+    LOG('payload failed', res.status, data?.error)
+    throw new Error(data?.error?.message || `Payload failed (${res.status})`)
   }
-  await chrome.storage.local.set({
-    stackPilotFulfillment: {
-      shipTo: data.shipTo || {},
-      orderId: data.orderId || '',
-      savedAt: Date.now(),
-    },
-  })
+  const st = data.shipTo || {}
+  LOG('payload ok', 'orderId=', data.orderId, 'keys=', Object.keys(st))
   return data
 }
 
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (!changeInfo.url && changeInfo.status !== 'complete') return
-  const url = tab.url || changeInfo.url
-  if (!url) return
-
-  const parsed = parseFulfillParamsFromUrl(url)
-  if (!parsed) return
-
-  const { token, stackpilotOrigin: originFromHash } = parsed
-  const stackpilotOrigin = originFromHash || ''
-  if (!stackpilotOrigin) {
-    console.warn('StackPilot fulfillment: missing stackpilotOrigin in URL hash — reinstall extension and use Fulfill from the dashboard.')
-    return
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === 'FETCH_FULFILL_PAYLOAD') {
+    const { stackpilotOrigin, token } = msg
+    LOG('message FETCH_FULFILL_PAYLOAD', stackpilotOrigin)
+    ;(async () => {
+      try {
+        const payload = await fetchPayload(stackpilotOrigin, token)
+        await chrome.storage.local.set({
+          [STORAGE_KEY]: {
+            fetchedAt: Date.now(),
+            stackpilotOrigin,
+            token,
+            orderId: payload.orderId,
+            legacyItemId: payload.legacyItemId,
+            asin: payload.asin,
+            amazonUrl: payload.amazonUrl,
+            shipTo: payload.shipTo || {},
+          },
+        })
+        sendResponse({ ok: true, payload })
+      } catch (e) {
+        LOG('FETCH_FULFILL_PAYLOAD error', e instanceof Error ? e.message : e)
+        sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) })
+      }
+    })()
+    return true
   }
 
-  try {
-    const payload = await fetchPayload({ stackpilotOrigin, token })
-
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: (args) => {
-        window.__STACKPILOT_FULFILLMENT__ = args
-      },
-      args: [{ token, payload, stackpilotOrigin }],
+  if (msg?.type === 'GET_STORED_PAYLOAD') {
+    chrome.storage.local.get(STORAGE_KEY, (data) => {
+      sendResponse({ ok: true, stored: data[STORAGE_KEY] || null })
     })
-
-    await chrome.tabs.sendMessage(tabId, { type: 'STACKPILOT_FULFILL', token })
-  } catch (error) {
-    // Best-effort: surface error in console
-    console.warn('StackPilot fulfillment autofill failed', error)
+    return true
   }
-})
 
+  if (msg?.type === 'REPORT_STATUS') {
+    const { stackpilotOrigin, token, state, lastError } = msg
+    const base = String(stackpilotOrigin || '').replace(/\/$/, '')
+    if (!base || !token) {
+      sendResponse({ ok: false, error: 'missing origin/token' })
+      return
+    }
+    LOG('REPORT_STATUS', state, lastError || '')
+    ;(async () => {
+      try {
+        const res = await fetch(`${base}/api/fulfillment/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, state, lastError: lastError || null }),
+          credentials: 'omit',
+          cache: 'no-store',
+        })
+        const data = await res.json().catch(() => null)
+        sendResponse({ ok: res.ok && data?.ok, data })
+      } catch (e) {
+        sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) })
+      }
+    })()
+    return true
+  }
+
+  return undefined
+})

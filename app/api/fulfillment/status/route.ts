@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json().catch(() => null)) as any
+    const body = (await req.json().catch(() => null)) as Record<string, unknown>
     const state = body?.state
     const lastError = body?.lastError ? String(body.lastError).slice(0, 1200) : null
 
@@ -60,4 +60,3 @@ export async function POST(req: NextRequest) {
     return apiError(getErrorText(error, 'Failed to update fulfillment state.'), { status: 500, code: 'FULFILLMENT_STATUS_FAILED' })
   }
 }
-

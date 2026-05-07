@@ -1,26 +1,56 @@
 {
   "manifest_version": 3,
-  "name": "StackPilot Fulfillment Autofill",
-  "version": "0.2.0",
-  "description": "Opens Amazon checkout and auto-fills the eBay buyer ship-to address from StackPilot.",
-  "permissions": ["tabs", "scripting", "storage"],
+  "name": "StackPilot Fulfillment",
+  "version": "0.3.2",
+  "description": "Assists Amazon dropship fulfillment opened from StackPilot (address + Buy Now hints).",
+  "permissions": ["storage"],
   "host_permissions": [
     "https://www.amazon.com/*",
-    "https://*.amazon.com/*",
-    "https://*/*",
+    "https://amazon.com/*",
+    "https://smile.amazon.com/*",
     "http://localhost/*",
-    "http://127.0.0.1/*"
+    "https://*/*"
   ],
+  "icons": {
+    "128": "icon-128.png"
+  },
+  "action": {
+    "default_title": "StackPilot Fulfillment — use Fulfill on the dashboard, then work in the Amazon tab",
+    "default_icon": {
+      "128": "icon-128.png"
+    }
+  },
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["https://www.amazon.com/*", "https://*.amazon.com/*"],
+      "matches": [
+        "https://www.amazon.com/*",
+        "https://amazon.com/*",
+        "https://smile.amazon.com/*"
+      ],
+      "js": ["content-bootstrap.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.amazon.com/*",
+        "https://amazon.com/*",
+        "https://smile.amazon.com/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content-ambient.js"],
+      "run_at": "document_idle",
+      "exclude_matches": [
+        "https://www.amazon.com/*",
+        "https://amazon.com/*",
+        "https://smile.amazon.com/*"
+      ]
     }
   ]
 }
-

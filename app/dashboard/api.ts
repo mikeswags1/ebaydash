@@ -104,37 +104,6 @@ export async function fetchOrderAsinMap() {
   return requestJson<{ ok: true; map: OrderAsinMap }>('/api/amazon/order-asins')
 }
 
-export type FulfillmentStatusRow = {
-  order_id: string
-  legacy_item_id: string | null
-  state: 'NOT_STARTED' | 'PREFILLED' | 'PURCHASED' | 'ISSUE'
-  last_error: string | null
-  updated_at: string
-}
-
-export async function fetchFulfillmentStatuses(orderIds: string[]) {
-  const params = new URLSearchParams()
-  if (orderIds.length > 0) params.set('orderIds', orderIds.join(','))
-  return requestJson<{ ok: true; rows: FulfillmentStatusRow[] }>(`/api/fulfillment/status?${params.toString()}`)
-}
-
-export async function startFulfillment(input: {
-  orderId: string
-  legacyItemId?: string | null
-  asin?: string | null
-  amazonUrl: string
-  shipTo: unknown
-}) {
-  return requestJson<{ ok: true; fulfillToken: string; fulfillUrl: string; jobId: string; stackpilotOrigin?: string }>(
-    '/api/fulfillment/start',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    }
-  )
-}
-
 export async function lookupAsinByItemId(itemId: string, excludeAsins: string[] = []) {
   const params = new URLSearchParams({ itemId })
   if (excludeAsins.length > 0) params.set('exclude', excludeAsins.join(','))
@@ -151,6 +120,59 @@ export async function saveManualAsinMapping(itemId: string, asin: string) {
 
 export async function validateAmazonAsin(asin: string) {
   return requestJson<AsinResult>(`/api/amazon/lookup?asin=${encodeURIComponent(asin)}`)
+}
+
+export type FulfillmentStatusRow = {
+  order_id: string
+  legacy_item_id: string | null
+  state: string
+  last_error: string | null
+  updated_at: string
+}
+
+export async function fetchFulfillmentStatuses(orderIds: string[]) {
+  if (orderIds.length === 0) return { rows: [] as FulfillmentStatusRow[] }
+  const params = new URLSearchParams({ orderIds: orderIds.join(',') })
+  return requestJson<{ ok: true; rows: FulfillmentStatusRow[] }>(
+    `/api/fulfillment/status?${params.toString()}`,
+    { cache: 'no-store' }
+  )
+}
+
+export async function startFulfillment(input: {
+  orderId: string
+  legacyItemId?: string | null
+  asin?: string | null
+  amazonUrl: string
+  shipTo: unknown
+}) {
+  return requestJson<{
+    ok: true
+    orderId: string
+    legacyItemId?: string | null
+    fulfillUrl: string
+    fulfillToken: string
+    stackpilotOrigin: string
+    jobId?: string
+  }>('/api/fulfillment/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
+export async function postFulfillmentStatus(input: {
+  token?: string
+  orderId?: string
+  legacyItemId?: string | null
+  state: 'NOT_STARTED' | 'PREFILLED' | 'PURCHASED' | 'ISSUE'
+  lastError?: string | null
+}) {
+  return requestJson<{ ok: true; state: string }>('/api/fulfillment/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
 }
 
 export async function runDashboardScript(file: string) {

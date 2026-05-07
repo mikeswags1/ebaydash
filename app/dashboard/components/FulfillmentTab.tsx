@@ -2,65 +2,129 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { EbayOrder, EbayShipToAddress, OrderAsinMap } from '../types'
+import { fetchFulfillmentStatuses, getErrorMessage, startFulfillment } from '../api'
 import { EmptyState, SectionIntro } from './shared'
-import { fetchFulfillmentStatuses, startFulfillment, type FulfillmentStatusRow } from '../api'
 
-const DEFAULT_EXTENSION_SOURCE_URL = 'https://github.com/mikeswags1/ebaydash/tree/master/extension'
+function FulfillmentAmazonSteps() {
+  const steps = ['Sign in to Amazon (2FA if prompted).', 'At checkout, confirm ship-to matches eBay, then pay and place the order.']
+  return (
+    <ol
+      style={{
+        margin: '10px 0 0',
+        paddingLeft: '18px',
+        fontSize: '12px',
+        color: 'var(--sil)',
+        lineHeight: 1.65,
+      }}
+    >
+      {steps.map((text) => (
+        <li key={text} style={{ marginBottom: '6px' }}>
+          {text}
+        </li>
+      ))}
+    </ol>
+  )
+}
 
-function FulfillmentSimpleTip() {
+/** Always renders visible copy + download + install steps — must never ship as an empty box. */
+function FulfillmentExtensionTip() {
+  const zipFilename = 'stackpilot-fulfillment-extension.zip'
   return (
     <div
       className="card"
       style={{
         marginBottom: '20px',
         padding: '16px 20px',
-        border: '1px solid rgba(56,189,248,0.18)',
-        background: 'rgba(14,27,44,0.55)',
+        border: '1px solid rgba(56,189,248,0.28)',
+        background: 'rgba(14,27,44,0.65)',
       }}
     >
+      <div
+        style={{
+          fontSize: '11px',
+          fontWeight: 800,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          color: 'var(--plat)',
+          marginBottom: '10px',
+        }}
+      >
+        Optional: Chrome / Edge autofill (desktop only)
+      </div>
       <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.65 }}>
-        <strong style={{ color: 'var(--plat)' }}>Works on phone and laptop:</strong> click <strong style={{ color: 'var(--gold)' }}>Fulfill</strong> — we copy the buyer&apos;s ship-to and open Amazon with the same secure link the optional Chrome helper uses.
-        Paste the address at Amazon checkout (browsers can&apos;t fill Amazon&apos;s forms for you without that helper).{' '}
-        <strong style={{ color: 'var(--plat)' }}>No install needed.</strong>
+        Install once on your computer. It reads the secure token from the Amazon tab, stores the buyer address for checkout, and tries <strong>Buy Now</strong> + shipping fields when Amazon shows those screens. You still sign in, complete 2FA, and place the order.
+      </div>
+
+      <div style={{ marginTop: '14px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
+        <a
+          className="btn btn-gold btn-sm"
+          href={`/${zipFilename}`}
+          download={zipFilename}
+          style={{ textDecoration: 'none', fontWeight: 700 }}
+        >
+          Download extension (zip)
+        </a>
+        <span style={{ fontSize: '11px', color: 'var(--dim)', maxWidth: '420px', lineHeight: 1.5 }}>
+          File: <code style={{ fontSize: '10px', color: 'rgba(148,212,255,0.85)' }}>/{zipFilename}</code>
+        </span>
+      </div>
+
+      <div style={{ marginTop: '14px', fontSize: '12px', color: 'var(--plat)', fontWeight: 700 }}>Install in the browser</div>
+      <ol
+        style={{
+          margin: '8px 0 0',
+          paddingLeft: '18px',
+          fontSize: '12px',
+          color: 'var(--sil)',
+          lineHeight: 1.7,
+        }}
+      >
+        <li style={{ marginBottom: '6px' }}>
+          <strong style={{ color: 'var(--plat)' }}>Unzip</strong> the download into a permanent folder (Chrome needs that folder to stay on disk).
+        </li>
+        <li style={{ marginBottom: '6px' }}>
+          Open{' '}
+          <code style={{ fontSize: '11px' }}>chrome://extensions</code> (Chrome) or <code style={{ fontSize: '11px' }}>edge://extensions</code> (Edge). Turn on{' '}
+          <strong>Developer mode</strong>.
+        </li>
+        <li style={{ marginBottom: '6px' }}>
+          Click <strong>Load unpacked</strong> and choose the unzipped folder. You should see <strong>StackPilot Fulfillment</strong> in the list.
+        </li>
+        <li>
+          Come back here with a mapped ASIN and click <strong style={{ color: 'var(--gold)' }}>Fulfill</strong> — the Amazon tab will carry the token the extension needs.
+        </li>
+      </ol>
+
+      <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '8px', background: 'rgba(14,27,44,0.85)', border: '1px solid rgba(125,211,252,0.12)', fontSize: '11px', color: 'var(--dim)', lineHeight: 1.55 }}>
+        <strong style={{ color: 'var(--plat)' }}>Chrome toolbar:</strong> On the StackPilot site the extension may look dimmed — Chrome only “lights up” tools that inject into the open page. Autofill runs in the <strong>Amazon</strong> tab after you click{' '}
+        <strong style={{ color: 'var(--gold)' }}>Fulfill</strong>. Reload the extension in chrome://extensions after updating the zip.
+      </div>
+
+      <div style={{ marginTop: '14px', fontSize: '11px', color: 'var(--dim)', lineHeight: 1.55 }}>
+        If the download returns 404, run <code style={{ fontSize: '10px' }}>npm install</code> then <code style={{ fontSize: '10px' }}>npm run zip:ext</code> locally and refresh; your host must run the prebuild zip step so{' '}
+        <code style={{ fontSize: '10px' }}>/public/{zipFilename}</code> exists.
       </div>
     </div>
   )
 }
 
-function FulfillmentOptionalExtension({ origin }: { origin: string }) {
-  const sourceUrl = process.env.NEXT_PUBLIC_STACKPILOT_EXTENSION_SOURCE_URL || DEFAULT_EXTENSION_SOURCE_URL
-
+function FulfillmentPrimaryTip() {
   return (
-    <details
+    <div
       className="card"
       style={{
-        marginBottom: '20px',
-        padding: '12px 18px',
-        border: '1px solid rgba(255,255,255,0.08)',
-        background: 'rgba(11,22,36,0.5)',
+        marginBottom: '14px',
+        padding: '16px 20px',
+        border: '1px solid rgba(56,189,248,0.18)',
+        background: 'rgba(14,27,44,0.5)',
       }}
     >
-      <summary style={{ cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: 'rgba(148,212,255,0.75)', listStyle: 'none' }}>
-        Optional: Chrome / Edge autofill (desktop only)
-      </summary>
-      <p style={{ margin: '12px 0 10px', fontSize: '12px', color: 'var(--dim)', lineHeight: 1.6 }}>
-        The <strong style={{ color: 'var(--sil)' }}>Fulfill</strong> button already opens Amazon with the token link. With this extension on Chrome/Edge, it also tries <strong style={{ color: 'var(--sil)' }}>Buy Now</strong> on the product page and fills checkout address fields when they appear. You still place the order on Amazon.
-      </p>
-      <ol style={{ margin: '0 0 10px', paddingLeft: '18px', fontSize: '11px', color: 'var(--dim)', lineHeight: 1.65 }}>
-        <li>Unzip the download. In <code>chrome://extensions</code>, enable Developer mode → Load unpacked → select the <code>stackpilot-fulfillment-extension</code> folder.</li>
-        <li>Reload the extension when StackPilot updates it.</li>
-      </ol>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
-        {origin ? (
-          <a href={`${origin}/stackpilot-fulfillment-extension.zip`} download className="btn btn-ghost btn-sm">
-            Download extension (.zip)
-          </a>
-        ) : null}
-        <a href={sourceUrl} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">
-          Source on GitHub
-        </a>
+      <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.65 }}>
+        Works on <strong style={{ color: 'var(--plat)' }}>phone and laptop</strong>: click <strong style={{ color: 'var(--gold)' }}>Fulfill</strong> — we copy the buyer&apos;s ship-to and open Amazon on a secure link (same link the optional
+        Chrome helper uses). Paste the address at checkout if the product page doesn&apos;t send you straight into shipping. <strong style={{ color: 'var(--plat)' }}>No install needed.</strong>
       </div>
-    </details>
+      <FulfillmentAmazonSteps />
+    </div>
   )
 }
 
@@ -97,6 +161,44 @@ function getLegacyItemId(order: EbayOrder) {
   return order.lineItems?.[0]?.legacyItemId ? String(order.lineItems[0].legacyItemId) : ''
 }
 
+function rowStatusKey(orderId: string, legacyItemId: string) {
+  return `${orderId}:${legacyItemId || 'na'}`
+}
+
+function StateBadge({ state }: { state?: string }) {
+  if (!state || state === 'NOT_STARTED') return null
+  const label =
+    state === 'PREFILLED'
+      ? 'Checkout ready — pay & place order'
+      : state === 'PURCHASED'
+        ? 'Marked purchased'
+        : state === 'ISSUE'
+          ? 'Finish checkout on Amazon'
+          : state
+  const color =
+    state === 'PREFILLED'
+      ? 'rgba(52,211,153,0.95)'
+      : state === 'PURCHASED'
+        ? 'rgba(251,191,36,0.95)'
+        : state === 'ISSUE'
+          ? 'rgba(148,212,255,0.85)'
+          : 'var(--dim)'
+  return (
+    <div
+      style={{
+        fontSize: '10px',
+        fontWeight: 700,
+        textTransform: 'uppercase',
+        letterSpacing: '0.02em',
+        color,
+        marginTop: '6px',
+      }}
+    >
+      {label}
+    </div>
+  )
+}
+
 export function FulfillmentTab({
   connected,
   awaiting,
@@ -110,13 +212,8 @@ export function FulfillmentTab({
 }) {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [fulfillFlash, setFulfillFlash] = useState<string | null>(null)
-  const [fulfillStatus, setFulfillStatus] = useState<Record<string, FulfillmentStatusRow>>({})
-  const [fulfillSubmitKey, setFulfillSubmitKey] = useState<string | null>(null)
-  const [origin, setOrigin] = useState('')
-
-  useEffect(() => {
-    setOrigin(typeof window !== 'undefined' ? window.location.origin : '')
-  }, [])
+  const [statusByKey, setStatusByKey] = useState<Record<string, string>>({})
+  const [fulfillErr, setFulfillErr] = useState<string | null>(null)
 
   const rows = useMemo(() => {
     return awaiting.map((order) => {
@@ -131,52 +228,39 @@ export function FulfillmentTab({
         legacyItemId,
         asin,
         amazonUrl: asin ? `https://www.amazon.com/dp/${asin}` : mapping?.amazonUrl || '',
-        shipTo,
         shipToLines: formatted.lines,
+        rawShipTo: shipTo,
       }
     })
   }, [awaiting, orderAsinMap])
 
+  const orderIdsKey = useMemo(() => awaiting.map((o) => o.orderId).sort().join('|'), [awaiting])
+
   useEffect(() => {
-    if (!connected) return
-    const orderIds = rows.map((row) => row.order.orderId).filter(Boolean)
-    if (orderIds.length === 0) return
-
+    if (!connected || !orderIdsKey) return
     let cancelled = false
-    void (async () => {
+    const load = async () => {
       try {
-        const data = await fetchFulfillmentStatuses(orderIds)
+        const ids = orderIdsKey.split('|').filter(Boolean)
+        const { rows: statusRows } = await fetchFulfillmentStatuses(ids)
         if (cancelled) return
-        const map: Record<string, FulfillmentStatusRow> = {}
-        for (const entry of data.rows || []) {
-          const key = `${entry.order_id}:${entry.legacy_item_id || 'na'}`
-          if (!map[key]) map[key] = entry
+        const next: Record<string, string> = {}
+        for (const r of statusRows) {
+          const k = rowStatusKey(r.order_id, r.legacy_item_id || '')
+          next[k] = r.state
         }
-        setFulfillStatus(map)
+        setStatusByKey(next)
       } catch {
-        // Non-blocking.
+        /* optional */
       }
-    })()
-
+    }
+    void load()
+    const interval = window.setInterval(load, 12_000)
     return () => {
       cancelled = true
+      window.clearInterval(interval)
     }
-  }, [connected, rows])
-
-  function renderStateBadge(state?: FulfillmentStatusRow['state'] | null) {
-    const resolved = state || 'NOT_STARTED'
-    const tone =
-      resolved === 'PREFILLED' ? { bg: 'rgba(16,185,129,0.10)', bd: 'rgba(16,185,129,0.28)', tx: '#34d399' } :
-      resolved === 'PURCHASED' ? { bg: 'rgba(56,189,248,0.10)', bd: 'rgba(56,189,248,0.28)', tx: '#7dd3fc' } :
-      resolved === 'ISSUE' ? { bg: 'rgba(232,63,80,0.12)', bd: 'rgba(232,63,80,0.25)', tx: 'var(--red)' } :
-      { bg: 'rgba(255,255,255,0.05)', bd: 'rgba(255,255,255,0.10)', tx: 'rgba(148,212,255,0.55)' }
-
-    return (
-      <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '8px', fontWeight: 700, letterSpacing: 0, background: tone.bg, border: `1px solid ${tone.bd}`, color: tone.tx }}>
-        {resolved}
-      </span>
-    )
-  }
+  }, [connected, orderIdsKey])
 
   if (!connected) {
     return (
@@ -184,7 +268,7 @@ export function FulfillmentTab({
         <SectionIntro
           eyebrow="Operations"
           title="Fulfillment"
-          subtitle="Connect eBay, then use Fulfill to copy ship-to and open Amazon on any device—no install."
+          subtitle="Connect eBay, then use Fulfill to copy ship-to and open Amazon."
         />
         <div className="dashboard-section" style={{ padding: '0 52px 72px' }}>
           <EmptyState connected={false} onConnect={onOpenSettings} msg="Connect eBay in Settings to load your awaiting shipment queue." />
@@ -198,12 +282,26 @@ export function FulfillmentTab({
       <SectionIntro
         eyebrow="Operations"
         title="Fulfillment"
-        subtitle="One tap: copy buyer address and open the Amazon listing—works on laptop and phone."
+        subtitle="One tap: copy buyer address and open the Amazon listing — works on laptop and phone."
       />
 
       <div className="dashboard-section" style={{ padding: '0 52px 72px', maxWidth: '1200px', display: 'flex', flexDirection: 'column' }}>
-        <FulfillmentSimpleTip />
-        <FulfillmentOptionalExtension origin={origin} />
+        <FulfillmentPrimaryTip />
+        <FulfillmentExtensionTip />
+        {fulfillErr ? (
+          <div
+            className="card"
+            style={{
+              marginBottom: '16px',
+              padding: '12px 16px',
+              border: '1px solid rgba(248,113,113,0.35)',
+              color: 'var(--sil)',
+              fontSize: '12px',
+            }}
+          >
+            {fulfillErr}
+          </div>
+        ) : null}
         {rows.length === 0 ? (
           <EmptyState connected={true} onConnect={() => {}} msg="No awaiting shipment orders right now." />
         ) : (
@@ -235,7 +333,7 @@ export function FulfillmentTab({
                   const qty = row.order.lineItems?.[0]?.quantity || 1
                   const line = row.shipToLines.join('\n')
                   const copyKey = `${row.order.orderId}:${row.legacyItemId || 'na'}`
-                  const status = fulfillStatus[copyKey]
+                  const st = statusByKey[copyKey]
 
                   return (
                     <tr
@@ -249,13 +347,13 @@ export function FulfillmentTab({
                       <td style={{ padding: '14px 16px', color: 'var(--txt)', fontSize: '12px', whiteSpace: 'nowrap' }}>
                         <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700 }}>{row.order.orderId}</div>
                         <div style={{ color: 'var(--dim)', fontSize: '10px', marginTop: '4px' }}>{new Date(row.order.creationDate).toLocaleDateString()}</div>
-                        <div style={{ marginTop: '10px' }}>{renderStateBadge(status?.state || null)}</div>
                       </td>
 
                       <td style={{ padding: '14px 16px', color: 'var(--txt)', fontSize: '12px', minWidth: '240px' }}>
                         <div style={{ fontWeight: 600, marginBottom: '6px' }}>{title}</div>
                         <div style={{ color: 'var(--dim)', fontSize: '10px' }}>
-                          Qty {qty}{row.legacyItemId ? ` · Item ${row.legacyItemId}` : ''}
+                          Qty {qty}
+                          {row.legacyItemId ? ` · Item ${row.legacyItemId}` : ''}
                         </div>
                       </td>
 
@@ -275,26 +373,27 @@ export function FulfillmentTab({
                         <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit', lineHeight: 1.5 }}>{line}</pre>
                       </td>
 
-                      <td style={{ padding: '14px 16px', minWidth: '220px' }}>
+                      <td style={{ padding: '14px 16px', minWidth: '200px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <button
-                            className="btn btn-gold btn-sm"
-                            disabled={fulfillSubmitKey === copyKey}
+                            type="button"
+                            className="btn btn-solid btn-sm"
                             onClick={async () => {
-                              setFulfillSubmitKey(copyKey)
+                              setFulfillErr(null)
                               try {
                                 await navigator.clipboard.writeText(line)
                                 if (row.amazonUrl) {
                                   try {
-                                    const started = await startFulfillment({
+                                    const r = await startFulfillment({
                                       orderId: row.order.orderId,
                                       legacyItemId: row.legacyItemId || null,
                                       asin: row.asin || null,
                                       amazonUrl: row.amazonUrl,
-                                      shipTo: row.shipTo,
+                                      shipTo: row.rawShipTo ?? {},
                                     })
-                                    window.open(started.fulfillUrl, '_blank', 'noreferrer')
-                                  } catch {
+                                    window.open(r.fulfillUrl, '_blank', 'noreferrer')
+                                  } catch (err) {
+                                    setFulfillErr(getErrorMessage(err, 'Could not start assist link. Opened Amazon without token.'))
                                     window.open(row.amazonUrl, '_blank', 'noreferrer')
                                   }
                                 }
@@ -304,22 +403,20 @@ export function FulfillmentTab({
                                 }, 2600)
                               } catch {
                                 setFulfillFlash(null)
-                              } finally {
-                                setFulfillSubmitKey(null)
                               }
                             }}
                           >
-                            {fulfillSubmitKey === copyKey
-                              ? 'Working…'
-                              : fulfillFlash === copyKey
-                                ? row.amazonUrl
-                                  ? 'Copied · opened Amazon'
-                                  : 'Address copied'
-                                : 'Fulfill'}
+                            {fulfillFlash === copyKey
+                              ? row.amazonUrl
+                                ? 'Copied · opened Amazon'
+                                : 'Address copied'
+                              : 'Fulfill'}
                           </button>
+                          <StateBadge state={st} />
 
                           <button
-                            className="btn btn-solid btn-sm"
+                            type="button"
+                            className="btn btn-gold btn-sm"
                             onClick={async () => {
                               try {
                                 await navigator.clipboard.writeText(line)
@@ -335,14 +432,8 @@ export function FulfillmentTab({
 
                           {!row.amazonUrl ? (
                             <span style={{ color: 'var(--dim)', fontSize: '11px', lineHeight: 1.45 }}>
-                              Map ASIN in <strong style={{ color: 'rgba(148,212,255,0.85)' }}>ASIN Lookup</strong> so Fulfill can open the product page (same link the Chrome helper needs).
+                              Map the ASIN in <strong style={{ color: 'rgba(148,212,255,0.85)' }}>ASIN Lookup</strong> so Fulfill can open the Amazon product page.
                             </span>
-                          ) : null}
-
-                          {status?.state === 'ISSUE' && status.last_error ? (
-                            <div style={{ color: 'var(--red)', fontSize: '11px', lineHeight: 1.4 }}>
-                              {status.last_error}
-                            </div>
                           ) : null}
                         </div>
                       </td>
@@ -357,4 +448,3 @@ export function FulfillmentTab({
     </>
   )
 }
-
