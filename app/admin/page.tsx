@@ -189,6 +189,7 @@ export default function AdminPage() {
   const router = useRouter()
   const [stats, setStats] = useState<Stats | null>(null)
   const [collab, setCollab] = useState('')
+  const [collabFileMtime, setCollabFileMtime] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [toolState, setToolState] = useState<ToolState>({ active: null, tone: 'info', message: '' })
@@ -197,10 +198,13 @@ export default function AdminPage() {
     setError(null)
     const [statsRes, collabRes] = await Promise.all([
       fetch('/api/admin/stats').then(readJson),
-      fetch('/api/admin/collab', { cache: 'no-store' }).then(readJson),
+      fetch(`/api/admin/collab?t=${Date.now()}`, { cache: 'no-store' }).then(readJson),
     ])
     setStats(statsRes as Stats)
     setCollab(String(collabRes?.content || ''))
+    setCollabFileMtime(
+      typeof collabRes?.fileMtime === 'string' && collabRes.fileMtime ? collabRes.fileMtime : null
+    )
   }, [])
 
   const pool = usePoolRefresh(() => {
@@ -615,6 +619,9 @@ export default function AdminPage() {
               <span>Collaboration log</span>
               <strong>COLLAB.md live notes</strong>
             </summary>
+            {collabFileMtime ? (
+              <p className="admin-collab-source">Server file <code>COLLAB.md</code> · mtime {collabFileMtime}</p>
+            ) : null}
             <pre className="admin-collab">{collab || 'COLLAB.md not loaded.'}</pre>
           </details>
         </section>
