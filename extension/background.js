@@ -1,0 +1,53 @@
+function parseFulfillTokenFromUrl(urlString) {
+  try {
+    const url = new URL(urlString)
+    const hash = (url.hash || '').replace(/^#/, '')
+    const params = new URLSearchParams(hash)
+    const token = (params.get('fulfillToken') || '').trim()
+    return token || null
+  } catch {
+    return null
+  }
+}
+
+async function fetchPayload({ stackpilotOrigin, token }) {
+  const url = new URL('/api/fulfillment/payload', stackpilotOrigin)
+  url.searchParams.set('token', token)
+  const res = await fetch(url.toString(), { cache: 'no-store' })
+  const data = await res.json().catch(() => null)
+  if (!res.ok || !data || data.ok === false) {
+    const message = data?.error?.message || 'Failed to fetch fulfillment payload.'
+    throw new Error(message)
+  }
+  return data
+}
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (!changeInfo.url && changeInfo.status !== 'complete') return
+  const url = tab.url || changeInfo.url
+  if (!url) return
+
+  const token = parseFulfillTokenFromUrl(url)
+  if (!token) return
+
+  // Default to current StackPilot host (the dashboard opened Amazon from this origin)
+  const stackpilotOrigin = new URL(tab.pendingUrl || tab.url || url).origin
+
+  try {
+    const payload = await fetchPayload({ stackpilotOrigin, token })
+
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (args) => {
+        window.__STACKPILOT_FULFILLMENT__ = args
+      },
+      args: [{ token, payload, stackpilotOrigin }],
+    })
+
+    await chrome.tabs.sendMessage(tabId, { type: 'STACKPILOT_FULFILL', token })
+  } catch (error) {
+    // Best-effort: surface error in console
+    console.warn('StackPilot fulfillment autofill failed', error)
+  }
+})
+

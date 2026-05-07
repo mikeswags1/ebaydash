@@ -104,6 +104,37 @@ export async function fetchOrderAsinMap() {
   return requestJson<{ ok: true; map: OrderAsinMap }>('/api/amazon/order-asins')
 }
 
+export type FulfillmentStatusRow = {
+  order_id: string
+  legacy_item_id: string | null
+  state: 'NOT_STARTED' | 'PREFILLED' | 'PURCHASED' | 'ISSUE'
+  last_error: string | null
+  updated_at: string
+}
+
+export async function fetchFulfillmentStatuses(orderIds: string[]) {
+  const params = new URLSearchParams()
+  if (orderIds.length > 0) params.set('orderIds', orderIds.join(','))
+  return requestJson<{ ok: true; rows: FulfillmentStatusRow[] }>(`/api/fulfillment/status?${params.toString()}`)
+}
+
+export async function startFulfillment(input: {
+  orderId: string
+  legacyItemId?: string | null
+  asin?: string | null
+  amazonUrl: string
+  shipTo: unknown
+}) {
+  return requestJson<{ ok: true; fulfillToken: string; fulfillUrl: string; jobId: string }>(
+    '/api/fulfillment/start',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }
+  )
+}
+
 export async function lookupAsinByItemId(itemId: string, excludeAsins: string[] = []) {
   const params = new URLSearchParams({ itemId })
   if (excludeAsins.length > 0) params.set('exclude', excludeAsins.join(','))

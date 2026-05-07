@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { EbayOrder, EbayShipToAddress, OrderAsinMap } from '../types'
 import { EmptyState, SectionIntro } from './shared'
+import { fetchFulfillmentStatuses, startFulfillment, type FulfillmentStatusRow } from '../api'
 
 function formatShipTo(shipTo?: EbayShipToAddress | null) {
   if (!shipTo) return { oneLine: 'No ship-to address found.', lines: ['No ship-to address found.'] }
@@ -49,6 +50,8 @@ export function FulfillmentTab({
   onOpenSettings: () => void
 }) {
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [fulfillStatus, setFulfillStatus] = useState<Record<string, FulfillmentStatusRow>>({})
+  const [startingKey, setStartingKey] = useState<string | null>(null)
 
   const rows = useMemo(() => {
     return awaiting.map((order) => {
@@ -63,10 +66,52 @@ export function FulfillmentTab({
         legacyItemId,
         asin,
         amazonUrl: asin ? `https://www.amazon.com/dp/${asin}` : mapping?.amazonUrl || '',
+        shipTo,
         shipToLines: formatted.lines,
       }
     })
   }, [awaiting, orderAsinMap])
+
+  useEffect(() => {
+    if (!connected) return
+    const orderIds = rows.map((row) => row.order.orderId).filter(Boolean)
+    if (orderIds.length === 0) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const data = await fetchFulfillmentStatuses(orderIds)
+        if (cancelled) return
+        const map: Record<string, FulfillmentStatusRow> = {}
+        for (const entry of data.rows || []) {
+          const key = `${entry.order_id}:${entry.legacy_item_id || 'na'}`
+          if (!map[key]) map[key] = entry
+        }
+        setFulfillStatus(map)
+      } catch {
+        // Non-blocking.
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [connected, rows])
+
+  function renderStateBadge(state?: FulfillmentStatusRow['state'] | null) {
+    const resolved = state || 'NOT_STARTED'
+    const tone =
+      resolved === 'PREFILLED' ? { bg: 'rgba(16,185,129,0.10)', bd: 'rgba(16,185,129,0.28)', tx: '#34d399' } :
+      resolved === 'PURCHASED' ? { bg: 'rgba(56,189,248,0.10)', bd: 'rgba(56,189,248,0.28)', tx: '#7dd3fc' } :
+      resolved === 'ISSUE' ? { bg: 'rgba(232,63,80,0.12)', bd: 'rgba(232,63,80,0.25)', tx: 'var(--red)' } :
+      { bg: 'rgba(255,255,255,0.05)', bd: 'rgba(255,255,255,0.10)', tx: 'rgba(148,212,255,0.55)' }
+
+    return (
+      <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '8px', fontWeight: 700, letterSpacing: 0, background: tone.bg, border: `1px solid ${tone.bd}`, color: tone.tx }}>
+        {resolved}
+      </span>
+    )
+  }
 
   if (!connected) {
     return (
@@ -123,6 +168,7 @@ export function FulfillmentTab({
                   const qty = row.order.lineItems?.[0]?.quantity || 1
                   const line = row.shipToLines.join('\n')
                   const copyKey = `${row.order.orderId}:${row.legacyItemId || 'na'}`
+                  const status = fulfillStatus[copyKey]
 
                   return (
                     <tr
@@ -136,6 +182,7 @@ export function FulfillmentTab({
                       <td style={{ padding: '14px 16px', color: 'var(--txt)', fontSize: '12px', whiteSpace: 'nowrap' }}>
                         <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700 }}>{row.order.orderId}</div>
                         <div style={{ color: 'var(--dim)', fontSize: '10px', marginTop: '4px' }}>{new Date(row.order.creationDate).toLocaleDateString()}</div>
+                        <div style={{ marginTop: '10px' }}>{renderStateBadge(status?.state || null)}</div>
                       </td>
 
                       <td style={{ padding: '14px 16px', color: 'var(--txt)', fontSize: '12px', minWidth: '240px' }}>
@@ -162,6 +209,30 @@ export function FulfillmentTab({
                       <td style={{ padding: '14px 16px', minWidth: '220px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <button
+                            className="btn btn-gold btn-sm"
+                            disabled={!row.amazonUrl || startingKey === copyKey}
+                            onClick={async () => {
+                              if (!row.amazonUrl) return
+                              setStartingKey(copyKey)
+                              try {
+                                const started = await startFulfillment({
+                                  orderId: row.order.orderId,
+                                  legacyItemId: row.legacyItemId || null,
+                                  asin: row.asin || null,
+                                  amazonUrl: row.amazonUrl,
+                                  shipTo: row.shipTo,
+                                })
+
+                                window.open(started.fulfillUrl, '_blank', 'noreferrer')
+                              } finally {
+                                setStartingKey(null)
+                              }
+                            }}
+                          >
+                            {startingKey === copyKey ? 'Starting…' : 'Fulfill (auto-fill)'}
+                          </button>
+
+                          <button
                             className="btn btn-solid btn-sm"
                             onClick={async () => {
                               try {
@@ -183,6 +254,12 @@ export function FulfillmentTab({
                           ) : (
                             <span style={{ color: 'var(--dim)', fontSize: '11px' }}>Map ASIN in ASIN Lookup</span>
                           )}
+
+                          {status?.state === 'ISSUE' && status.last_error ? (
+                            <div style={{ color: 'var(--red)', fontSize: '11px', lineHeight: 1.4 }}>
+                              {status.last_error}
+                            </div>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
