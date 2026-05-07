@@ -24,6 +24,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-08 | GPT-5.2 | Simplified Fulfillment UX: primary **Fulfill** = copy ship-to + open Amazon (no install); Chrome extension + token flow moved to optional section + **Chrome autofill** button | `app/dashboard/components/FulfillmentTab.tsx` |
 | 2026-05-08 | GPT-5.2 | Host extension zip on StackPilot (`/stackpilot-fulfillment-extension.zip` via `prebuild`/`dev`); Fulfillment tab primary download button — no GitHub required | `scripts/zip-extension.mjs`, `package.json`, `app/dashboard/components/FulfillmentTab.tsx`, `.gitignore`, `extension/INSTALL.md` |
 | 2026-05-08 | GPT-5.2 | Fulfillment tab: in-tab Amazon extension setup card; fulfill URLs carry `stackpilotOrigin` for the extension API; broader extension host permissions | `app/dashboard/components/FulfillmentTab.tsx`, `app/api/fulfillment/start/route.ts`, `extension/manifest.json`, `extension/background.js`, `extension/INSTALL.md` |
 | 2026-05-07 | GPT-5.2 | Started Amazon checkout automation (autofill-only): added Fulfill button + short-lived token payload endpoints + Chrome extension scaffold | `lib/fulfillment.ts`, `app/api/fulfillment/start/route.ts`, `app/api/fulfillment/payload/route.ts`, `app/api/fulfillment/status/route.ts`, `app/dashboard/api.ts`, `app/dashboard/components/FulfillmentTab.tsx`, `extension/*` |
