@@ -6,7 +6,14 @@ This extension is **autofill-only**:
 - The extension fetches the buyer ship-to payload from StackPilot and **tries to fill** the shipping address fields.
 - It does **not** click “Place order”.
 
-### Install (Chrome / Edge)
+### Install (Chrome / Edge) — recommended
+
+1. In StackPilot, open **Dashboard → Fulfillment** and click **Download extension (.zip)** (hosted on your StackPilot domain — no GitHub login required).
+2. Unzip; use the folder **`stackpilot-fulfillment-extension`** (it must contain `manifest.json` at the top level).
+3. Go to `chrome://extensions` (Edge: `edge://extensions`), enable **Developer mode**, click **Load unpacked**, and select that folder.
+
+### Install from this repo (developers)
+
 1. Go to `chrome://extensions` (Edge: `edge://extensions`).
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.

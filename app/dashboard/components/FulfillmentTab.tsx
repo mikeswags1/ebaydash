@@ -77,22 +77,35 @@ function FulfillmentExtensionSetup() {
       </div>
 
       <ol style={{ margin: '16px 0 0', paddingLeft: '20px', fontSize: '12px', color: 'var(--sil)', lineHeight: 1.7 }}>
-        <li>Clone or download the repo and locate the <code style={{ color: 'var(--gold)' }}>extension</code> folder (same files as on GitHub).</li>
+        <li>Download the extension zip from StackPilot (button below). Unzip it — you should see a folder named <code style={{ color: 'var(--gold)' }}>stackpilot-fulfillment-extension</code> with <code>manifest.json</code> inside.</li>
         <li>Chrome: open <code>chrome://extensions</code> · Edge: <code>edge://extensions</code>. Turn on <strong>Developer mode</strong>.</li>
-        <li>Click <strong>Load unpacked</strong> and choose the <code>extension</code> folder.</li>
+        <li>Click <strong>Load unpacked</strong> and select that unzipped folder (the one that contains <code>manifest.json</code>).</li>
         <li>Return here, map ASINs if needed, then click <strong>Fulfill (auto-fill)</strong> on a row.</li>
       </ol>
 
       <div style={{ marginTop: '14px', display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
+        {origin ? (
+          <a
+            href={`${origin}/stackpilot-fulfillment-extension.zip`}
+            download
+            className="btn btn-gold btn-sm"
+          >
+            Download extension (.zip)
+          </a>
+        ) : (
+          <span className="btn btn-gold btn-sm" style={{ opacity: 0.6, cursor: 'wait' }}>
+            Download extension (.zip)
+          </span>
+        )}
         <a
           href={sourceUrl}
           target="_blank"
           rel="noreferrer"
-          className="btn btn-solid btn-sm"
+          className="btn btn-ghost btn-sm"
         >
-          Extension folder on GitHub
+          Source on GitHub
         </a>
-        <span style={{ fontSize: '11px', color: 'var(--dim)' }}>Reload the extension after you update files (chrome://extensions → Reload).</span>
+        <span style={{ fontSize: '11px', color: 'var(--dim)' }}>No GitHub account needed for the zip. Reload the extension after updates (chrome://extensions → Reload).</span>
       </div>
     </div>
   )
