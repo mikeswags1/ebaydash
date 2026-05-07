@@ -11,6 +11,7 @@ import { FinancialsTab } from './components/FinancialsTab'
 import { PerformanceTab } from './components/PerformanceTab'
 import { ScriptsTab } from './components/ScriptsTab'
 import { AsinLookupTab } from './components/AsinLookupTab'
+import { FulfillmentTab } from './components/FulfillmentTab'
 import { ProductListingTab } from './components/ProductListingTab'
 import { ContinuousListingTab } from './components/ContinuousListingTab'
 import { CampaignsTab } from './components/CampaignsTab'
@@ -1037,6 +1038,14 @@ export default function Dashboard() {
           ) : null}
           {tab === 'orders' ? (
             <OrdersTab connected={connectionState.ebayConnected} orders={orderState.orders} awaiting={orderState.awaiting} grossRevenue={grossRevenue} onOpenSettings={() => setTab('settings')} />
+          ) : null}
+          {tab === 'fulfillment' ? (
+            <FulfillmentTab
+              connected={connectionState.ebayConnected}
+              awaiting={orderState.awaiting}
+              orderAsinMap={orderState.orderAsinMap}
+              onOpenSettings={() => setTab('settings')}
+            />
           ) : null}
           {tab === 'financials' ? (
             <FinancialsTab

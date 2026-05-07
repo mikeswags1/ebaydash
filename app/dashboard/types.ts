@@ -1,4 +1,20 @@
-export type Tab = 'overview' | 'orders' | 'financials' | 'performance' | 'scripts' | 'asin' | 'product' | 'continuous' | 'campaigns' | 'settings'
+export type Tab = 'overview' | 'orders' | 'fulfillment' | 'financials' | 'performance' | 'scripts' | 'asin' | 'product' | 'continuous' | 'campaigns' | 'settings'
+
+export interface EbayShipToAddress {
+  fullName?: string
+  contactAddress?: {
+    addressLine1?: string
+    addressLine2?: string
+    city?: string
+    stateOrProvince?: string
+    postalCode?: string
+    countryCode?: string
+  }
+  primaryPhone?: {
+    phoneNumber?: string
+  }
+  email?: string
+}
 
 export interface AsinResult {
   asin: string
@@ -29,7 +45,7 @@ export interface EbayOrder {
   cancelStatus?: {
     cancelState?: string
   }
-  fulfillmentStartInstructions?: Array<{ shippingStep?: { shipTo?: { fullName?: string } } }>
+  fulfillmentStartInstructions?: Array<{ shippingStep?: { shipTo?: EbayShipToAddress } }>
   lineItems?: Array<{
     title: string
     quantity: number

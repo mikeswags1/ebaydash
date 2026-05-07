@@ -24,6 +24,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-07 | GPT-5.2 | Added Fulfillment Queue tab to speed Amazon checkout — shows awaiting shipment orders with ship-to block copy + mapped ASIN link | `app/dashboard/types.ts`, `app/dashboard/constants.ts`, `app/dashboard/components/FulfillmentTab.tsx`, `app/dashboard/page.tsx` |
 | 2026-05-06 | Codex | Finished remaining launch polish queued in COLLAB (removed last generic `29223` publish fallback; added personalized first-name greeting on Overview) | `app/api/ebay/list-product/route.ts`, `app/dashboard/components/OverviewTab.tsx`, `app/dashboard/page.tsx` |
 | 2026-05-06 | Codex | Added StackPilot PWA support — web manifest, standalone metadata, icons, service worker shell cache | `app/layout.tsx`, `app/manifest.ts`, `app/pwa-registration.tsx`, `app/globals.css`, `public/stackpilot-icon-192.png`, `public/stackpilot-icon-512.png`, `public/apple-touch-icon.png`, `public/sw.js` |
 | 2026-05-06 | Codex | Added Problem Listings visibility to `/admin` with low-image/category warnings, issue tags, per-listing details | `app/admin/page.tsx`, `app/api/admin/stats/route.ts`, `app/globals.css` |
