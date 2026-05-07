@@ -197,7 +197,7 @@ export default function AdminPage() {
     setError(null)
     const [statsRes, collabRes] = await Promise.all([
       fetch('/api/admin/stats').then(readJson),
-      fetch('/api/admin/collab').then(readJson),
+      fetch('/api/admin/collab', { cache: 'no-store' }).then(readJson),
     ])
     setStats(statsRes as Stats)
     setCollab(String(collabRes?.content || ''))

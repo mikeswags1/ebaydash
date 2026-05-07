@@ -6,6 +6,9 @@ import { join } from 'path'
 
 const ADMIN_EMAILS = ['msawaged12@gmail.com', 'mikeswags1@gmail.com']
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session?.user?.email || !ADMIN_EMAILS.includes(session.user.email)) {
@@ -14,8 +17,22 @@ export async function GET() {
 
   try {
     const content = await readFile(join(process.cwd(), 'COLLAB.md'), 'utf-8')
-    return apiOk({ content })
+    return apiOk(
+      { content },
+      {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    )
   } catch {
-    return apiOk({ content: 'COLLAB.md not found.' })
+    return apiOk(
+      { content: 'COLLAB.md not found.' },
+      {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    )
   }
 }

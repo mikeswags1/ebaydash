@@ -38,6 +38,7 @@ _Clear this section when done._
 | 2026-05-06 | Antigravity | Added personalized greeting to Overview tab — `"Good morning, Mike 👋"` via `userName` prop using `session.user.name` split on first space | `app/dashboard/components/OverviewTab.tsx`, `app/dashboard/page.tsx` |
 | 2026-05-06 | Antigravity | Confirmed Performance tab already parallelized — `fetchOrders`, DB query, `fetchActiveListingMetrics` in `Promise.all`. No change needed. | `app/api/performance/route.ts` |
 | 2026-05-06 | Antigravity | Updated COLLAB.md — added Cursor + Antigravity to agent roster, resolved merge conflict | `COLLAB.md` |
+| 2026-05-06 | GPT-5.2 | Made `/admin` COLLAB viewer always live (no-store; force-dynamic) and confirmed `COLLAB.md` is the single canonical collaboration file | `app/api/admin/collab/route.ts`, `app/admin/page.tsx`, `COLLAB.md` |
 | 2026-05-03 | Claude | Trusted mode title + price accuracy: after ASIN mismatch check, `validatedAmazon.title` replaced with `amazon_product_cache` title; price updated from cache if drift >10% | `app/api/ebay/list-product/route.ts` |
 | 2026-05-03 | Claude | ASIN mismatch guard now universal — runs for ALL trusted listings regardless of image count | `app/api/ebay/list-product/route.ts` |
 | 2026-05-03 | Claude | Campaigns Boost All fixed: correct eBay `bulk_create_ads_by_listing_id` body format | `app/api/ebay/campaigns/[campaignId]/listings/route.ts` |
