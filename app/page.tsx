@@ -1,36 +1,32 @@
 import Link from 'next/link'
 import Image from 'next/image'
 
-const queueItems = [
+const previews = [
   {
-    title: 'Wireless charging stand',
-    cost: '$24.00',
-    price: '$49.99',
-    margin: '$18.42',
-    status: 'Ready',
+    id: 'product',
+    label: 'Product Listing',
+    caption: 'Find products, review ROI, list fast.',
+    src: '/preview-product-listing.png',
+    width: 1536,
+    height: 864,
   },
   {
-    title: 'Drawer organizer set',
-    cost: '$18.00',
-    price: '$39.99',
-    margin: '$15.86',
-    status: 'Checked',
+    id: 'financials',
+    label: 'Financials',
+    caption: 'Real profit after Amazon + eBay fees.',
+    src: '/preview-financials.png',
+    width: 1536,
+    height: 864,
   },
   {
-    title: 'Compact desk lamp',
-    cost: '$31.00',
-    price: '$67.99',
-    margin: '$27.15',
-    status: 'Ready',
+    id: 'performance',
+    label: 'Performance',
+    caption: 'What to list more of next.',
+    src: '/preview-performance.png',
+    width: 1536,
+    height: 864,
   },
-]
-
-const metrics = [
-  { label: 'Catalog signals', value: '13.9K+', note: 'scored items' },
-  { label: 'Queue target', value: '30', note: 'ready listings' },
-  { label: 'Checks', value: '8', note: 'quality gates' },
-  { label: 'Refresh', value: 'Live', note: 'seller-specific' },
-]
+] as const
 
 const pillars = [
   {
@@ -104,36 +100,37 @@ export default function Landing() {
 
         <div className="home-command-preview" aria-label="StackPilot dashboard preview">
           <div className="home-preview-bar">
-          <div>
-            <span>Continuous Listing</span>
-            <strong>Fresh listing candidates, ready to review</strong>
-          </div>
-            <em>Synced now</em>
+            <div>
+              <span>Dashboard Preview</span>
+              <strong>See what sellers use every day</strong>
+            </div>
+            <em>Live UI</em>
           </div>
 
-          <div className="home-metric-grid">
-            {metrics.map((metric) => (
-              <div key={metric.label}>
-                <span>{metric.label}</span>
-                <strong>{metric.value}</strong>
-                <small>{metric.note}</small>
-              </div>
+          <div className="home-preview-tabs" role="tablist" aria-label="Dashboard previews">
+            {previews.map((preview, index) => (
+              <label key={preview.id} className="home-preview-tab">
+                <input type="radio" name="home-preview" defaultChecked={index === 0} />
+                <span>
+                  <strong>{preview.label}</strong>
+                  <em>{preview.caption}</em>
+                </span>
+              </label>
             ))}
           </div>
 
-          <div className="home-queue">
-            {queueItems.map((item) => (
-              <article key={item.title} className="home-queue-row">
-                <div className="home-product-thumb" />
-                <div>
-                  <strong>{item.title}</strong>
-                  <span>Cost basis {item.cost} · Target price {item.price}</span>
-                </div>
-                <div>
-                  <strong>{item.margin}</strong>
-                  <span>{item.status}</span>
-                </div>
-              </article>
+          <div className="home-preview-stage">
+            {previews.map((preview, index) => (
+              <div key={preview.id} className="home-preview-shot" data-default={index === 0 ? '1' : '0'}>
+                <Image
+                  src={preview.src}
+                  alt={`${preview.label} preview`}
+                  width={preview.width}
+                  height={preview.height}
+                  sizes="(max-width: 980px) 100vw, 980px"
+                  priority={index === 0}
+                />
+              </div>
             ))}
           </div>
         </div>
