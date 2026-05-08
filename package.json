@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "node scripts/lint.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke": "node scripts/smoke-check.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.9.4",

@@ -16,7 +16,7 @@ _Clear this section when done._
 
 | Agent | File(s) | What | Started |
 |-------|---------|------|---------|
-| GPT-5.2 | repo-wide | Production audit + final optimization pass (stability, security, perf). Tracking fixes + risks. | 2026-05-08 |
+| — | — | — | — |
 
 ---
 
@@ -24,6 +24,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-08 | GPT-5.2 | **Release readiness tooling**: `/api/health` (DB ping + env flags, no secrets); `docs/RELEASE_CHECKLIST.md`; `npm run smoke` → `scripts/smoke-check.mjs`; CI runs **`npm run build`** with placeholder env for secrets-free GitHub Actions | `app/api/health/route.ts`, `docs/RELEASE_CHECKLIST.md`, `scripts/smoke-check.mjs`, `package.json`, `.github/workflows/ci.yml`, `COLLAB.md` |
 | 2026-05-08 | GPT-5.2 | Fulfillment tab: in-tab Amazon extension setup card; fulfill URLs carry `stackpilotOrigin` for the extension API; broader extension host permissions | `app/dashboard/components/FulfillmentTab.tsx`, `app/api/fulfillment/start/route.ts`, `extension/manifest.json`, `extension/background.js`, `extension/INSTALL.md` |
 | 2026-05-08 | GPT-5.2 | Host extension zip on StackPilot (`/stackpilot-fulfillment-extension.zip` via `prebuild`/`dev`); Fulfillment tab primary download button — no GitHub required | `scripts/zip-extension.mjs`, `package.json`, `app/dashboard/components/FulfillmentTab.tsx`, `.gitignore`, `extension/INSTALL.md` |
 | 2026-05-08 | GPT-5.2 | Extension v0.2: persist ship-to in chrome.storage, try **Buy Now** on PDP, fill Amazon checkout widget IDs + retries; skip sign-in autofill | `extension/manifest.json`, `extension/background.js`, `extension/content.js`, `extension/INSTALL.md` |
@@ -138,8 +139,9 @@ _Clear this section when done._
 
 ### Reviewed
 - **Static checks**: ESLint + TypeScript typecheck (passing locally).
-- **Build**: `next build` started; verify completion and runtime smoke after it finishes.
-- **Cron + background jobs**: `vercel.json` crons, `/api/cron/*` routes, and new Auto Bulk Listing scheduler.
+- **Build**: `next build` verified with CI placeholder env (matches GitHub Actions).
+- **Cron + background jobs**: `vercel.json` crons, `/api/cron/*` routes, and Auto Bulk Listing scheduler.
+- **Operational docs**: `docs/RELEASE_CHECKLIST.md` — objective manual + automated steps.
 
 ### Fixed
 - **Cron auth hardening**: accept `x-vercel-cron: 1` to avoid 401s for scheduled invocations while still supporting `CRON_SECRET` bearer auth.
@@ -152,10 +154,13 @@ _Clear this section when done._
 - **DX/typing cleanup**: removed `any` usage in Auto Bulk Listing dashboard client types.
   - `app/dashboard/api.ts`
   - `app/dashboard/components/SettingsTab.tsx`
+- **Health endpoint**: `GET /api/health` for uptime / release verification (503 when DB or critical env missing).
+  - `app/api/health/route.ts`
 
 ### Still needs testing
-- Auto Bulk Listing: enable → cron tick runs → queue fills → listing posts → retries/logging.
-- Cron auth behavior on Vercel (headers vs scheduled invocation).
+- **Manual (cannot automate without your seller session)**: sign-off rows in `docs/RELEASE_CHECKLIST.md` (login, eBay connect, orders, listing, fulfillment, admin, device PWA).
+- **Auto Bulk Listing**: enable on staging/real account → confirm cron invocations + queue + listings (see checklist).
+- **Post-deploy smoke**: `BASE_URL=https://stackpilot-app.vercel.app npm run smoke` after each production deploy.
 
 ### Risks / concerns
 - Cron routes are now permissive for Vercel scheduler (`x-vercel-cron: 1`). If the route is reachable publicly, ensure only Vercel can set that header (expected) and that crons do not leak privileged operations beyond intended scope.

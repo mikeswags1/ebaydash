@@ -26,3 +26,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Build
+        run: npm run build
+        env:
+          # CI-only placeholders so Next.js can build without repo secrets.
+          NEXTAUTH_SECRET: ci-build-placeholder-nextauth-secret-min-32-chars
+          NEXTAUTH_URL: http://localhost:3000
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci_build_dummy
+
