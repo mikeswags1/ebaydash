@@ -1,5 +1,7 @@
 import { SectionIntro } from './shared'
 import type { ProductSourceHealth } from '../types'
+import { useEffect, useMemo, useState } from 'react'
+import { fetchAutoListingSettings, fetchAutoListingStatus, fetchEbayAccounts, saveAutoListingSettings, getErrorMessage } from '../api'
 
 export function SettingsTab({
   connected,
@@ -30,6 +32,51 @@ export function SettingsTab({
   onRefreshSourceHealth: () => void
   compact?: boolean
 }) {
+  const [autoLoading, setAutoLoading] = useState(false)
+  const [autoSaving, setAutoSaving] = useState(false)
+  const [autoErr, setAutoErr] = useState<string | null>(null)
+  const [accounts, setAccounts] = useState<Array<{ id: number; label: string }>>([])
+  const [autoSettings, setAutoSettings] = useState<any>(null)
+  const [autoStatus, setAutoStatus] = useState<any>(null)
+
+  const allowedNichesText = useMemo(() => {
+    const list = autoSettings?.allowed_niches || []
+    return Array.isArray(list) ? list.join(', ') : ''
+  }, [autoSettings])
+
+  useEffect(() => {
+    let alive = true
+    setAutoLoading(true)
+    Promise.all([fetchAutoListingSettings(), fetchAutoListingStatus(), fetchEbayAccounts()])
+      .then(([s, st, accts]) => {
+        if (!alive) return
+        setAutoSettings(s.settings)
+        setAutoStatus(st)
+        setAccounts((accts.accounts || []).map((a) => ({ id: a.id, label: a.label })))
+      })
+      .catch((e) => {
+        if (!alive) return
+        setAutoErr(getErrorMessage(e, 'Unable to load Auto Bulk Listing settings.'))
+      })
+      .finally(() => { if (alive) setAutoLoading(false) })
+    return () => { alive = false }
+  }, [])
+
+  const saveAuto = async (patch: Record<string, unknown>) => {
+    setAutoSaving(true)
+    setAutoErr(null)
+    try {
+      const next = await saveAutoListingSettings(patch)
+      setAutoSettings(next.settings)
+      const st = await fetchAutoListingStatus()
+      setAutoStatus(st)
+    } catch (e) {
+      setAutoErr(getErrorMessage(e, 'Unable to save Auto Bulk Listing settings.'))
+    } finally {
+      setAutoSaving(false)
+    }
+  }
+
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
       {compact ? (
@@ -95,6 +142,136 @@ export function SettingsTab({
           onRefresh={onRefreshSourceHealth}
         />
 
+        <div className="card" style={{ padding: compact ? '18px' : '28px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline', flexWrap: 'wrap', marginBottom: '10px' }}>
+            <div>
+              <div style={{ color: 'var(--sky)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 900, marginBottom: '6px' }}>
+                Auto Bulk Listing
+              </div>
+              <div style={{ color: 'var(--sil)', fontSize: '13px', lineHeight: 1.6 }}>
+                Drip-lists products throughout the day using your source pool and safety checks.
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--dim)' }}>
+                {autoStatus?.enabled ? (autoStatus?.paused ? 'Paused' : 'Running') : 'Off'}
+              </span>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(autoSettings?.enabled)}
+                  disabled={autoLoading || autoSaving}
+                  onChange={(e) => saveAuto({ enabled: e.target.checked, paused: false, emergency_stopped: false })}
+                />
+                <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--txt)' }}>Enable</span>
+              </label>
+            </div>
+          </div>
+
+          {autoErr ? (
+            <div style={{ marginTop: '10px', color: 'var(--red)', border: '1px solid rgba(248,81,101,0.25)', background: 'rgba(248,81,101,0.08)', borderRadius: '10px', padding: '10px 12px', fontSize: '12px' }}>
+              {autoErr}
+            </div>
+          ) : null}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '14px' }}>
+            <Field label="Listings / day">
+              <input
+                value={String(autoSettings?.listings_per_day ?? 100)}
+                inputMode="numeric"
+                onChange={(e) => setAutoSettings((s: any) => ({ ...s, listings_per_day: e.target.value }))}
+                onBlur={() => saveAuto({ listings_per_day: Number(autoSettings?.listings_per_day || 100) })}
+                className="pwa-orders__search-input"
+              />
+            </Field>
+            <Field label="Max / hour">
+              <input
+                value={String(autoSettings?.max_per_hour ?? 25)}
+                inputMode="numeric"
+                onChange={(e) => setAutoSettings((s: any) => ({ ...s, max_per_hour: e.target.value }))}
+                onBlur={() => saveAuto({ max_per_hour: Number(autoSettings?.max_per_hour || 25) })}
+                className="pwa-orders__search-input"
+              />
+            </Field>
+            <Field label="Cooldown (min)">
+              <input
+                value={String(autoSettings?.cooldown_minutes ?? 3)}
+                inputMode="numeric"
+                onChange={(e) => setAutoSettings((s: any) => ({ ...s, cooldown_minutes: e.target.value }))}
+                onBlur={() => saveAuto({ cooldown_minutes: Number(autoSettings?.cooldown_minutes || 3) })}
+                className="pwa-orders__search-input"
+              />
+            </Field>
+            <Field label="Minimum ROI %">
+              <input
+                value={String(autoSettings?.min_roi ?? 45)}
+                inputMode="numeric"
+                onChange={(e) => setAutoSettings((s: any) => ({ ...s, min_roi: e.target.value }))}
+                onBlur={() => saveAuto({ min_roi: Number(autoSettings?.min_roi || 45) })}
+                className="pwa-orders__search-input"
+              />
+            </Field>
+            <Field label="Mode">
+              <select
+                value={String(autoSettings?.mode || 'balanced')}
+                onChange={(e) => saveAuto({ mode: e.target.value })}
+                className="pwa-orders__search-input"
+              >
+                <option value="safe">Safe</option>
+                <option value="balanced">Balanced</option>
+                <option value="aggressive">Aggressive</option>
+              </select>
+            </Field>
+            <Field label="eBay account">
+              <select
+                value={String(autoSettings?.selected_account_id ?? '')}
+                onChange={(e) => saveAuto({ selected_account_id: e.target.value ? Number(e.target.value) : null })}
+                className="pwa-orders__search-input"
+              >
+                <option value="">Default</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={String(a.id)}>{a.label}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Allowed niches (comma separated)">
+              <input
+                value={allowedNichesText}
+                onChange={(e) => setAutoSettings((s: any) => ({ ...s, allowed_niches: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) }))}
+                onBlur={() => saveAuto({ allowed_niches: autoSettings?.allowed_niches || [] })}
+                className="pwa-orders__search-input"
+                placeholder="Phone Accessories, Home Decor"
+              />
+            </Field>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={!autoSettings?.enabled || autoSaving || autoLoading}
+              onClick={() => saveAuto({ paused: !autoSettings?.paused })}
+            >
+              {autoSettings?.paused ? 'Resume' : 'Pause'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ color: 'var(--red)', borderColor: 'rgba(248,81,101,0.28)' }}
+              disabled={autoSaving || autoLoading}
+              onClick={() => saveAuto({ emergency_stopped: true, enabled: false, paused: true })}
+            >
+              Emergency stop
+            </button>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', color: 'var(--dim)' }}>Posted today</span>
+              <span style={{ fontSize: '12px', fontWeight: 900, color: 'var(--txt)' }}>{autoStatus?.postedToday ?? 0}</span>
+              <span style={{ fontSize: '12px', color: 'var(--dim)' }}>Queue</span>
+              <span style={{ fontSize: '12px', fontWeight: 900, color: 'var(--txt)' }}>{(autoStatus?.queue?.queued ?? 0) + (autoStatus?.queue?.retry ?? 0)}</span>
+            </div>
+          </div>
+        </div>
+
         {niche ? (
           <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(125,211,252,0.08)', border: '1px solid rgba(125,211,252,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
             <div style={{ fontSize: '13px', color: 'var(--sil)' }}>
@@ -107,6 +284,17 @@ export function SettingsTab({
           </div>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize: '11px', fontWeight: 900, color: 'var(--dim)', marginBottom: '6px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+        {label}
+      </div>
+      {children}
     </div>
   )
 }

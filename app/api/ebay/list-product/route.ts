@@ -1274,17 +1274,27 @@ function buildXml(params: {
 
 // ── Route handler ────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
+  const cronSecret = process.env.CRON_SECRET
+  const authHeader = req.headers.get('authorization') || ''
+  const isCron = Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`)
+
+  const session = isCron ? null : await getServerSession(authOptions)
+  if (!isCron && !session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
   // Trial gating: allow connected sellers to list a few items before upgrading.
   // Default plan is "trial" unless a subscription row indicates otherwise.
-  await ensureSubscriptionRow(session.user.id)
-  const sub = await getUserPlan(session.user.id)
+  const body = await req.json()
+  const effectiveUserId = isCron ? body?.userId : session!.user.id
+  const effectiveAccountId = isCron ? body?.accountId : null
+
+  if (!effectiveUserId) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
+
+  await ensureSubscriptionRow(effectiveUserId)
+  const sub = await getUserPlan(effectiveUserId)
   const plan = sub?.plan || 'trial'
   const trialLimit = Number(process.env.TRIAL_LIST_LIMIT || '5')
   if (plan === 'trial' && Number.isFinite(trialLimit) && trialLimit > 0) {
-    const usage = await getTrialUsage(session.user.id)
+    const usage = await getTrialUsage(effectiveUserId)
     if (usage.listed >= trialLimit) {
       return apiError(`Trial limit reached. You can list ${trialLimit} items for free — upgrade to keep listing.`, {
         status: 402,
@@ -1307,7 +1317,10 @@ export async function POST(req: NextRequest) {
     niche,
     trusted,
     categoryId: providedCategoryId,
-  } = await req.json()
+    // ignore cron-only fields
+    userId: _userIdIgnored,
+    accountId: _accountIdIgnored,
+  } = body
   if (!asin || !title || ebayPrice === undefined || ebayPrice === null) {
     return apiError('ASIN, title, and eBay price are required.', { status: 400, code: 'INVALID_LISTING_INPUT' })
   }
@@ -1321,7 +1334,7 @@ export async function POST(req: NextRequest) {
   // from appearing when the same product shows up in both the niche tab and continuous tab.
   const existingListing = await queryRows<{ ebay_listing_id: string }>`
     SELECT ebay_listing_id FROM listed_asins
-    WHERE user_id = ${session.user.id} AND asin = ${String(asin).toUpperCase()} AND ended_at IS NULL
+    WHERE user_id = ${effectiveUserId} AND asin = ${String(asin).toUpperCase()} AND ended_at IS NULL
     LIMIT 1
   `.catch(() => [])
   if (existingListing.length > 0) {
@@ -1340,7 +1353,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  const credentials = await getValidEbayAccessToken(session.user.id)
+  const credentials = await getValidEbayAccessToken(String(effectiveUserId), effectiveAccountId)
   if (!credentials?.accessToken) {
     return apiError('Your eBay session expired. Reconnect your account in Settings.', {
       status: 401,
@@ -2275,7 +2288,7 @@ export async function POST(req: NextRequest) {
   await ensureListedAsinsFinancialColumns()
   await sql`
     INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate, amazon_image_url, amazon_images, amazon_snapshot, niche, category_id)
-    VALUES (${session.user.id}, ${asin}, ${listingTitle.slice(0, 200)}, ${listingId}, ${listingAmazonPrice.toFixed(2)}, ${price}, ${EBAY_DEFAULT_FEE_RATE}, ${primarySourceImage}, ${JSON.stringify(filteredImages)}, ${JSON.stringify({
+    VALUES (${effectiveUserId}, ${asin}, ${listingTitle.slice(0, 200)}, ${listingId}, ${listingAmazonPrice.toFixed(2)}, ${price}, ${EBAY_DEFAULT_FEE_RATE}, ${primarySourceImage}, ${JSON.stringify(filteredImages)}, ${JSON.stringify({
       asin,
       title: listingTitle,
       amazonPrice: listingAmazonPrice,

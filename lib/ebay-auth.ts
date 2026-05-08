@@ -20,6 +20,7 @@ export const EBAY_MINIMAL_OAUTH_SCOPES = [
 ]
 
 type StoredEbayCredentials = {
+  id?: number
   oauth_token?: string
   refresh_token?: string
   token_expires_at?: string
@@ -40,14 +41,29 @@ export class EbayNetworkError extends Error {
   }
 }
 
-export async function getStoredEbayCredentials(userId: string) {
-  const rows = await queryRows<StoredEbayCredentials>`
+export async function getStoredEbayCredentials(userId: string, accountId?: number | null) {
+  // Prefer multi-account table when present. Falls back to legacy `ebay_credentials`.
+  const uid = String(userId)
+  const accountRows = await queryRows<StoredEbayCredentials>`
+    SELECT id, oauth_token, refresh_token, token_expires_at, sandbox_mode
+    FROM ebay_accounts
+    WHERE user_id = ${uid}
+      AND active = TRUE
+      AND (${accountId ?? null}::int IS NULL OR id = ${accountId ?? null})
+    ORDER BY id ASC
+    LIMIT 1
+  `.catch(() => [])
+
+  if (accountRows[0]) return accountRows[0]
+
+  const legacyRows = await queryRows<StoredEbayCredentials>`
     SELECT oauth_token, refresh_token, token_expires_at, sandbox_mode
     FROM ebay_credentials
-    WHERE user_id = ${userId}
-  `
+    WHERE user_id = ${uid}
+    LIMIT 1
+  `.catch(() => [])
 
-  return rows[0] || null
+  return legacyRows[0] || null
 }
 
 export function isEbayTokenExpired(tokenExpiresAt?: string, bufferMs = 5 * 60 * 1000) {
@@ -104,11 +120,17 @@ export async function refreshEbayAccessToken(userId: string, refreshToken: strin
   }
 
   const expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString()
+  // Update whichever table holds the refresh token.
+  await sql`
+    UPDATE ebay_accounts
+    SET oauth_token = ${data.access_token}, token_expires_at = ${expiresAt}, updated_at = NOW()
+    WHERE user_id = ${userId} AND refresh_token = ${refreshToken}
+  `.catch(() => {})
   await sql`
     UPDATE ebay_credentials
     SET oauth_token = ${data.access_token}, token_expires_at = ${expiresAt}, updated_at = NOW()
     WHERE user_id = ${userId}
-  `
+  `.catch(() => {})
 
   return {
     accessToken: data.access_token as string,
@@ -116,8 +138,8 @@ export async function refreshEbayAccessToken(userId: string, refreshToken: strin
   }
 }
 
-export async function getValidEbayAccessToken(userId: string) {
-  const credentials = await getStoredEbayCredentials(userId)
+export async function getValidEbayAccessToken(userId: string, accountId?: number | null) {
+  const credentials = await getStoredEbayCredentials(userId, accountId)
   if (!credentials) return null
 
   const oauthToken = credentials.oauth_token ? String(credentials.oauth_token) : ''

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { ensureProductSourceTables } from '@/lib/product-source-engine'
+import { ensureAutoListingTables } from '@/lib/auto-listing/db'
 
 export async function GET() {
   try {
@@ -76,6 +77,7 @@ export async function GET() {
     `
     await ensureListedAsinsFinancialColumns()
     await ensureProductSourceTables()
+    await ensureAutoListingTables()
     return NextResponse.json({ success: true, message: 'Database tables ready' })
   } catch (e) {
     console.error(e)

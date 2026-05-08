@@ -217,3 +217,23 @@ export async function publishProduct(input: {
 export async function fetchSubscriptionStatus() {
   return requestJson<{ ok: true; plan: string; status: string; trialLimit: number; listed: number }>('/api/subscription/status', { cache: 'no-store' })
 }
+
+export async function fetchAutoListingSettings() {
+  return requestJson<{ ok: true; settings: any }>('/api/auto-listing/settings', { cache: 'no-store' })
+}
+
+export async function saveAutoListingSettings(input: Record<string, unknown>) {
+  return requestJson<{ ok: true; settings: any }>('/api/auto-listing/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
+export async function fetchAutoListingStatus() {
+  return requestJson<{ ok: true } & Record<string, any>>('/api/auto-listing/status', { cache: 'no-store' })
+}
+
+export async function fetchEbayAccounts() {
+  return requestJson<{ ok: true; accounts: Array<{ id: number; label: string; sandbox_mode: boolean; active: boolean; updated_at: string }> }>('/api/ebay/accounts', { cache: 'no-store' })
+}
