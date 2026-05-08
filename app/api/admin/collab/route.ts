@@ -16,6 +16,9 @@ export async function GET() {
   }
 
   const collabPath = join(process.cwd(), 'COLLAB.md')
+  const gitSha = process.env.VERCEL_GIT_COMMIT_SHA || null
+  const deploymentId = process.env.VERCEL_DEPLOYMENT_ID || null
+  const env = process.env.VERCEL_ENV || null
 
   try {
     const [st, content] = await Promise.all([stat(collabPath), readFile(collabPath, 'utf-8')])
@@ -23,6 +26,9 @@ export async function GET() {
       {
         content,
         fileMtime: new Date(st.mtimeMs).toISOString(),
+        gitSha,
+        deploymentId,
+        env,
       },
       {
         headers: {
@@ -32,7 +38,7 @@ export async function GET() {
     )
   } catch {
     return apiOk(
-      { content: 'COLLAB.md not found.', fileMtime: null },
+      { content: 'COLLAB.md not found.', fileMtime: null, gitSha, deploymentId, env },
       {
         headers: {
           'Cache-Control': 'no-store, max-age=0',

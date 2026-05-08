@@ -190,6 +190,8 @@ export default function AdminPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [collab, setCollab] = useState('')
   const [collabFileMtime, setCollabFileMtime] = useState<string | null>(null)
+  const [collabGitSha, setCollabGitSha] = useState<string | null>(null)
+  const [collabDeploymentId, setCollabDeploymentId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [toolState, setToolState] = useState<ToolState>({ active: null, tone: 'info', message: '' })
@@ -204,6 +206,10 @@ export default function AdminPage() {
     setCollab(String(collabRes?.content || ''))
     setCollabFileMtime(
       typeof collabRes?.fileMtime === 'string' && collabRes.fileMtime ? collabRes.fileMtime : null
+    )
+    setCollabGitSha(typeof collabRes?.gitSha === 'string' && collabRes.gitSha ? collabRes.gitSha : null)
+    setCollabDeploymentId(
+      typeof collabRes?.deploymentId === 'string' && collabRes.deploymentId ? collabRes.deploymentId : null
     )
   }, [])
 
@@ -619,9 +625,29 @@ export default function AdminPage() {
               <span>Collaboration log</span>
               <strong>COLLAB.md live notes</strong>
             </summary>
-            {collabFileMtime ? (
-              <p className="admin-collab-source">Server file <code>COLLAB.md</code> · mtime {collabFileMtime}</p>
-            ) : null}
+            <p className="admin-collab-source">
+              {collabGitSha ? (
+                <>
+                  Deploy <code>{collabGitSha.slice(0, 7)}</code>
+                </>
+              ) : (
+                <>
+                  Deploy <code>unknown</code>
+                </>
+              )}
+              {collabDeploymentId ? (
+                <>
+                  {' '}
+                  · dpl <code>{collabDeploymentId}</code>
+                </>
+              ) : null}
+              {collabFileMtime ? (
+                <>
+                  {' '}
+                  · bundle mtime <code>{collabFileMtime}</code>
+                </>
+              ) : null}
+            </p>
             <pre className="admin-collab">{collab || 'COLLAB.md not loaded.'}</pre>
           </details>
         </section>
