@@ -1,4 +1,4 @@
-const CACHE_NAME = 'stackpilot-shell-v1'
+const CACHE_NAME = 'stackpilot-shell-v2'
 const APP_SHELL = [
   '/',
   '/login',
@@ -31,7 +31,10 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return
 
   const url = new URL(request.url)
-  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return
+  if (url.origin !== self.location.origin) return
+  if (url.pathname.startsWith('/api/')) return
+  // Never cache admin pages; they must reflect live server state.
+  if (url.pathname.startsWith('/admin')) return
 
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).catch(() => caches.match('/')))
