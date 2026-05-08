@@ -128,6 +128,7 @@ function getStableShuffleScore(product: FinderProduct, tick: number, index: numb
 
 function getRotatingFinderProducts(products: FinderProduct[] | null, tick: number, limit = FINDER_STOCK_TARGET) {
   if (!products || products.length <= 1) return products || null
+  if (tick === 0) return products.slice(0, limit)
   return [...products]
     .map((product, index) => ({ product, score: getStableShuffleScore(product, tick, index) }))
     .sort((a, b) => a.score - b.score)
@@ -154,6 +155,7 @@ export default function Dashboard() {
   const router = useRouter()
 
   const [tab, setTab] = useState<Tab>('overview')
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [banner, setBanner] = useState<BannerState | null>(null)
   const [connectionState, setConnectionState] = useState<ConnectionState>({
     ebayConnected: false,
@@ -328,38 +330,9 @@ export default function Dashboard() {
     }
   }, [router, status])
 
-  useEffect(() => {
-    const productListingActive = !!finderState.listAllProgress && finderState.listAllProgress.done < finderState.listAllProgress.total
-    const continuousListingActive = !!continuousFinderState.listAllProgress && continuousFinderState.listAllProgress.done < continuousFinderState.listAllProgress.total
-    const activeResults = tab === 'product'
-      ? finderState.results
-      : tab === 'continuous'
-        ? continuousFinderState.results
-        : null
-
-    if (
-      !activeResults ||
-      activeResults.length <= 1 ||
-      listingState.modal ||
-      (tab === 'product' && productListingActive) ||
-      (tab === 'continuous' && continuousListingActive)
-    ) {
-      return
-    }
-
-    const timer = window.setInterval(() => {
-      setFinderRotationTick((tick) => tick + 1)
-    }, 1000)
-
-    return () => window.clearInterval(timer)
-  }, [
-    continuousFinderState.listAllProgress,
-    continuousFinderState.results,
-    finderState.listAllProgress,
-    finderState.results,
-    listingState.modal,
-    tab,
-  ])
+  const shuffleVisibleFinderResults = useCallback(() => {
+    setFinderRotationTick((tick) => tick + 1)
+  }, [])
 
   const getEbayConnectionState = useCallback((credentials: EbayCredentialsSummary | null) => {
     const hasToken = Boolean(credentials?.has_token)
@@ -1000,7 +973,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="dashboard-shell" style={{ display: 'flex', minHeight: '100vh', position: 'relative', zIndex: 1 }}>
+    <div className="dashboard-shell">
       <DashboardSidebar
         tab={tab}
         onTabChange={setTab}
@@ -1009,9 +982,11 @@ export default function Dashboard() {
         awaitingCount={orderState.awaiting.length}
         userLabel={session?.user?.name || session?.user?.email}
         onSignOut={() => signOut({ callbackUrl: '/' })}
+        mobileOpen={mobileNavOpen}
+        onRequestClose={() => setMobileNavOpen(false)}
       />
 
-      <main className="dashboard-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <main className="dashboard-main">
         <DashboardBanner banner={banner} onClose={() => setBanner(null)} />
         <DashboardTopbar
           tab={tab}
@@ -1023,9 +998,10 @@ export default function Dashboard() {
             if (tab === 'performance') void loadPerformance()
             if (tab === 'settings') void loadProductSourceHealth()
           }}
+          onToggleNav={() => setMobileNavOpen((prev) => !prev)}
         />
 
-        <div className="dashboard-content" style={{ flex: 1, overflowY: 'auto' }}>
+        <div className="dashboard-content">
           {tab === 'overview' ? (
             <OverviewTab
               connected={connectionState.ebayConnected}
@@ -1108,6 +1084,7 @@ export default function Dashboard() {
               finderView={finderState.view}
               onFinderViewChange={(view) => setFinderState((prev) => ({ ...prev, view }))}
               onFindProducts={() => void handleFindProducts()}
+              onShuffleResults={shuffleVisibleFinderResults}
               onOpenAsinLookup={() => setTab('asin')}
               onOpenScripts={() => setTab('scripts')}
               onOpenListModal={(product) => openListModal({ ...product, sourceMode: 'niche' })}

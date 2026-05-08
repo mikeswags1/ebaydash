@@ -16,7 +16,7 @@ export function DashboardBanner({
     <div
       className="dashboard-banner"
       style={{
-        padding: '10px 44px',
+        padding: '10px var(--xpad)',
         fontSize: '12px',
         fontWeight: 600,
         background: success ? 'rgba(46,207,118,0.10)' : 'rgba(232,63,80,0.10)',
@@ -40,11 +40,13 @@ export function DashboardTopbar({
   syncTime,
   syncing,
   onSync,
+  onToggleNav,
 }: {
   tab: Tab
   syncTime: string | null
   syncing: boolean
   onSync: () => void
+  onToggleNav: () => void
 }) {
   return (
     <header
@@ -57,15 +59,20 @@ export function DashboardTopbar({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 44px',
+        padding: '0 var(--xpad)',
         position: 'sticky',
         top: 0,
         zIndex: 200,
         boxShadow: '0 1px 22px rgba(0,0,0,0.22)',
       }}
     >
-      <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plat)', letterSpacing: 0, textTransform: 'uppercase' }}>
-        {NAV_ITEMS.find((item) => item.id === tab)?.label}
+      <div className="dashboard-topbar-left">
+        <button type="button" className="dashboard-nav-toggle" onClick={onToggleNav} aria-label="Open navigation">
+          Menu
+        </button>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plat)', letterSpacing: 0, textTransform: 'uppercase' }}>
+          {NAV_ITEMS.find((item) => item.id === tab)?.label}
+        </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         {syncTime ? <span style={{ fontSize: '10px', color: 'var(--dim)' }}>Synced {syncTime}</span> : null}

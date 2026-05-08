@@ -23,6 +23,7 @@ export function ProductListingTab({
   finderView,
   onFinderViewChange,
   onFindProducts,
+  onShuffleResults,
   onOpenAsinLookup,
   onOpenScripts,
   onOpenListModal,
@@ -40,6 +41,7 @@ export function ProductListingTab({
   finderView: 'cards' | 'list'
   onFinderViewChange: (view: 'cards' | 'list') => void
   onFindProducts: () => void
+  onShuffleResults: () => void
   onOpenAsinLookup: () => void
   onOpenScripts: () => void
   onOpenListModal: (product: FinderProduct) => void
@@ -53,12 +55,13 @@ export function ProductListingTab({
   const skippedCount = listAllProgress?.skipped || 0
   const failedCount = listAllProgress ? Math.max(0, listAllProgress.errors - skippedCount) : 0
   const listedCount = listAllProgress ? Math.max(0, listAllProgress.total - listAllProgress.errors) : 0
+  const hasResults = Boolean(finderResults?.length)
 
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 44px 28px' }}>
+      <div style={{ padding: '40px var(--xpad) 28px' }}>
         <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--plat)', marginBottom: '8px' }}>
           StackPilot / Strategy
         </div>
@@ -72,7 +75,7 @@ export function ProductListingTab({
         </div>
       </div>
 
-      <div style={{ padding: '0 44px 44px' }}>
+      <div style={{ padding: '0 var(--xpad) 44px' }}>
 
         {/* Active niche banner */}
         {niche ? (
@@ -156,6 +159,15 @@ export function ProductListingTab({
               >
                 {finderLoading ? '🔍 Scanning Amazon...' : '🔍 Find Products'}
               </button>
+              {hasResults && !finderLoading && !isListing ? (
+                <button
+                  className="btn btn-ghost"
+                  onClick={onShuffleResults}
+                  style={{ padding: '13px 18px', fontSize: '12px' }}
+                >
+                  Shuffle Results
+                </button>
+              ) : null}
               {finderResults && finderResults.length > 0 && !isListing ? (
                 <button
                   className="btn btn-solid"
@@ -278,7 +290,7 @@ export function FinderResults({
             {results.length} products found — {niche}
           </div>
           <div style={{ fontSize: '10px', color: 'var(--dim)', marginTop: '3px' }}>
-            Live-rotating every second from the safe product pool · Click any card to review before publishing
+            Stable queue · Use Shuffle to reshuffle · Click any card to review before publishing
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>

@@ -20,7 +20,7 @@ export function OrdersTab({
     <div style={{ animation: 'fadein 0.22s ease' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 44px 28px' }}>
+      <div style={{ padding: '40px var(--xpad) 28px' }}>
         <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--plat)', marginBottom: '8px' }}>
           StackPilot / Orders
         </div>
@@ -39,7 +39,7 @@ export function OrdersTab({
       </div>
 
       {/* Summary cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '14px', padding: '0 44px 28px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '14px', padding: '0 var(--xpad) 28px' }}>
         <SummaryCard
           label="Need Action"
           value={awaiting.length.toString()}
@@ -69,7 +69,7 @@ export function OrdersTab({
 
       {/* Needs attention */}
       {awaiting.length > 0 ? (
-        <div style={{ margin: '0 44px 28px' }}>
+        <div style={{ margin: '0 var(--xpad) 28px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
             <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--red)', boxShadow: '0 0 8px var(--red)', animation: 'glow-pulse 2s ease infinite' }} />
             <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--red)' }}>
@@ -82,7 +82,7 @@ export function OrdersTab({
           <OrderTable orders={awaiting} />
         </div>
       ) : connected && orders.length > 0 ? (
-        <div style={{ margin: '0 44px 28px', padding: '16px 20px', borderRadius: '14px', background: 'rgba(46,207,118,0.06)', border: '1px solid rgba(46,207,118,0.18)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ margin: '0 var(--xpad) 28px', padding: '16px 20px', borderRadius: '14px', background: 'rgba(46,207,118,0.06)', border: '1px solid rgba(46,207,118,0.18)', display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ fontSize: '20px' }}>✅</div>
           <div>
             <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--grn)', marginBottom: '2px' }}>All caught up!</div>
@@ -92,7 +92,7 @@ export function OrdersTab({
       ) : null}
 
       {/* All orders */}
-      <div style={{ padding: '0 44px 44px' }}>
+      <div style={{ padding: '0 var(--xpad) 44px' }}>
         <div style={{ marginBottom: '12px' }}>
           <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)' }}>
             All Orders ({orders.length})

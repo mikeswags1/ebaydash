@@ -31,7 +31,7 @@ export function ContinuousListingTab({
     <div style={{ animation: 'fadein 0.22s ease' }}>
       <SectionIntro eyebrow="StackPilot / Queue" title="Continuous Listing" />
 
-      <div style={{ padding: '0 44px 44px' }}>
+      <div style={{ padding: '0 var(--xpad) 44px' }}>
         {!connected ? (
           <div
             style={{

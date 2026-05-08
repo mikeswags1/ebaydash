@@ -32,7 +32,7 @@ export function SettingsTab({
     <div style={{ animation: 'fadein 0.22s ease' }}>
       <SectionIntro eyebrow="StackPilot / Configuration" title="Settings" />
 
-      <div style={{ padding: '0 44px 44px', maxWidth: '980px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ padding: '0 var(--xpad) 44px', maxWidth: '980px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
           {connected ? (
             <>

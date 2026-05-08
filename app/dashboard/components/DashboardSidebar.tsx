@@ -9,6 +9,8 @@ export function DashboardSidebar({
   awaitingCount,
   userLabel,
   onSignOut,
+  mobileOpen,
+  onRequestClose,
 }: {
   tab: Tab
   onTabChange: (tab: Tab) => void
@@ -17,23 +19,20 @@ export function DashboardSidebar({
   awaitingCount: number
   userLabel?: string | null
   onSignOut: () => void
+  mobileOpen: boolean
+  onRequestClose: () => void
 }) {
   return (
-    <aside
-      className="dashboard-sidebar"
-      style={{
-        width: '260px',
-        flexShrink: 0,
-        position: 'sticky',
-        top: 0,
-        height: '100vh',
-        background: 'linear-gradient(180deg,#081624 0%,#070f1a 50%,#060c16 100%)',
-        borderRight: '1px solid rgba(56,189,248,0.10)',
-        display: 'flex',
-        flexDirection: 'column',
-        boxShadow: '1px 0 0 rgba(56,189,248,0.06), 8px 0 32px rgba(0,0,0,0.5)',
-      }}
-    >
+    <>
+      <button
+        type="button"
+        className="dashboard-sidebar-scrim"
+        aria-label="Close navigation"
+        onClick={onRequestClose}
+        data-open={mobileOpen ? '1' : '0'}
+      />
+
+      <aside className={`dashboard-sidebar${mobileOpen ? ' is-open' : ''}`}>
       <div className="dashboard-brand" style={{ padding: '32px 24px 28px', borderBottom: '1px solid rgba(56,189,248,0.12)' }}>
         <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 700, color: '#e0f2fe', lineHeight: 1 }}>
           Stack
@@ -47,6 +46,14 @@ export function DashboardSidebar({
             Pilot
           </span>
         </div>
+        <button
+          type="button"
+          className="dashboard-sidebar-close"
+          onClick={onRequestClose}
+          aria-label="Close navigation"
+        >
+          Close
+        </button>
         <div
           style={{
             fontSize: '8px',
@@ -136,7 +143,10 @@ export function DashboardSidebar({
         {NAV_ITEMS.map((item) => (
           <button
             key={item.id}
-            onClick={() => onTabChange(item.id)}
+            onClick={() => {
+              onTabChange(item.id)
+              onRequestClose()
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -215,6 +225,7 @@ export function DashboardSidebar({
           Sign Out
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

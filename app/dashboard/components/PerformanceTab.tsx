@@ -34,24 +34,24 @@ export function PerformanceTab({
       />
 
       {!connected ? (
-        <EmptyState connected={false} onConnect={onOpenSettings} msg="Connect your eBay account to see your sales performance." style={{ margin: '0 44px 44px' }} />
+        <EmptyState connected={false} onConnect={onOpenSettings} msg="Connect your eBay account to see your sales performance." style={{ margin: '0 var(--xpad) 44px' }} />
       ) : null}
 
       {connected && loading ? (
-        <div className="card" style={{ margin: '0 44px 44px', padding: '40px', textAlign: 'center' }}>
+        <div className="card" style={{ margin: '0 var(--xpad) 44px', padding: '40px', textAlign: 'center' }}>
           <div style={{ fontSize: '13px', color: 'var(--dim)' }}>Loading your performance data...</div>
         </div>
       ) : null}
 
       {connected && error ? (
-        <div className="card" style={{ margin: '0 44px 24px', padding: '24px' }}>
+        <div className="card" style={{ margin: '0 var(--xpad) 24px', padding: '24px' }}>
           <div style={{ fontSize: '13px', color: 'var(--red)', marginBottom: '14px' }}>{error}</div>
           <button onClick={onRefresh} className="btn btn-gold btn-sm">Retry</button>
         </div>
       ) : null}
 
       {connected && !loading && !error && !data ? (
-        <div className="card" style={{ margin: '0 44px 44px', padding: '40px', textAlign: 'center' }}>
+        <div className="card" style={{ margin: '0 var(--xpad) 44px', padding: '40px', textAlign: 'center' }}>
           <div style={{ fontSize: '13px', color: 'var(--dim)', marginBottom: '16px' }}>No performance data yet.</div>
           <button onClick={onRefresh} className="btn btn-gold btn-sm">Load Performance</button>
         </div>
@@ -61,13 +61,13 @@ export function PerformanceTab({
         <>
           {/* Traffic note */}
           {data.traffic.error ? (
-            <div style={{ margin: '0 44px 16px', padding: '8px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(240,246,252,0.08)', color: 'var(--dim)', fontSize: '10px', lineHeight: 1.5 }}>
+            <div style={{ margin: '0 var(--xpad) 16px', padding: '8px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(240,246,252,0.08)', color: 'var(--dim)', fontSize: '10px', lineHeight: 1.5 }}>
               {data.traffic.error}
             </div>
           ) : null}
 
           {/* At-a-glance numbers */}
-          <div style={{ padding: '0 44px 28px' }}>
+          <div style={{ padding: '0 var(--xpad) 28px' }}>
             <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)', marginBottom: '12px' }}>
               Last 90 Days — At a Glance
             </div>
@@ -106,7 +106,7 @@ export function PerformanceTab({
           </div>
 
           {/* Action cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', padding: '0 44px 28px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', padding: '0 var(--xpad) 28px' }}>
             <ActionCard
               title="List More Of These"
               description="These categories are making you money. Source more products here."

@@ -223,7 +223,7 @@ export function AsinLookupTab({
     <div style={{ animation: 'fadein 0.22s ease' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 44px 28px' }}>
+      <div style={{ padding: '40px var(--xpad) 28px' }}>
         <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '8px' }}>
           StackPilot / Fulfillment
         </div>
@@ -237,7 +237,7 @@ export function AsinLookupTab({
       </div>
 
       {/* How it works */}
-      <div style={{ padding: '0 44px 28px' }}>
+      <div style={{ padding: '0 var(--xpad) 28px' }}>
         <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--dim)', marginBottom: '12px' }}>
           How It Works
         </div>
@@ -260,7 +260,7 @@ export function AsinLookupTab({
         </div>
       </div>
 
-      <div style={{ padding: '0 44px 44px', maxWidth: '720px' }}>
+      <div style={{ padding: '0 var(--xpad) 44px', maxWidth: '720px' }}>
 
         {/* Search box */}
         <div className="card" style={{ padding: '28px 32px', marginBottom: '20px' }}>
