@@ -50,20 +50,25 @@ export function SectionIntro({
 export function OrderTable({ orders }: { orders: EbayOrder[] }) {
   return (
     <div className="card" style={{ overflow: 'hidden' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
         <thead>
-          <tr style={{ background: 'rgba(15,35,56,0.92)', borderBottom: '1px solid rgba(125,211,252,0.12)' }}>
+          <tr style={{ background: 'rgba(8,17,31,0.88)' }}>
             {['Item', 'Buyer', 'Total', 'Status', 'Date'].map((heading) => (
               <th
                 key={heading}
                 style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 5,
+                  background: 'rgba(8,17,31,0.88)',
                   color: 'var(--plat)',
-                  fontSize: '7.5px',
+                  fontSize: '8px',
                   fontWeight: 700,
                   textTransform: 'uppercase',
-                  letterSpacing: 0,
-                  padding: '13px 16px',
+                  letterSpacing: '0.04em',
+                  padding: '12px 16px',
                   textAlign: heading === 'Item' ? 'left' : 'center',
+                  borderBottom: '1px solid rgba(125,211,252,0.10)',
                 }}
               >
                 {heading}
@@ -80,16 +85,19 @@ export function OrderTable({ orders }: { orders: EbayOrder[] }) {
               <tr
                 key={order.orderId}
                 style={{
-                  background: index % 2 === 0 ? 'rgba(14,27,44,0.88)' : 'rgba(11,22,36,0.88)',
-                  borderBottom: '1px solid rgba(125,211,252,0.08)',
+                  background: index % 2 === 0 ? 'rgba(14,27,44,0.86)' : 'rgba(12,24,40,0.86)',
                   transition: 'background 0.15s',
                 }}
               >
-                <td style={{ padding: '14px 16px', color: 'var(--txt)', fontSize: '13px', maxWidth: '300px' }}>
-                  {order.lineItems?.[0]?.title?.slice(0, 55) || order.orderId}
-                  {(order.lineItems?.[0]?.title?.length || 0) > 55 ? '...' : ''}
+                <td style={{ padding: '14px 16px', color: 'var(--txt)', fontSize: '13px', maxWidth: '340px', borderBottom: '1px solid rgba(125,211,252,0.06)' }}>
+                  <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {order.lineItems?.[0]?.title || order.orderId}
+                  </div>
+                  <div style={{ marginTop: '3px', fontSize: '10px', color: 'var(--dim)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+                    {order.orderId}
+                  </div>
                 </td>
-                <td style={{ padding: '14px 16px', color: 'var(--sil)', fontSize: '12px', textAlign: 'center' }}>
+                <td style={{ padding: '14px 16px', color: 'var(--sil)', fontSize: '12px', textAlign: 'center', borderBottom: '1px solid rgba(125,211,252,0.06)' }}>
                   {order.buyer?.username}
                 </td>
                 <td
@@ -100,27 +108,30 @@ export function OrderTable({ orders }: { orders: EbayOrder[] }) {
                     color: 'var(--gld2)',
                     fontSize: '13px',
                     textAlign: 'center',
+                    borderBottom: '1px solid rgba(125,211,252,0.06)',
                   }}
                 >
                   ${parseFloat(order.pricingSummary?.total?.value || '0').toFixed(2)}
                 </td>
-                <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                <td style={{ padding: '14px 16px', textAlign: 'center', borderBottom: '1px solid rgba(125,211,252,0.06)' }}>
                   <span
                     style={{
-                      padding: '3px 10px',
+                      padding: '4px 10px',
                       borderRadius: '20px',
-                      fontSize: '8px',
+                      fontSize: '9px',
                       fontWeight: 700,
-                      letterSpacing: 0,
+                      letterSpacing: '0.02em',
                       background: badge.background,
                       color: badge.color,
                       border: `1px solid ${badge.border}`,
+                      textTransform: 'uppercase',
+                      whiteSpace: 'nowrap',
                     }}
                   >
                     {status.label}
                   </span>
                 </td>
-                <td style={{ padding: '14px 16px', color: 'var(--dim)', fontSize: '11px', textAlign: 'center' }}>
+                <td style={{ padding: '14px 16px', color: 'var(--dim)', fontSize: '11px', textAlign: 'center', borderBottom: '1px solid rgba(125,211,252,0.06)' }}>
                   {new Date(order.creationDate).toLocaleDateString()}
                 </td>
               </tr>

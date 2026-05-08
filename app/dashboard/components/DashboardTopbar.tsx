@@ -75,7 +75,7 @@ export function DashboardTopbar({
           </button>
         )}
         <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plat)', letterSpacing: 0, textTransform: 'uppercase' }}>
-          {NAV_ITEMS.find((item) => item.id === tab)?.label}
+          {(NAV_ITEMS.find((item) => item.id === tab)?.label || '').replace(/^\p{Emoji}\s*/u, '').trim()}
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>

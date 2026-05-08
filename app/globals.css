@@ -600,6 +600,15 @@ body:has(.dashboard-shell--compact)::after{
   gap:10px;
   margin:12px 0 10px;
 }
+.pwa-orders__tools--sticky{
+  position:sticky;
+  top:calc(52px + env(safe-area-inset-top, 0px));
+  z-index:20;
+  background:linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.88));
+  backdrop-filter:blur(10px);
+  padding:10px 0 8px;
+  margin-top:10px;
+}
 .pwa-orders__search{
   border:1px solid rgba(15,23,42,0.06);
   border-radius:14px;
@@ -803,6 +812,17 @@ body:has(.dashboard-shell--compact)::after{
 .dashboard-sidebar-close{display:none}
 .dashboard-topbar-left{display:flex;align-items:center;gap:10px;min-width:0}
 .dashboard-nav-toggle{display:none}
+
+/* Premium readability tweaks (desktop dashboard only) */
+.dashboard-shell:not(.dashboard-shell--compact) .dashboard-topbar{
+  border-bottom:1px solid rgba(125,211,252,0.12)!important;
+}
+.dashboard-shell:not(.dashboard-shell--compact) .btn{
+  border-radius:12px;
+}
+.dashboard-shell:not(.dashboard-shell--compact) .card{
+  box-shadow:0 10px 26px rgba(0,0,0,0.16);
+}
 
 @supports (min-height:100svh){
   body{min-height:100svh}
@@ -1357,6 +1377,9 @@ textarea{resize:vertical;min-height:100px}
   .btn{min-height:42px;padding:11px 16px;white-space:normal;text-align:center;}
   input,textarea,select{font-size:16px;padding:12px 14px}
   table{min-width:720px}
+.dashboard-shell:not(.dashboard-shell--compact) tr:hover > td{
+  background:rgba(56,189,248,0.06);
+}
   .landing-nav{height:auto;min-height:66px;padding:12px 16px;gap:12px}
   .landing-brand{font-size:24px}
   .landing-nav-actions{gap:8px;justify-content:flex-end}

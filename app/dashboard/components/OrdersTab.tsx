@@ -106,7 +106,8 @@ export function OrdersTab({
     const needsShip = awaiting
     const history = orders
     const [query, setQuery] = useState('')
-    const [filter, setFilter] = useState<CompactOrdersFilter>('all')
+    const defaultFilter: CompactOrdersFilter = needsShip.length > 0 ? 'needs_ship' : 'all'
+    const [filter, setFilter] = useState<CompactOrdersFilter>(defaultFilter)
     const [expandedId, setExpandedId] = useState<string | null>(null)
 
     const allFiltered = useMemo(() => {
@@ -120,9 +121,7 @@ export function OrdersTab({
       })
     }, [filter, history, query])
 
-    const shipFiltered = useMemo(() => {
-      return needsShip.filter((o) => matchesQuery(o, query))
-    }, [needsShip, query])
+    const shipFiltered = useMemo(() => needsShip.filter((o) => matchesQuery(o, query)), [needsShip, query])
 
     const toggleExpanded = (orderId: string) => {
       setExpandedId((prev) => (prev === orderId ? null : orderId))
@@ -163,7 +162,7 @@ export function OrdersTab({
               </div>
             </div>
 
-            <div className="pwa-orders__tools">
+            <div className="pwa-orders__tools pwa-orders__tools--sticky">
               <div className="pwa-orders__search">
                 <input
                   value={query}
