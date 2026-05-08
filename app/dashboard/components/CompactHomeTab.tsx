@@ -69,7 +69,6 @@ export function CompactHomeTab({
           </div>
           <div className="pwa-metric-card__value">{awaitingCount}</div>
           <div className="pwa-metric-card__label">Needs to ship</div>
-          <div className="pwa-metric-card__hint">{awaitingCount > 0 ? 'Awaiting shipment' : 'All caught up!'}</div>
         </div>
         <div className="pwa-metric-card">
           <div className="pwa-metric-card__icon pwa-metric-card__icon--blue">
@@ -81,7 +80,6 @@ export function CompactHomeTab({
           </div>
           <div className="pwa-metric-card__value">{orders.length}</div>
           <div className="pwa-metric-card__label">Total orders</div>
-          <div className="pwa-metric-card__hint">Loaded from eBay</div>
         </div>
         <div className="pwa-metric-card">
           <div className="pwa-metric-card__icon pwa-metric-card__icon--teal">
@@ -91,7 +89,6 @@ export function CompactHomeTab({
           </div>
           <div className="pwa-metric-card__value">{connected ? 'Live' : 'Offline'}</div>
           <div className="pwa-metric-card__label">eBay connection</div>
-          <div className="pwa-metric-card__hint">{connected ? 'Syncing normally' : 'Tap status above'}</div>
         </div>
       </div>
 
@@ -126,11 +123,6 @@ export function CompactHomeTab({
                     </span>
                   </span>
                   <span className="pwa-order-row__price">${total.toFixed(2)}</span>
-                  <span className="pwa-order-row__chev" aria-hidden>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="9 18 15 12 9 6" />
-                    </svg>
-                  </span>
                 </button>
               )
             })}

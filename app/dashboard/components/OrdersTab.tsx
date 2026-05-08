@@ -1,5 +1,89 @@
 import type { EbayOrder } from '../types'
+import { useMemo, useState } from 'react'
+import { getOrderDisplayStatus } from '../order-status'
 import { EmptyState, OrderTable } from './shared'
+
+function dotClassForTone(tone: 'green' | 'red' | 'gold' | 'blue') {
+  if (tone === 'red') return 'pwa-order-row__dot pwa-order-row__dot--red'
+  if (tone === 'blue') return 'pwa-order-row__dot pwa-order-row__dot--blue'
+  if (tone === 'gold') return 'pwa-order-row__dot pwa-order-row__dot--gold'
+  return 'pwa-order-row__dot pwa-order-row__dot--green'
+}
+
+type CompactOrdersFilter = 'all' | 'needs_ship' | 'fulfilled' | 'refunded'
+
+function matchesQuery(order: EbayOrder, query: string) {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  const title = String(order.lineItems?.[0]?.title || '').toLowerCase()
+  const buyer = String(order.buyer?.username || '').toLowerCase()
+  const orderId = String(order.orderId || '').toLowerCase()
+  const sku = String(order.lineItems?.[0]?.sku || '').toLowerCase()
+  const legacyItemId = String(order.lineItems?.[0]?.legacyItemId || '').toLowerCase()
+  return [title, buyer, orderId, sku, legacyItemId].some((v) => v.includes(q))
+}
+
+function CompactOrdersList({
+  orders,
+  expandedId,
+  onToggleExpanded,
+}: {
+  orders: EbayOrder[]
+  expandedId: string | null
+  onToggleExpanded: (orderId: string) => void
+}) {
+  if (orders.length === 0) return null
+
+  return (
+    <div className="pwa-orders__list">
+      {orders.map((order) => {
+        const fullTitle = order.lineItems?.[0]?.title || order.orderId
+        const title = String(fullTitle).slice(0, 80) || order.orderId
+        const total = parseFloat(order.pricingSummary?.total?.value || '0')
+        const date = new Date(order.creationDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        const buyer = order.buyer?.username || 'Buyer'
+        const status = getOrderDisplayStatus(order)
+        const expanded = expandedId === order.orderId
+
+        return (
+          <button
+            key={order.orderId}
+            type="button"
+            className={`pwa-order-row${expanded ? ' pwa-order-row--expanded' : ''}`}
+            onClick={() => onToggleExpanded(order.orderId)}
+          >
+            <span className={dotClassForTone(status.tone)} aria-hidden />
+            <span className="pwa-order-row__main">
+              <span className="pwa-order-row__title">{title}</span>
+              <span className="pwa-order-row__meta">
+                {buyer} · {date} · <span className={`pwa-order-row__status pwa-order-row__status--${status.tone}`}>{status.label}</span>
+              </span>
+              {expanded ? (
+                <span className="pwa-order-row__expand">
+                  <span className="pwa-order-row__expand-line">{fullTitle}</span>
+                  <span className="pwa-order-row__expand-meta">
+                    Order ID <span className="pwa-order-row__mono">{order.orderId}</span>
+                    {order.lineItems?.[0]?.legacyItemId ? (
+                      <>
+                        {' '}· Item <span className="pwa-order-row__mono">{String(order.lineItems[0].legacyItemId)}</span>
+                      </>
+                    ) : null}
+                    {order.lineItems?.[0]?.sku ? (
+                      <>
+                        {' '}· SKU <span className="pwa-order-row__mono">{String(order.lineItems[0].sku)}</span>
+                      </>
+                    ) : null}
+                  </span>
+                </span>
+              ) : null}
+            </span>
+            <span className="pwa-order-row__price">${total.toFixed(2)}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 export function OrdersTab({
   connected,
@@ -17,6 +101,129 @@ export function OrdersTab({
   compact?: boolean
 }) {
   const fulfilled = orders.filter(o => o.orderFulfillmentStatus !== 'NOT_STARTED')
+
+  if (compact) {
+    const needsShip = awaiting
+    const history = orders
+    const [query, setQuery] = useState('')
+    const [filter, setFilter] = useState<CompactOrdersFilter>('all')
+    const [expandedId, setExpandedId] = useState<string | null>(null)
+
+    const allFiltered = useMemo(() => {
+      const withQuery = history.filter((o) => matchesQuery(o, query))
+      if (filter === 'all') return withQuery
+      if (filter === 'needs_ship') return withQuery.filter((o) => getOrderDisplayStatus(o).tone === 'red')
+      if (filter === 'refunded') return withQuery.filter((o) => getOrderDisplayStatus(o).tone === 'blue')
+      return withQuery.filter((o) => {
+        const s = getOrderDisplayStatus(o)
+        return s.tone === 'green' || s.tone === 'gold'
+      })
+    }, [filter, history, query])
+
+    const shipFiltered = useMemo(() => {
+      return needsShip.filter((o) => matchesQuery(o, query))
+    }, [needsShip, query])
+
+    const toggleExpanded = (orderId: string) => {
+      setExpandedId((prev) => (prev === orderId ? null : orderId))
+    }
+
+    return (
+      <div className="pwa-orders">
+        <div className="pwa-orders__head">
+          <div className="pwa-orders__eyebrow">Orders</div>
+          <div className="pwa-orders__title">All orders</div>
+          <div className="pwa-orders__sub">
+            {!connected
+              ? 'Connect eBay to load your order history.'
+              : needsShip.length > 0
+                ? `${needsShip.length} need to ship.`
+                : 'You’re all caught up.'}
+          </div>
+        </div>
+
+        {!connected ? (
+          <div style={{ padding: '0 var(--xpad) 24px' }}>
+            <EmptyState connected={false} onConnect={onOpenSettings} msg="Connect eBay in Settings to load orders." style={{ background: '#fff', padding: '28px 18px' }} />
+          </div>
+        ) : (
+          <>
+            <div className="pwa-orders__stats">
+              <div className="pwa-orders__stat">
+                <div className="pwa-orders__stat-label">Needs to ship</div>
+                <div className="pwa-orders__stat-value">{needsShip.length}</div>
+              </div>
+              <div className="pwa-orders__stat">
+                <div className="pwa-orders__stat-label">Total</div>
+                <div className="pwa-orders__stat-value">{orders.length}</div>
+              </div>
+              <div className="pwa-orders__stat">
+                <div className="pwa-orders__stat-label">Revenue</div>
+                <div className="pwa-orders__stat-value">${grossRevenue.toFixed(0)}</div>
+              </div>
+            </div>
+
+            <div className="pwa-orders__tools">
+              <div className="pwa-orders__search">
+                <input
+                  value={query}
+                  onChange={(e) => { setQuery(e.target.value); setExpandedId(null) }}
+                  placeholder="Search title, buyer, SKU…"
+                  inputMode="search"
+                  className="pwa-orders__search-input"
+                />
+              </div>
+              <div className="pwa-orders__chips" role="tablist" aria-label="Order filters">
+                {([
+                  { id: 'all', label: 'All' },
+                  { id: 'needs_ship', label: 'Needs ship' },
+                  { id: 'fulfilled', label: 'Fulfilled' },
+                  { id: 'refunded', label: 'Refunded' },
+                ] as Array<{ id: CompactOrdersFilter; label: string }>).map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`pwa-orders__chip${filter === c.id ? ' is-active' : ''}`}
+                    onClick={() => { setFilter(c.id); setExpandedId(null) }}
+                    role="tab"
+                    aria-selected={filter === c.id}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {connected && needsShip.length > 0 ? (
+          <section className="pwa-orders__section">
+            <div className="pwa-orders__section-head">
+              <div className="pwa-orders__section-title">Needs to ship</div>
+              <div className="pwa-orders__section-count">{shipFiltered.length}</div>
+            </div>
+            <CompactOrdersList orders={shipFiltered} expandedId={expandedId} onToggleExpanded={toggleExpanded} />
+          </section>
+        ) : null}
+
+        {connected ? (
+          <section className="pwa-orders__section">
+            <div className="pwa-orders__section-head">
+              <div className="pwa-orders__section-title">All orders</div>
+              <div className="pwa-orders__section-count">{allFiltered.length}</div>
+            </div>
+            {history.length === 0 ? (
+              <div className="pwa-empty-card">No orders yet — sync from the menu when you’re ready.</div>
+            ) : allFiltered.length === 0 ? (
+              <div className="pwa-empty-card">No matches.</div>
+            ) : (
+              <CompactOrdersList orders={allFiltered} expandedId={expandedId} onToggleExpanded={toggleExpanded} />
+            )}
+          </section>
+        ) : null}
+      </div>
+    )
+  }
 
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>

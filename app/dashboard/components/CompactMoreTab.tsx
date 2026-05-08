@@ -21,9 +21,7 @@ export function CompactMoreTab({
   return (
     <div className="pwa-more">
       <h1 className="pwa-more__title">More</h1>
-      <p className="pwa-more__intro">
-        Extras stay light here — open the full dashboard on a computer for dense tables and automation.
-      </p>
+      <p className="pwa-more__intro">Quick settings and tools.</p>
 
       <div className="pwa-more__list">
         {ROWS.map((row) => (
