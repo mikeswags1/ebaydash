@@ -2,6 +2,7 @@ import { EBAY_FEE_RATE } from '../constants'
 import type { FinderProduct, ListResult } from '../types'
 import { getListingPreview } from '../utils'
 import Image from 'next/image'
+import { dashboardDisplayImageUrl } from '@/lib/dashboard-display-image'
 
 export function SellOnEbayModal({
   product,
@@ -29,6 +30,7 @@ export function SellOnEbayModal({
   if (!product) return null
 
   const preview = getListingPreview(listPrice, product.amazonPrice, '0', EBAY_FEE_RATE)
+  const modalThumb = dashboardDisplayImageUrl(product.imageUrl)
 
   return (
     <div
@@ -76,12 +78,14 @@ export function SellOnEbayModal({
         ) : (
           <>
             <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', marginBottom: '24px' }}>
-              {product.imageUrl ? (
+              {modalThumb ? (
                 <Image
-                  src={product.imageUrl}
+                  src={modalThumb}
                   alt={product.title}
                   width={64}
                   height={64}
+                  unoptimized
+                  referrerPolicy="no-referrer"
                   style={{
                     width: '64px',
                     height: '64px',

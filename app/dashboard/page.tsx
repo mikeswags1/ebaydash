@@ -16,7 +16,14 @@ import { ProductListingTab } from './components/ProductListingTab'
 import { ContinuousListingTab } from './components/ContinuousListingTab'
 import { CampaignsTab } from './components/CampaignsTab'
 import { SettingsTab } from './components/SettingsTab'
+import { CompactBottomNav } from './components/CompactBottomNav'
+import { CompactPwaTopbar } from './components/CompactPwaTopbar'
+import { CompactPwaMenu } from './components/CompactPwaMenu'
+import { CompactHomeTab } from './components/CompactHomeTab'
+import { CompactMoreTab } from './components/CompactMoreTab'
+import { CompactDesktopHint } from './components/CompactDesktopHint'
 import { SellOnEbayModal } from './components/SellOnEbayModal'
+import { useCompactDashboard } from './hooks/useCompactDashboard'
 import type { BannerState, EbayCredentialsSummary, FinancialItem, FinancialSummary, FinderProduct, ListProgress, OrderAsinMap, PerformanceData, ProductSourceHealth, ScriptMessage, Tab } from './types'
 import type { AsinResult, EbayOrder, ListResult } from './types'
 import {
@@ -153,9 +160,11 @@ function mergeRefilledProducts(current: FinderProduct[] | null, incoming: Finder
 export default function Dashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const compact = useCompactDashboard()
 
   const [tab, setTab] = useState<Tab>('overview')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [pwaMenuOpen, setPwaMenuOpen] = useState(false)
   const [banner, setBanner] = useState<BannerState | null>(null)
   const [connectionState, setConnectionState] = useState<ConnectionState>({
     ebayConnected: false,
@@ -329,6 +338,12 @@ export default function Dashboard() {
       router.replace('/login')
     }
   }, [router, status])
+
+  useEffect(() => {
+    if (!compact && tab === 'more') {
+      setTab('overview')
+    }
+  }, [compact, tab])
 
   const shuffleVisibleFinderResults = useCallback(() => {
     setFinderRotationTick((tick) => tick + 1)
@@ -973,7 +988,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="dashboard-shell">
+    <div className={compact ? 'dashboard-shell dashboard-shell--compact' : 'dashboard-shell'}>
       <DashboardSidebar
         tab={tab}
         onTabChange={setTab}
@@ -984,36 +999,84 @@ export default function Dashboard() {
         onSignOut={() => signOut({ callbackUrl: '/' })}
         mobileOpen={mobileNavOpen}
         onRequestClose={() => setMobileNavOpen(false)}
+        hidden={compact}
       />
 
       <main className="dashboard-main">
         <DashboardBanner banner={banner} onClose={() => setBanner(null)} />
-        <DashboardTopbar
-          tab={tab}
-          syncTime={orderState.syncTime}
-          syncing={connectionState.syncing}
-          onSync={() => {
-            void loadOrders()
-            void loadFinancials()
-            if (tab === 'performance') void loadPerformance()
-            if (tab === 'settings') void loadProductSourceHealth()
-          }}
-          onToggleNav={() => setMobileNavOpen((prev) => !prev)}
-        />
+        {compact ? (
+          <>
+            <CompactPwaTopbar
+              connected={connectionState.ebayConnected}
+              onMenuClick={() => setPwaMenuOpen(true)}
+              onStatusClick={() => setTab('settings')}
+            />
+            <CompactPwaMenu
+              open={pwaMenuOpen}
+              onClose={() => setPwaMenuOpen(false)}
+              onSync={() => {
+                void loadOrders()
+                void loadFinancials()
+                if (tab === 'performance') void loadPerformance()
+                if (tab === 'settings') void loadProductSourceHealth()
+              }}
+              syncing={connectionState.syncing}
+              syncTime={orderState.syncTime}
+              onFulfillment={() => setTab('fulfillment')}
+              onSettings={() => setTab('settings')}
+              onSignOut={() => signOut({ callbackUrl: '/' })}
+            />
+          </>
+        ) : (
+          <DashboardTopbar
+            tab={tab}
+            syncTime={orderState.syncTime}
+            syncing={connectionState.syncing}
+            onSync={() => {
+              void loadOrders()
+              void loadFinancials()
+              if (tab === 'performance') void loadPerformance()
+              if (tab === 'settings') void loadProductSourceHealth()
+            }}
+            onToggleNav={() => setMobileNavOpen((prev) => !prev)}
+            compact={false}
+          />
+        )}
 
         <div className="dashboard-content">
           {tab === 'overview' ? (
-            <OverviewTab
-              connected={connectionState.ebayConnected}
-              orders={orderState.orders}
-              awaitingCount={orderState.awaiting.length}
-              grossRevenue={grossRevenue}
-              userName={session?.user?.name || session?.user?.email || null}
-              onOpenSettings={() => setTab('settings')}
-            />
+            compact ? (
+              <CompactHomeTab
+                connected={connectionState.ebayConnected}
+                awaitingCount={orderState.awaiting.length}
+                orders={orderState.orders}
+                userName={session?.user?.name || session?.user?.email || null}
+                onOpenSettings={() => setTab('settings')}
+                onGo={setTab}
+              />
+            ) : (
+              <OverviewTab
+                connected={connectionState.ebayConnected}
+                orders={orderState.orders}
+                awaitingCount={orderState.awaiting.length}
+                grossRevenue={grossRevenue}
+                userName={session?.user?.name || session?.user?.email || null}
+                onOpenSettings={() => setTab('settings')}
+              />
+            )
+          ) : null}
+          {tab === 'more' ? (
+            <CompactMoreTab onOpenTab={setTab} onSignOut={() => signOut({ callbackUrl: '/' })} />
           ) : null}
           {tab === 'orders' ? (
-            <OrdersTab connected={connectionState.ebayConnected} orders={orderState.orders} awaiting={orderState.awaiting} grossRevenue={grossRevenue} onOpenSettings={() => setTab('settings')} />
+            <OrdersTab
+              connected={connectionState.ebayConnected}
+              orders={orderState.orders}
+              awaiting={orderState.awaiting}
+              grossRevenue={grossRevenue}
+              onOpenSettings={() => setTab('settings')}
+              compact={compact}
+            />
           ) : null}
           {tab === 'fulfillment' ? (
             <FulfillmentTab
@@ -1021,6 +1084,7 @@ export default function Dashboard() {
               awaiting={orderState.awaiting}
               orderAsinMap={orderState.orderAsinMap}
               onOpenSettings={() => setTab('settings')}
+              compact={compact}
             />
           ) : null}
           {tab === 'financials' ? (
@@ -1034,6 +1098,7 @@ export default function Dashboard() {
               onPeriodChange={(p) => { setFinancialPeriod(p); void loadFinancials(p) }}
               onRefresh={() => void loadFinancials()}
               onOpenSettings={() => setTab('settings')}
+              compact={compact}
             />
           ) : null}
           {tab === 'performance' ? (
@@ -1045,10 +1110,18 @@ export default function Dashboard() {
               onRefresh={() => void loadPerformance()}
               onOpenSettings={() => setTab('settings')}
               onOpenProductFinder={() => setTab('product')}
+              compact={compact}
             />
           ) : null}
           {tab === 'scripts' ? (
-            <ScriptsTab scriptRunning={scriptRunning} scriptMessage={scriptMessage} onRunScript={(file) => handleRunScript(file)} onOpenProductFinder={() => setTab('product')} />
+            compact ? (
+              <CompactDesktopHint
+                title="Scripts"
+                body="Automation and bulk actions are built for a large screen. Open StackPilot in a desktop browser when you need to run scripts."
+              />
+            ) : (
+              <ScriptsTab scriptRunning={scriptRunning} scriptMessage={scriptMessage} onRunScript={(file) => handleRunScript(file)} onOpenProductFinder={() => setTab('product')} />
+            )
           ) : null}
           {tab === 'asin' ? (
             <AsinLookupTab
@@ -1091,6 +1164,7 @@ export default function Dashboard() {
               onListAll={() => void handleListAll()}
               listAllProgress={finderState.listAllProgress}
               connected={connectionState.ebayConnected}
+              compact={compact}
             />
           ) : null}
           {tab === 'continuous' ? (
@@ -1105,10 +1179,18 @@ export default function Dashboard() {
               onListAll={() => void handleContinuousListAll()}
               listAllProgress={continuousFinderState.listAllProgress}
               connected={connectionState.ebayConnected}
+              compact={compact}
             />
           ) : null}
           {tab === 'campaigns' ? (
-            <CampaignsTab connected={connectionState.ebayConnected} />
+            compact ? (
+              <CompactDesktopHint
+                title="Campaigns"
+                body="Creating and tuning promoted listings is easier on a wide layout. Use Seller Hub on desktop for deep campaign work, or open the full StackPilot dashboard in a browser."
+              />
+            ) : (
+              <CampaignsTab connected={connectionState.ebayConnected} />
+            )
           ) : null}
           {tab === 'settings' ? (
             <SettingsTab
@@ -1129,10 +1211,15 @@ export default function Dashboard() {
               sourceHealthLoading={sourceHealthState.loading}
               sourceHealthError={sourceHealthState.error}
               onRefreshSourceHealth={() => void loadProductSourceHealth()}
+              compact={compact}
             />
           ) : null}
         </div>
       </main>
+
+      {compact ? (
+        <CompactBottomNav tab={tab} onTabChange={setTab} awaitingCount={orderState.awaiting.length} />
+      ) : null}
 
       <SellOnEbayModal
         product={listingState.modal}

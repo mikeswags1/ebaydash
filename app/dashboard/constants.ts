@@ -13,6 +13,10 @@ export const NAV_ITEMS: Array<{ id: Tab; label: string; badge?: 'orders' }> = [
   { id: 'continuous', label: '🔄 Continuous Listing' },
   { id: 'campaigns', label: '📢 Campaigns' },
   { id: 'settings', label: '⚙️ Settings' },
+  { id: 'more', label: '⋯ More' },
 ]
+
+/** Tabs opened from the compact "More" hub — bottom nav keeps "More" highlighted. */
+export const MORE_SECTION_TABS: Tab[] = ['fulfillment', 'settings', 'financials', 'performance', 'continuous', 'asin', 'scripts', 'campaigns']
 
 export const EBAY_FEE_RATE = EBAY_DEFAULT_FEE_RATE

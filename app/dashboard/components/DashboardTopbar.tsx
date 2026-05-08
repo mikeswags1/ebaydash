@@ -14,7 +14,7 @@ export function DashboardBanner({
 
   return (
     <div
-      className="dashboard-banner"
+      className={`dashboard-banner dashboard-banner--${success ? 'success' : 'error'}`}
       style={{
         padding: '10px var(--xpad)',
         fontSize: '12px',
@@ -41,16 +41,18 @@ export function DashboardTopbar({
   syncing,
   onSync,
   onToggleNav,
+  compact,
 }: {
   tab: Tab
   syncTime: string | null
   syncing: boolean
   onSync: () => void
   onToggleNav: () => void
+  compact?: boolean
 }) {
   return (
     <header
-      className="dashboard-topbar"
+      className={`dashboard-topbar${compact ? ' dashboard-topbar--compact' : ''}`}
       style={{
         height: '56px',
         background: 'rgba(8,17,31,0.84)',
@@ -67,9 +69,11 @@ export function DashboardTopbar({
       }}
     >
       <div className="dashboard-topbar-left">
-        <button type="button" className="dashboard-nav-toggle" onClick={onToggleNav} aria-label="Open navigation">
-          Menu
-        </button>
+        {compact ? null : (
+          <button type="button" className="dashboard-nav-toggle" onClick={onToggleNav} aria-label="Open navigation">
+            Menu
+          </button>
+        )}
         <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plat)', letterSpacing: 0, textTransform: 'uppercase' }}>
           {NAV_ITEMS.find((item) => item.id === tab)?.label}
         </div>

@@ -7,12 +7,14 @@ export function OrdersTab({
   awaiting,
   grossRevenue,
   onOpenSettings,
+  compact,
 }: {
   connected: boolean
   orders: EbayOrder[]
   awaiting: EbayOrder[]
   grossRevenue: number
   onOpenSettings: () => void
+  compact?: boolean
 }) {
   const fulfilled = orders.filter(o => o.orderFulfillmentStatus !== 'NOT_STARTED')
 
@@ -20,14 +22,14 @@ export function OrdersTab({
     <div style={{ animation: 'fadein 0.22s ease' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px var(--xpad) 28px' }}>
+      <div style={{ padding: compact ? '22px var(--xpad) 18px' : '40px var(--xpad) 28px' }}>
         <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--plat)', marginBottom: '8px' }}>
-          StackPilot / Orders
+          {compact ? 'Orders' : 'StackPilot / Orders'}
         </div>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: '36px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
-          Order Management
+        <div style={{ fontFamily: 'var(--serif)', fontSize: compact ? '26px' : '36px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
+          {compact ? 'Your orders' : 'Order Management'}
         </div>
-        <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.6 }}>
+        <div style={{ fontSize: compact ? '12px' : '13px', color: 'var(--sil)', lineHeight: 1.6 }}>
           {!connected
             ? 'Connect your eBay account to start loading orders.'
             : awaiting.length > 0

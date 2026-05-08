@@ -13,6 +13,7 @@ export function ContinuousListingTab({
   onListAll,
   listAllProgress,
   connected,
+  compact,
 }: {
   finderLoading: boolean
   finderResults: FinderProduct[] | null
@@ -24,12 +25,20 @@ export function ContinuousListingTab({
   onListAll: () => void
   listAllProgress: ListProgress | null
   connected: boolean
+  compact?: boolean
 }) {
   const hasResults = Boolean(finderResults?.length)
 
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
-      <SectionIntro eyebrow="StackPilot / Queue" title="Continuous Listing" />
+      {compact ? (
+        <div style={{ padding: '22px var(--xpad) 8px' }}>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 700, color: 'var(--txt)' }}>Continuous listing</div>
+          <div style={{ fontSize: '12px', color: 'var(--sil)', marginTop: '6px', lineHeight: 1.5 }}>Auto-built queue — same tools as List, fewer niches.</div>
+        </div>
+      ) : (
+        <SectionIntro eyebrow="StackPilot / Queue" title="Continuous Listing" />
+      )}
 
       <div style={{ padding: '0 var(--xpad) 44px' }}>
         {!connected ? (
@@ -100,6 +109,7 @@ export function ContinuousListingTab({
             onOpenListModal={onOpenListModal}
             onListAll={onListAll}
             listAllProgress={listAllProgress}
+            compact={compact}
           />
         ) : null}
       </div>

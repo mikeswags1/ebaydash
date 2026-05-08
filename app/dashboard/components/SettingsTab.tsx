@@ -14,6 +14,7 @@ export function SettingsTab({
   sourceHealthLoading,
   sourceHealthError,
   onRefreshSourceHealth,
+  compact,
 }: {
   connected: boolean
   needsReconnect: boolean
@@ -27,13 +28,21 @@ export function SettingsTab({
   sourceHealthLoading: boolean
   sourceHealthError: string | null
   onRefreshSourceHealth: () => void
+  compact?: boolean
 }) {
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
-      <SectionIntro eyebrow="StackPilot / Configuration" title="Settings" />
+      {compact ? (
+        <div style={{ padding: '22px var(--xpad) 12px' }}>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 700, color: 'var(--txt)' }}>Settings</div>
+          <div style={{ fontSize: '12px', color: 'var(--sil)', marginTop: '6px' }}>eBay connection and sourcing health.</div>
+        </div>
+      ) : (
+        <SectionIntro eyebrow="StackPilot / Configuration" title="Settings" />
+      )}
 
-      <div style={{ padding: '0 var(--xpad) 44px', maxWidth: '980px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
+      <div style={{ padding: '0 var(--xpad) 44px', maxWidth: '980px', display: 'flex', flexDirection: 'column', gap: compact ? '14px' : '20px' }}>
+        <div className="card" style={{ padding: compact ? '24px 18px' : '40px', textAlign: 'center' }}>
           {connected ? (
             <>
               <StatusIcon tone="success" label="OK" />

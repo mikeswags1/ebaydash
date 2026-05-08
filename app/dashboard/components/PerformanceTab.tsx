@@ -9,6 +9,7 @@ export function PerformanceTab({
   onRefresh,
   onOpenSettings,
   onOpenProductFinder,
+  compact,
 }: {
   connected: boolean
   loading: boolean
@@ -17,6 +18,7 @@ export function PerformanceTab({
   onRefresh: () => void
   onOpenSettings: () => void
   onOpenProductFinder: () => void
+  compact?: boolean
 }) {
   const summary = data?.summary
 
@@ -27,11 +29,19 @@ export function PerformanceTab({
 
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
-      <SectionIntro
-        eyebrow="StackPilot / Intelligence"
-        title="Performance"
-        subtitle="See what's selling, what's not, and exactly what to do next. Based on your last 90 days of eBay activity."
-      />
+      {compact ? (
+        <div style={{ padding: '22px var(--xpad) 12px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--plat)', marginBottom: '6px' }}>Performance</div>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: '24px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1 }}>Last 90 days</div>
+          <div style={{ fontSize: '12px', color: 'var(--sil)', marginTop: '8px', lineHeight: 1.5 }}>Key numbers only — category tables are on the full dashboard.</div>
+        </div>
+      ) : (
+        <SectionIntro
+          eyebrow="StackPilot / Intelligence"
+          title="Performance"
+          subtitle="See what's selling, what's not, and exactly what to do next. Based on your last 90 days of eBay activity."
+        />
+      )}
 
       {!connected ? (
         <EmptyState connected={false} onConnect={onOpenSettings} msg="Connect your eBay account to see your sales performance." style={{ margin: '0 var(--xpad) 44px' }} />
@@ -105,7 +115,19 @@ export function PerformanceTab({
             </div>
           </div>
 
+          {compact ? (
+            <div style={{ padding: '0 var(--xpad) 36px' }}>
+              <button type="button" onClick={onOpenProductFinder} className="btn btn-gold btn-sm" style={{ marginRight: '10px' }}>
+                Find products
+              </button>
+              <button type="button" onClick={onRefresh} className="btn btn-ghost btn-sm">
+                Refresh
+              </button>
+            </div>
+          ) : null}
+
           {/* Action cards */}
+          {compact ? null : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', padding: '0 var(--xpad) 28px' }}>
             <ActionCard
               title="List More Of These"
@@ -126,9 +148,10 @@ export function PerformanceTab({
               actionLabel="Refresh"
             />
           </div>
+          )}
 
           {/* Category breakdown */}
-          {allNiches.length > 0 ? (
+          {compact ? null : allNiches.length > 0 ? (
             <div style={{ padding: '0 44px 28px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                 <div>
@@ -187,7 +210,7 @@ export function PerformanceTab({
           ) : null}
 
           {/* Top products */}
-          {topProducts.length > 0 ? (
+          {compact ? null : topProducts.length > 0 ? (
             <div style={{ padding: '0 44px 44px' }}>
               <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)', marginBottom: '4px' }}>
                 Your Top Products

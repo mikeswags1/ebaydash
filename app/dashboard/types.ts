@@ -1,4 +1,4 @@
-export type Tab = 'overview' | 'orders' | 'fulfillment' | 'financials' | 'performance' | 'scripts' | 'asin' | 'product' | 'continuous' | 'campaigns' | 'settings'
+export type Tab = 'overview' | 'orders' | 'fulfillment' | 'financials' | 'performance' | 'scripts' | 'asin' | 'product' | 'continuous' | 'campaigns' | 'settings' | 'more'
 
 export interface EbayShipToAddress {
   fullName?: string

@@ -1,5 +1,6 @@
 'use client'
 import Image from 'next/image'
+import { dashboardDisplayImageUrl } from '@/lib/dashboard-display-image'
 import { useState } from 'react'
 import type { AsinResult, EbayOrder, OrderAsinMap } from '../types'
 
@@ -63,6 +64,8 @@ function AmazonAsinLookup() {
     setLinkError(null)
   }
 
+  const resultThumb = result ? dashboardDisplayImageUrl(result.imageUrl) : ''
+
   return (
     <div className="card" style={{ padding: '28px 32px' }}>
       <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--txt)', marginBottom: '4px' }}>
@@ -101,12 +104,14 @@ function AmazonAsinLookup() {
         <>
           {/* Product result */}
           <div style={{ display: 'flex', gap: '18px', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap' }}>
-            {result.imageUrl ? (
+            {resultThumb ? (
               <Image
-                src={result.imageUrl}
+                src={resultThumb}
                 alt={result.title}
                 width={88}
                 height={88}
+                unoptimized
+                referrerPolicy="no-referrer"
                 style={{ width: '88px', height: '88px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }}
               />
             ) : null}
@@ -218,6 +223,7 @@ export function AsinLookupTab({
     const itemId = o.lineItems?.[0]?.legacyItemId || ''
     return itemId && !orderAsinMap[itemId]?.asin
   })
+  const mappedAsinThumb = asinResult ? dashboardDisplayImageUrl(asinResult.imageUrl) : ''
 
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
@@ -304,12 +310,14 @@ export function AsinLookupTab({
                 ✓ Amazon Source Found
               </div>
               <div style={{ display: 'flex', gap: '18px', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap' }}>
-                {asinResult.imageUrl ? (
+                {mappedAsinThumb ? (
                   <Image
-                    src={asinResult.imageUrl}
+                    src={mappedAsinThumb}
                     alt={asinResult.title}
                     width={90}
                     height={90}
+                    unoptimized
+                    referrerPolicy="no-referrer"
                     style={{
                       width: '90px',
                       height: '90px',

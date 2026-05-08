@@ -19,6 +19,7 @@ export function FinancialsTab({
   onPeriodChange,
   onRefresh,
   onOpenSettings,
+  compact,
 }: {
   connected: boolean
   loading: boolean
@@ -29,19 +30,22 @@ export function FinancialsTab({
   onPeriodChange: (p: string) => void
   onRefresh: () => void
   onOpenSettings: () => void
+  compact?: boolean
 }) {
   const periodLabel = PERIODS.find(p => p.value === period)?.label || period
+  const hx = compact ? 'var(--xpad)' : '44px'
+  const heroCols = compact ? '1fr' : '1fr 1fr 1fr'
 
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px 44px 24px' }}>
+      <div style={{ padding: compact ? `22px var(--xpad) 16px` : '40px 44px 24px' }}>
         <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--plat)', marginBottom: '8px' }}>
-          StackPilot / Analytics
+          {compact ? 'Money' : 'StackPilot / Analytics'}
         </div>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: '36px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
-          Financials
+        <div style={{ fontFamily: 'var(--serif)', fontSize: compact ? '24px' : '36px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
+          {compact ? 'Snapshot' : 'Financials'}
         </div>
         <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.6 }}>
           {connected
@@ -51,14 +55,14 @@ export function FinancialsTab({
       </div>
 
       {!connected ? (
-        <div style={{ padding: '0 44px 44px' }}>
+        <div style={{ padding: `0 ${hx} 44px` }}>
           <EmptyState connected={false} onConnect={onOpenSettings} msg="Connect eBay to load your real profitability data." />
         </div>
       ) : null}
 
       {/* Period selector */}
       {connected ? (
-        <div style={{ padding: '0 44px 28px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        <div style={{ padding: `0 ${hx} 28px`, display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           {PERIODS.map(p => (
             <button
               key={p.value}
@@ -83,13 +87,13 @@ export function FinancialsTab({
       ) : null}
 
       {connected && loading ? (
-        <div className="card" style={{ margin: '0 44px 44px', padding: '48px', textAlign: 'center' }}>
+        <div className="card" style={{ margin: `0 ${hx} 44px`, padding: '48px', textAlign: 'center' }}>
           <div style={{ fontSize: '13px', color: 'var(--dim)' }}>Loading your financials...</div>
         </div>
       ) : null}
 
       {connected && error ? (
-        <div className="card" style={{ margin: '0 44px 24px', padding: '24px' }}>
+        <div className="card" style={{ margin: `0 ${hx} 24px`, padding: '24px' }}>
           <div style={{ fontSize: '13px', color: 'var(--red)', marginBottom: '14px' }}>{error}</div>
           <button onClick={onRefresh} className="btn btn-gold btn-sm">Retry</button>
         </div>
@@ -98,8 +102,8 @@ export function FinancialsTab({
       {connected && summary ? (
         <>
           {/* Hero — Net Profit front and center */}
-          <div style={{ padding: '0 44px 28px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+          <div style={{ padding: `0 ${hx} 28px` }}>
+            <div style={{ display: 'grid', gridTemplateColumns: heroCols, gap: '16px' }}>
               <HeroCard
                 label="Net Profit"
                 value={`$${summary.profit.toFixed(2)}`}
@@ -125,7 +129,9 @@ export function FinancialsTab({
           </div>
 
           {/* Money flow breakdown */}
-          <div style={{ padding: '0 44px 28px' }}>
+          {compact ? null : (
+          <>
+          <div style={{ padding: `0 ${hx} 28px` }}>
             <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)', marginBottom: '14px' }}>
               Where Your Money Went
             </div>
@@ -173,16 +179,18 @@ export function FinancialsTab({
           </div>
 
           {/* Secondary stats */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '14px', padding: '0 44px 28px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '14px', padding: `0 ${hx} 28px` }}>
             <StatCard label="Items Sold" value={summary.soldItems.toString()} hint="Total line items" />
             <StatCard label="Tracked" value={summary.trackedItems.toString()} hint="Items with cost data" />
             {summary.refundedItems ? <StatCard label="Refunded" value={String(summary.refundedItems)} hint={`$${(summary.refundedRevenue || 0).toFixed(2)} back to buyers`} tone="#74a9ff" /> : null}
             {summary.missingCostItems > 0 ? <StatCard label="Missing Cost" value={String(summary.missingCostItems)} hint="No Amazon cost saved" tone="var(--gold)" /> : null}
           </div>
+          </>
+          )}
 
           {/* Alerts */}
           {(summary.missingCostItems > 0 || summary.refundedItems) ? (
-            <div style={{ padding: '0 44px 24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ padding: `0 ${hx} 24px`, display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {summary.missingCostItems > 0 ? (
                 <InfoBanner tone="gold" text={`${summary.missingCostItems} item${summary.missingCostItems > 1 ? 's are' : ' is'} missing Amazon cost — profit totals only count items where we have your cost saved. New listings save this automatically.`} />
               ) : null}
@@ -193,83 +201,94 @@ export function FinancialsTab({
           ) : null}
 
           {/* Sold items table */}
-          <div style={{ padding: '0 44px 44px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '12px' }}>
-              <div>
-                <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)' }}>
-                  Every Sale — {periodLabel}
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '4px' }}>
-                  {items.length} line item{items.length !== 1 ? 's' : ''} — profit per product after all costs
-                </div>
-              </div>
-              <button onClick={onRefresh} className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }}>Refresh</button>
+          {compact ? (
+            <div style={{ padding: `0 ${hx} 40px` }}>
+              <p style={{ fontSize: '12px', color: 'var(--dim)', lineHeight: 1.55, margin: '0 0 12px' }}>
+                Line-by-line sales are easier on a larger screen. Sync from the top bar to refresh these numbers.
+              </p>
+              <button type="button" onClick={onRefresh} className="btn btn-ghost btn-sm" style={{ fontSize: '12px' }}>
+                Refresh
+              </button>
             </div>
+          ) : (
+            <div style={{ padding: '0 44px 44px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)' }}>
+                    Every Sale — {periodLabel}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '4px' }}>
+                    {items.length} line item{items.length !== 1 ? 's' : ''} — profit per product after all costs
+                  </div>
+                </div>
+                <button onClick={onRefresh} className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }}>Refresh</button>
+              </div>
 
-            {items.length === 0 ? (
-              <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
-                <div style={{ fontSize: '22px', marginBottom: '10px' }}>💰</div>
-                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)', marginBottom: '6px' }}>No sales yet for this period</div>
-                <div style={{ fontSize: '12px', color: 'var(--dim)' }}>Try a wider time range or sync your eBay orders.</div>
-              </div>
-            ) : (
-              <div className="card" style={{ overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: 'rgba(15,35,56,0.92)', borderBottom: '1px solid rgba(125,211,252,0.12)' }}>
-                      {[
-                        { label: 'Item', left: true },
-                        { label: 'Sale Price', left: false },
-                        { label: 'Amazon Cost', left: false },
-                        { label: 'eBay Fees', left: false },
-                        { label: 'Profit', left: false },
-                        { label: 'ROI', left: false },
-                        { label: 'Date', left: false },
-                      ].map(h => (
-                        <th key={h.label} style={{ color: 'var(--plat)', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, padding: '12px 14px', textAlign: h.left ? 'left' : 'center', whiteSpace: 'nowrap' }}>
-                          {h.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item, i) => (
-                      <tr key={item.id} style={{ background: i % 2 === 0 ? 'rgba(14,27,44,0.88)' : 'rgba(11,22,36,0.88)', borderBottom: '1px solid rgba(125,211,252,0.08)' }}>
-                        <td style={{ padding: '12px 14px', maxWidth: '280px' }}>
-                          <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</div>
-                          <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '2px' }}>
-                            {item.asin || '—'}
-                            {item.refundStatus && item.refundStatus !== 'none' ? (
-                              <span style={{ marginLeft: '6px', color: '#74a9ff', fontFamily: 'inherit', fontSize: '9px', fontWeight: 600 }}>
-                                {item.refundStatus === 'full' ? 'Refunded' : item.refundStatus === 'partial' ? 'Partial Refund' : 'Refund Pending'}
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td style={tc('var(--gld2)')}>${item.ebayRevenue.toFixed(2)}</td>
-                        <td style={tc(item.amazonCost === null ? 'var(--gold)' : 'var(--txt)')}>
-                          {item.amazonCost === null ? '—' : `$${item.amazonCost.toFixed(2)}`}
-                        </td>
-                        <td style={tc('var(--dim)')}>
-                          <div>${item.ebayFees.toFixed(2)}</div>
-                          <div style={{ fontSize: '8px', color: 'rgba(120,110,80,0.7)', marginTop: '1px' }}>{item.feeSource === 'actual' ? 'actual' : 'est.'}</div>
-                        </td>
-                        <td style={tc(item.profit !== null && item.profit >= 0 ? 'var(--grn)' : 'var(--red)')}>
-                          {item.profit === null ? '—' : `$${item.profit.toFixed(2)}`}
-                        </td>
-                        <td style={tc(item.roi !== null && item.roi >= 30 ? 'var(--grn)' : item.roi !== null && item.roi >= 0 ? 'var(--gold)' : 'var(--red)')}>
-                          {item.roi === null ? '—' : `${item.roi.toFixed(0)}%`}
-                        </td>
-                        <td style={{ padding: '12px 14px', textAlign: 'center', fontSize: '10px', color: 'var(--dim)' }}>
-                          {new Date(item.soldAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </td>
+              {items.length === 0 ? (
+                <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '22px', marginBottom: '10px' }}>💰</div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)', marginBottom: '6px' }}>No sales yet for this period</div>
+                  <div style={{ fontSize: '12px', color: 'var(--dim)' }}>Try a wider time range or sync your eBay orders.</div>
+                </div>
+              ) : (
+                <div className="card" style={{ overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(15,35,56,0.92)', borderBottom: '1px solid rgba(125,211,252,0.12)' }}>
+                        {[
+                          { label: 'Item', left: true },
+                          { label: 'Sale Price', left: false },
+                          { label: 'Amazon Cost', left: false },
+                          { label: 'eBay Fees', left: false },
+                          { label: 'Profit', left: false },
+                          { label: 'ROI', left: false },
+                          { label: 'Date', left: false },
+                        ].map(h => (
+                          <th key={h.label} style={{ color: 'var(--plat)', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, padding: '12px 14px', textAlign: h.left ? 'left' : 'center', whiteSpace: 'nowrap' }}>
+                            {h.label}
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+                    </thead>
+                    <tbody>
+                      {items.map((item, i) => (
+                        <tr key={item.id} style={{ background: i % 2 === 0 ? 'rgba(14,27,44,0.88)' : 'rgba(11,22,36,0.88)', borderBottom: '1px solid rgba(125,211,252,0.08)' }}>
+                          <td style={{ padding: '12px 14px', maxWidth: '280px' }}>
+                            <div style={{ fontSize: '12px', color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</div>
+                            <div style={{ fontSize: '9px', fontFamily: 'monospace', color: 'var(--dim)', marginTop: '2px' }}>
+                              {item.asin || '—'}
+                              {item.refundStatus && item.refundStatus !== 'none' ? (
+                                <span style={{ marginLeft: '6px', color: '#74a9ff', fontFamily: 'inherit', fontSize: '9px', fontWeight: 600 }}>
+                                  {item.refundStatus === 'full' ? 'Refunded' : item.refundStatus === 'partial' ? 'Partial Refund' : 'Refund Pending'}
+                                </span>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td style={tc('var(--gld2)')}>${item.ebayRevenue.toFixed(2)}</td>
+                          <td style={tc(item.amazonCost === null ? 'var(--gold)' : 'var(--txt)')}>
+                            {item.amazonCost === null ? '—' : `$${item.amazonCost.toFixed(2)}`}
+                          </td>
+                          <td style={tc('var(--dim)')}>
+                            <div>${item.ebayFees.toFixed(2)}</div>
+                            <div style={{ fontSize: '8px', color: 'rgba(120,110,80,0.7)', marginTop: '1px' }}>{item.feeSource === 'actual' ? 'actual' : 'est.'}</div>
+                          </td>
+                          <td style={tc(item.profit !== null && item.profit >= 0 ? 'var(--grn)' : 'var(--red)')}>
+                            {item.profit === null ? '—' : `$${item.profit.toFixed(2)}`}
+                          </td>
+                          <td style={tc(item.roi !== null && item.roi >= 30 ? 'var(--grn)' : item.roi !== null && item.roi >= 0 ? 'var(--gold)' : 'var(--red)')}>
+                            {item.roi === null ? '—' : `${item.roi.toFixed(0)}%`}
+                          </td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', fontSize: '10px', color: 'var(--dim)' }}>
+                            {new Date(item.soldAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </>
       ) : null}
     </div>

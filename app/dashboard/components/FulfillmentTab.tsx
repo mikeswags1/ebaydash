@@ -204,11 +204,13 @@ export function FulfillmentTab({
   awaiting,
   orderAsinMap,
   onOpenSettings,
+  compact,
 }: {
   connected: boolean
   awaiting: EbayOrder[]
   orderAsinMap: OrderAsinMap
   onOpenSettings: () => void
+  compact?: boolean
 }) {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [fulfillFlash, setFulfillFlash] = useState<string | null>(null)
@@ -262,15 +264,24 @@ export function FulfillmentTab({
     }
   }, [connected, orderIdsKey])
 
+  const sectionPad = compact ? `0 var(--xpad) 48px` : '0 52px 72px'
+
   if (!connected) {
     return (
       <>
-        <SectionIntro
-          eyebrow="Operations"
-          title="Fulfillment"
-          subtitle="Connect eBay, then use Fulfill to copy ship-to and open Amazon."
-        />
-        <div className="dashboard-section" style={{ padding: '0 52px 72px' }}>
+        {compact ? (
+          <div style={{ padding: '20px var(--xpad) 12px' }}>
+            <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 700, color: 'var(--txt)' }}>Fulfillment</div>
+            <div style={{ fontSize: '12px', color: 'var(--sil)', marginTop: '6px', lineHeight: 1.5 }}>Connect eBay to load orders waiting to ship.</div>
+          </div>
+        ) : (
+          <SectionIntro
+            eyebrow="Operations"
+            title="Fulfillment"
+            subtitle="Connect eBay, then use Fulfill to copy ship-to and open Amazon."
+          />
+        )}
+        <div className="dashboard-section" style={{ padding: sectionPad }}>
           <EmptyState connected={false} onConnect={onOpenSettings} msg="Connect eBay in Settings to load your awaiting shipment queue." />
         </div>
       </>
@@ -279,15 +290,24 @@ export function FulfillmentTab({
 
   return (
     <>
-      <SectionIntro
-        eyebrow="Operations"
-        title="Fulfillment"
-        subtitle="One tap: copy buyer address and open the Amazon listing — works on laptop and phone."
-      />
+      {compact ? (
+        <div style={{ padding: '20px var(--xpad) 12px' }}>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 700, color: 'var(--txt)' }}>Fulfillment</div>
+          <div style={{ fontSize: '12px', color: 'var(--sil)', marginTop: '6px', lineHeight: 1.5 }}>
+            Tap <strong style={{ color: 'var(--gold)' }}>Fulfill</strong> to copy the address and open Amazon. No browser extension required on your phone.
+          </div>
+        </div>
+      ) : (
+        <SectionIntro
+          eyebrow="Operations"
+          title="Fulfillment"
+          subtitle="One tap: copy buyer address and open the Amazon listing — works on laptop and phone."
+        />
+      )}
 
-      <div className="dashboard-section" style={{ padding: '0 52px 72px', maxWidth: '1200px', display: 'flex', flexDirection: 'column' }}>
-        <FulfillmentPrimaryTip />
-        <FulfillmentExtensionTip />
+      <div className="dashboard-section" style={{ padding: sectionPad, maxWidth: '1200px', display: 'flex', flexDirection: 'column' }}>
+        {compact ? null : <FulfillmentPrimaryTip />}
+        {compact ? null : <FulfillmentExtensionTip />}
         {fulfillErr ? (
           <div
             className="card"

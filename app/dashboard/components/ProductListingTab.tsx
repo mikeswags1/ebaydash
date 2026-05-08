@@ -1,5 +1,6 @@
 import type { FinderProduct, ListProgress } from '../types'
 import Image from 'next/image'
+import { dashboardDisplayImageUrl } from '@/lib/dashboard-display-image'
 
 const NICHE_GROUPS = [
   { group: 'Electronics', emoji: '⚡', items: ['Phone Accessories', 'Computer Parts', 'Audio & Headphones', 'Smart Home Devices', 'Gaming Gear'] },
@@ -30,6 +31,7 @@ export function ProductListingTab({
   onListAll,
   listAllProgress,
   connected,
+  compact,
 }: {
   niche: string | null
   nicheSaving: boolean
@@ -48,6 +50,7 @@ export function ProductListingTab({
   onListAll: () => void
   listAllProgress: ListProgress | null
   connected: boolean
+  compact?: boolean
 }) {
   const isListing = !!listAllProgress && listAllProgress.done < listAllProgress.total
   const listingDone = !!listAllProgress && listAllProgress.done === listAllProgress.total
@@ -61,14 +64,14 @@ export function ProductListingTab({
     <div style={{ animation: 'fadein 0.22s ease' }}>
 
       {/* Header */}
-      <div style={{ padding: '40px var(--xpad) 28px' }}>
+      <div style={{ padding: compact ? '22px var(--xpad) 16px' : '40px var(--xpad) 28px' }}>
         <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: 0, textTransform: 'uppercase', color: 'var(--plat)', marginBottom: '8px' }}>
-          StackPilot / Strategy
+          {compact ? 'List' : 'StackPilot / Strategy'}
         </div>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: '36px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
-          Product Listing
+        <div style={{ fontFamily: 'var(--serif)', fontSize: compact ? '26px' : '36px', fontWeight: 700, color: 'var(--txt)', lineHeight: 1.1, marginBottom: '10px' }}>
+          {compact ? 'Products' : 'Product Listing'}
         </div>
-        <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.6, maxWidth: '540px' }}>
+        <div style={{ fontSize: compact ? '12px' : '13px', color: 'var(--sil)', lineHeight: 1.6, maxWidth: '540px' }}>
           {niche
             ? `Sourcing profitable products for ${niche}. Find items, review the numbers, and list directly to eBay in one click.`
             : 'Pick a category below to start sourcing. We\'ll scan Amazon for profitable products you can list on eBay right now.'}
@@ -189,12 +192,16 @@ export function ProductListingTab({
                   Done: {listedCount} listed{skippedCount > 0 ? ` · ${skippedCount} skipped` : ''}{failedCount > 0 ? ` · ${failedCount} failed` : ''}
                 </div>
               ) : null}
-              <button className="btn btn-ghost" onClick={onOpenAsinLookup} style={{ padding: '13px 18px', fontSize: '12px' }}>
-                ASIN Lookup
-              </button>
-              <button className="btn btn-ghost" onClick={onOpenScripts} style={{ padding: '13px 18px', fontSize: '12px' }}>
-                Scripts
-              </button>
+              {compact ? null : (
+                <>
+                  <button className="btn btn-ghost" onClick={onOpenAsinLookup} style={{ padding: '13px 18px', fontSize: '12px' }}>
+                    ASIN Lookup
+                  </button>
+                  <button className="btn btn-ghost" onClick={onOpenScripts} style={{ padding: '13px 18px', fontSize: '12px' }}>
+                    Scripts
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Error */}
@@ -246,6 +253,7 @@ export function ProductListingTab({
                 onOpenListModal={onOpenListModal}
                 onListAll={onListAll}
                 listAllProgress={listAllProgress}
+                compact={compact}
               />
             ) : null}
           </>
@@ -264,6 +272,7 @@ export function FinderResults({
   onOpenListModal,
   onListAll,
   listAllProgress,
+  compact,
 }: {
   connected: boolean
   niche: string
@@ -273,6 +282,7 @@ export function FinderResults({
   onOpenListModal: (product: FinderProduct) => void
   onListAll: () => void
   listAllProgress: ListProgress | null
+  compact?: boolean
 }) {
   const isListing = !!listAllProgress && listAllProgress.done < listAllProgress.total
   const listingDone = !!listAllProgress && listAllProgress.done === listAllProgress.total
@@ -287,11 +297,13 @@ export function FinderResults({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         <div>
           <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)' }}>
-            {results.length} products found — {niche}
+            {results.length} products — {niche}
           </div>
-          <div style={{ fontSize: '10px', color: 'var(--dim)', marginTop: '3px' }}>
-            Stable queue · Use Shuffle to reshuffle · Click any card to review before publishing
-          </div>
+          {compact ? null : (
+            <div style={{ fontSize: '10px', color: 'var(--dim)', marginTop: '3px' }}>
+              Stable queue · Use Shuffle to reshuffle · Click any card to review before publishing
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           {!isListing && !listingDone ? (
@@ -330,7 +342,7 @@ export function FinderResults({
       ) : null}
 
       {view === 'cards' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: compact ? 'repeat(auto-fill,minmax(260px,1fr))' : 'repeat(auto-fill,minmax(300px,1fr))', gap: '14px' }}>
           {results.map(product => (
             <ProductCard key={product.asin} product={product} onOpenListModal={onOpenListModal} />
           ))}
@@ -376,6 +388,7 @@ export function FinderResults({
 
 function ProductCard({ product, onOpenListModal }: { product: FinderProduct; onOpenListModal: (p: FinderProduct) => void }) {
   const accentColor = product.risk === 'LOW' ? 'rgba(46,207,118,0.6)' : product.risk === 'MEDIUM' ? 'rgba(14,165,233,0.6)' : 'rgba(232,63,80,0.5)'
+  const thumbSrc = dashboardDisplayImageUrl(product.imageUrl)
 
   return (
     <div className="card" style={{ padding: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -385,12 +398,14 @@ function ProductCard({ product, onOpenListModal }: { product: FinderProduct; onO
       <div style={{ padding: '18px 18px 16px', flex: 1, display: 'flex', flexDirection: 'column' }}>
         {/* Image + title */}
         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '14px' }}>
-          {product.imageUrl ? (
+          {thumbSrc ? (
             <Image
-              src={product.imageUrl}
+              src={thumbSrc}
               alt={product.title}
               width={54}
               height={54}
+              unoptimized
+              referrerPolicy="no-referrer"
               style={{
                 width: '54px',
                 height: '54px',

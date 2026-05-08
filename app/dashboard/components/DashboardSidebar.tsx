@@ -11,6 +11,7 @@ export function DashboardSidebar({
   onSignOut,
   mobileOpen,
   onRequestClose,
+  hidden,
 }: {
   tab: Tab
   onTabChange: (tab: Tab) => void
@@ -21,7 +22,11 @@ export function DashboardSidebar({
   onSignOut: () => void
   mobileOpen: boolean
   onRequestClose: () => void
+  /** Compact app shell uses bottom navigation instead. */
+  hidden?: boolean
 }) {
+  if (hidden) return null
+
   return (
     <>
       <button
@@ -140,7 +145,7 @@ export function DashboardSidebar({
       ) : null}
 
       <nav className="dashboard-nav" style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: '2px', overflowY: 'auto' }}>
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.filter((item) => item.id !== 'more').map((item) => (
           <button
             key={item.id}
             onClick={() => {
