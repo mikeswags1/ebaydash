@@ -83,7 +83,14 @@ async function listOneViaInternal(req: NextRequest, input: { userId: number; acc
 
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
-  if (cronSecret && req.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+  const authHeader = req.headers.get('authorization') || ''
+  const secretParam = req.nextUrl.searchParams.get('secret') || ''
+  const authed =
+    !cronSecret ||
+    authHeader === `Bearer ${cronSecret}` ||
+    (secretParam && cronSecret && secretParam === cronSecret)
+
+  if (!authed) {
     return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
   }
 

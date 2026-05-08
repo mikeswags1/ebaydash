@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/refresh-products?catalog=1&wait=1",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/auto-listing-tick?userId=4",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
