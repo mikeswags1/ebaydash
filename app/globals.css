@@ -2224,18 +2224,87 @@ textarea{resize:vertical;min-height:100px}
   display:block;
   border:0;
 }
-.home-demo-fallback{
+
+.home-guide{
   height:100%;
+  display:grid;
+  grid-template-rows:1fr auto;
+}
+.home-guide__shot{
+  position:relative;
+  overflow:hidden;
+}
+.home-guide__shot img{object-fit:cover;object-position:center}
+.home-guide__overlay{
+  position:absolute;
+  inset:0;
+  background:
+    linear-gradient(180deg,rgba(7,24,39,0.0),rgba(7,24,39,0.55)),
+    radial-gradient(circle at 20% 10%, rgba(56,189,248,0.20), transparent 55%);
+}
+.home-guide__badge{
+  position:absolute;
+  left:16px;
+  top:16px;
   display:flex;
-  align-items:center;
-  justify-content:center;
-  text-align:center;
-  padding:28px;
+  flex-direction:column;
+  gap:3px;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid rgba(148,212,255,0.22);
+  background:rgba(7,24,39,0.55);
+  backdrop-filter:blur(10px);
   color:#eaf6ff;
 }
-.home-demo-fallback__title{font-weight:800;font-size:16px;margin-bottom:8px}
-.home-demo-fallback__body{font-size:12px;color:rgba(234,246,255,0.8);line-height:1.6}
-.home-demo-fallback code{color:#a5e9ff}
+.home-guide__badge strong{
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:0.12em;
+  opacity:0.9;
+}
+.home-guide__badge span{
+  font-weight:800;
+  font-family:'Space Grotesk','Inter',sans-serif;
+}
+.home-guide__dots{
+  position:absolute;
+  left:16px;
+  bottom:14px;
+  display:flex;
+  gap:8px;
+}
+.home-guide__dot{
+  width:9px;
+  height:9px;
+  border-radius:99px;
+  border:1px solid rgba(148,212,255,0.4);
+  background:rgba(234,246,255,0.32);
+  cursor:pointer;
+}
+.home-guide__dot.is-active{
+  background:#a5e9ff;
+  border-color:rgba(165,233,255,0.9);
+}
+.home-guide__body{
+  padding:14px 16px 16px;
+  border-top:1px solid rgba(148,212,255,0.14);
+  background:linear-gradient(135deg,#071827,#0b2740);
+  color:#eaf6ff;
+}
+.home-guide__title{
+  font-weight:900;
+  font-family:'Space Grotesk','Inter',sans-serif;
+  letter-spacing:-0.01em;
+  margin-bottom:6px;
+}
+.home-guide__desc{
+  font-size:12px;
+  color:rgba(234,246,255,0.82);
+  line-height:1.55;
+  margin-bottom:12px;
+}
+.home-guide__desc span{opacity:0.85}
+.home-guide__actions{display:flex;gap:10px;flex-wrap:wrap}
 
 .home-demo-steps{
   display:flex;

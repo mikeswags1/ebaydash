@@ -100,29 +100,29 @@ export function OrdersTab({
   onOpenSettings: () => void
   compact?: boolean
 }) {
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<CompactOrdersFilter>(() => (awaiting.length > 0 ? 'needs_ship' : 'all'))
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  const needsShip = awaiting
+  const history = orders
+
+  const allFiltered = useMemo(() => {
+    const withQuery = history.filter((o) => matchesQuery(o, query))
+    if (filter === 'all') return withQuery
+    if (filter === 'needs_ship') return withQuery.filter((o) => getOrderDisplayStatus(o).tone === 'red')
+    if (filter === 'refunded') return withQuery.filter((o) => getOrderDisplayStatus(o).tone === 'blue')
+    return withQuery.filter((o) => {
+      const s = getOrderDisplayStatus(o)
+      return s.tone === 'green' || s.tone === 'gold'
+    })
+  }, [filter, history, query])
+
+  const shipFiltered = useMemo(() => needsShip.filter((o) => matchesQuery(o, query)), [needsShip, query])
+
   const fulfilled = orders.filter(o => o.orderFulfillmentStatus !== 'NOT_STARTED')
 
   if (compact) {
-    const needsShip = awaiting
-    const history = orders
-    const [query, setQuery] = useState('')
-    const defaultFilter: CompactOrdersFilter = needsShip.length > 0 ? 'needs_ship' : 'all'
-    const [filter, setFilter] = useState<CompactOrdersFilter>(defaultFilter)
-    const [expandedId, setExpandedId] = useState<string | null>(null)
-
-    const allFiltered = useMemo(() => {
-      const withQuery = history.filter((o) => matchesQuery(o, query))
-      if (filter === 'all') return withQuery
-      if (filter === 'needs_ship') return withQuery.filter((o) => getOrderDisplayStatus(o).tone === 'red')
-      if (filter === 'refunded') return withQuery.filter((o) => getOrderDisplayStatus(o).tone === 'blue')
-      return withQuery.filter((o) => {
-        const s = getOrderDisplayStatus(o)
-        return s.tone === 'green' || s.tone === 'gold'
-      })
-    }, [filter, history, query])
-
-    const shipFiltered = useMemo(() => needsShip.filter((o) => matchesQuery(o, query)), [needsShip, query])
-
     const toggleExpanded = (orderId: string) => {
       setExpandedId((prev) => (prev === orderId ? null : orderId))
     }

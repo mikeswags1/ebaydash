@@ -1,4 +1,4 @@
-const CACHE_NAME = 'stackpilot-shell-v2'
+const CACHE_NAME = 'stackpilot-shell-v3'
 const APP_SHELL = [
   '/',
   '/login',
