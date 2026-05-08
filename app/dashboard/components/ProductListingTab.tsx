@@ -1,6 +1,7 @@
 import type { FinderProduct, ListProgress } from '../types'
 import Image from 'next/image'
 import { dashboardDisplayImageUrl } from '@/lib/dashboard-display-image'
+import { useEffect, useState } from 'react'
 
 const NICHE_GROUPS = [
   { group: 'Electronics', emoji: '⚡', items: ['Phone Accessories', 'Computer Parts', 'Audio & Headphones', 'Smart Home Devices', 'Gaming Gear'] },
@@ -52,6 +53,14 @@ export function ProductListingTab({
   connected: boolean
   compact?: boolean
 }) {
+  const [trialBannerDismissed, setTrialBannerDismissed] = useState(true)
+  useEffect(() => {
+    try {
+      setTrialBannerDismissed(window.localStorage.getItem('stackpilot:trial_banner:dismissed') === '1')
+    } catch {
+      setTrialBannerDismissed(true)
+    }
+  }, [])
   const isListing = !!listAllProgress && listAllProgress.done < listAllProgress.total
   const listingDone = !!listAllProgress && listAllProgress.done === listAllProgress.total
   const failurePreview = listAllProgress?.failures?.slice(0, 3) || []
@@ -79,6 +88,25 @@ export function ProductListingTab({
       </div>
 
       <div style={{ padding: '0 var(--xpad) 44px' }}>
+        {compact && !trialBannerDismissed ? (
+          <div className="pwa-trial-banner">
+            <div>
+              <div className="pwa-trial-banner__title">Trial</div>
+              <div className="pwa-trial-banner__body">Connect eBay, then list up to 5 items free. Upgrade when you’re ready.</div>
+            </div>
+            <button
+              type="button"
+              className="pwa-trial-banner__close"
+              onClick={() => {
+                try { window.localStorage.setItem('stackpilot:trial_banner:dismissed', '1') } catch {}
+                setTrialBannerDismissed(true)
+              }}
+              aria-label="Dismiss trial banner"
+            >
+              Close
+            </button>
+          </div>
+        ) : null}
 
         {/* Active niche banner */}
         {niche ? (

@@ -45,6 +45,7 @@ import {
   saveManualAsinMapping,
   saveUserNiche,
   validateAmazonAsin,
+  fetchSubscriptionStatus,
 } from './api'
 import { EBAY_FEE_RATE } from './constants'
 import { getBulkPreflightIssue, getGrossRevenue, getListingPreview, getRecommendedEbayPrice, listProductsInBatches, parseDashboardSearchMessage, summarizeBulkListResult } from './utils'
@@ -54,6 +55,13 @@ type ConnectionState = {
   ebayConnected: boolean
   ebayNeedsReconnect: boolean
   syncing: boolean
+}
+
+type SubscriptionState = {
+  loading: boolean
+  plan: string
+  trialLimit: number
+  listed: number
 }
 
 type OrderState = {
@@ -166,6 +174,12 @@ export default function Dashboard() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [pwaMenuOpen, setPwaMenuOpen] = useState(false)
   const [banner, setBanner] = useState<BannerState | null>(null)
+  const [subscriptionState, setSubscriptionState] = useState<SubscriptionState>({
+    loading: false,
+    plan: 'trial',
+    trialLimit: 5,
+    listed: 0,
+  })
   const [connectionState, setConnectionState] = useState<ConnectionState>({
     ebayConnected: false,
     ebayNeedsReconnect: false,
@@ -447,9 +461,10 @@ export default function Dashboard() {
       fetchEbayCredentials(),
       fetchUserNiche(),
       fetchOrderAsinMap(),
+      fetchSubscriptionStatus(),
     ])
 
-    const [ebayResult, nicheResult, orderMapResult] = results
+    const [ebayResult, nicheResult, orderMapResult, subResult] = results
 
     if (ebayResult.status === 'fulfilled') {
       const nextState = getEbayConnectionState(ebayResult.value.credentials)
@@ -472,6 +487,15 @@ export default function Dashboard() {
       setOrderState((prev) => ({ ...prev, orderAsinMap: orderMapResult.value.map || {} }))
     } else {
       setBanner((prev) => prev ?? { tone: 'error', text: 'Unable to load tracked listing mappings.' })
+    }
+
+    if (subResult.status === 'fulfilled') {
+      setSubscriptionState({
+        loading: false,
+        plan: subResult.value.plan || 'trial',
+        trialLimit: subResult.value.trialLimit || 5,
+        listed: subResult.value.listed || 0,
+      })
     }
   }, [getEbayConnectionState])
 
@@ -964,6 +988,18 @@ export default function Dashboard() {
         await refillNicheFinderProducts([productToPublish.asin])
       }
       setBanner({ tone: 'success', text: `Listing ${data.listingId} is now live on eBay.` })
+      // Refresh trial counter after publishing.
+      try {
+        const s = await fetchSubscriptionStatus()
+        setSubscriptionState({
+          loading: false,
+          plan: s.plan || 'trial',
+          trialLimit: s.trialLimit || 5,
+          listed: s.listed || 0,
+        })
+      } catch {
+        /* optional */
+      }
     } catch (error) {
       setListingState((prev) => ({
         ...prev,

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import { HomeDemoVideo } from './components/HomeDemoVideo'
 
 const previews = [
   {
@@ -44,10 +45,10 @@ const pillars = [
 ]
 
 const workflow = [
-  'Connect eBay and choose a niche',
-  'Review 30 fresh product candidates',
-  'Publish with pricing and policy checks',
-  'Track orders, refunds, financials, and performance',
+  'Connect eBay',
+  'List 5 items free (trial)',
+  'Upgrade when you’re ready',
+  'Fulfill orders and track profit',
 ]
 
 export default function Landing() {
@@ -85,9 +86,11 @@ export default function Landing() {
           </div>
           <h1>StackPilot</h1>
           <p>
-            A cleaner operating system for eBay sellers: organize listing work,
-            review catalog opportunities, monitor performance, and keep daily operations moving.
+            A cleaner operating system for eBay sellers. Connect your account, list 5 items free, and upgrade only when you’re ready.
           </p>
+          <div className="home-trial-note" aria-label="Trial note">
+            No card required · Trial ends after 5 published listings
+          </div>
           <div className="home-actions">
             <Link href="/signup" className="btn btn-solid">
               Request Access
@@ -169,6 +172,53 @@ export default function Landing() {
               <span>{step}</span>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section id="demo" className="home-section">
+        <div className="home-section-heading">
+          <span>Getting started</span>
+          <h2>Watch a quick walkthrough, then copy the workflow.</h2>
+          <p>
+            StackPilot is intentionally simple on mobile. List products, fulfill orders, and stay on top of profit and performance without dashboard clutter.
+          </p>
+        </div>
+
+        <div className="home-demo-grid">
+          <div className="home-demo-card">
+            <HomeDemoVideo />
+          </div>
+          <div className="home-demo-steps">
+            <div className="home-demo-step">
+              <strong>1</strong>
+              <div>
+                <div className="home-demo-step__title">Connect eBay</div>
+                <div className="home-demo-step__body">Sign in once. Sync brings orders and listing context into one place.</div>
+              </div>
+            </div>
+            <div className="home-demo-step">
+              <strong>2</strong>
+              <div>
+                <div className="home-demo-step__title">List products</div>
+                <div className="home-demo-step__body">Review ROI, confirm pricing, and publish. Stable queues — no random reshuffling.</div>
+              </div>
+            </div>
+            <div className="home-demo-step">
+              <strong>3</strong>
+              <div>
+                <div className="home-demo-step__title">Fulfill orders</div>
+                <div className="home-demo-step__body">Copy ship-to, open Amazon, and keep your seller metrics clean.</div>
+              </div>
+            </div>
+            <div className="home-demo-cta">
+              <Link href="/signup" className="btn btn-solid">
+                Request Access
+              </Link>
+              <Link href="/login" className="btn btn-ghost">
+                Sign In
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
 

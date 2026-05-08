@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { ensureSubscriptionRow, getTrialUsage, getUserPlan } from '@/lib/subscription'
 import { apiError, apiOk } from '@/lib/api-response'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { queryRows, sql } from '@/lib/db'
@@ -1275,6 +1276,23 @@ function buildXml(params: {
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
+
+  // Trial gating: allow connected sellers to list a few items before upgrading.
+  // Default plan is "trial" unless a subscription row indicates otherwise.
+  await ensureSubscriptionRow(session.user.id)
+  const sub = await getUserPlan(session.user.id)
+  const plan = sub?.plan || 'trial'
+  const trialLimit = Number(process.env.TRIAL_LIST_LIMIT || '5')
+  if (plan === 'trial' && Number.isFinite(trialLimit) && trialLimit > 0) {
+    const usage = await getTrialUsage(session.user.id)
+    if (usage.listed >= trialLimit) {
+      return apiError(`Trial limit reached. You can list ${trialLimit} items for free — upgrade to keep listing.`, {
+        status: 402,
+        code: 'TRIAL_LIMIT_REACHED',
+        details: { trialLimit, listed: usage.listed },
+      })
+    }
+  }
 
   const {
     asin,

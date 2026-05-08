@@ -213,3 +213,7 @@ export async function publishProduct(input: {
     body: JSON.stringify(input),
   })
 }
+
+export async function fetchSubscriptionStatus() {
+  return requestJson<{ ok: true; plan: string; status: string; trialLimit: number; listed: number }>('/api/subscription/status', { cache: 'no-store' })
+}

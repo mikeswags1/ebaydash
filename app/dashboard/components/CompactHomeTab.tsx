@@ -1,5 +1,6 @@
 import type { EbayOrder, Tab } from '../types'
 import { getOrderDisplayStatus } from '../order-status'
+import { GettingStartedChecklist } from './GettingStartedChecklist'
 
 function getFirstName(userName?: string | null) {
   const raw = String(userName || '').trim()
@@ -91,6 +92,13 @@ export function CompactHomeTab({
           <div className="pwa-metric-card__label">eBay connection</div>
         </div>
       </div>
+
+      <GettingStartedChecklist
+        connected={connected}
+        hasOrders={orders.length > 0}
+        hasAwaiting={awaitingCount > 0}
+        onGo={onGo}
+      />
 
       {connected && recentOrders.length > 0 ? (
         <section className="pwa-recent">
