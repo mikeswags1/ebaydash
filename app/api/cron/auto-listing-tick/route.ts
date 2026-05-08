@@ -85,10 +85,12 @@ export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
   const authHeader = req.headers.get('authorization') || ''
   const secretParam = req.nextUrl.searchParams.get('secret') || ''
+  const isVercelCron = req.headers.get('x-vercel-cron') === '1'
   const authed =
     !cronSecret ||
     authHeader === `Bearer ${cronSecret}` ||
-    (secretParam && cronSecret && secretParam === cronSecret)
+    (secretParam && cronSecret && secretParam === cronSecret) ||
+    isVercelCron
 
   if (!authed) {
     return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })

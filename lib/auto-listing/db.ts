@@ -61,6 +61,7 @@ export async function ensureAutoListingTables() {
   `.catch(() => {})
   await sql`CREATE INDEX IF NOT EXISTS auto_listing_queue_due_idx ON auto_listing_queue (status, scheduled_at)`.catch(() => {})
   await sql`CREATE INDEX IF NOT EXISTS auto_listing_queue_user_idx ON auto_listing_queue (user_id, status, created_at DESC)`.catch(() => {})
+  await sql`CREATE INDEX IF NOT EXISTS auto_listing_queue_user_score_due_idx ON auto_listing_queue (user_id, status, score DESC, scheduled_at ASC)`.catch(() => {})
   // Prevent massive duplicate queueing: allow at most one active row per ASIN.
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS auto_listing_queue_user_asin_active_unique_idx
