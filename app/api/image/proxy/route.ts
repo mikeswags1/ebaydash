@@ -3,9 +3,33 @@ import sharp from 'sharp'
 
 export const dynamic = 'force-dynamic'
 
+function isAllowedImageUrl(raw: string) {
+  let u: URL
+  try {
+    u = new URL(raw)
+  } catch {
+    return false
+  }
+  if (u.protocol !== 'https:') return false
+
+  const host = u.hostname.toLowerCase()
+  // Only allow known image CDNs we rely on.
+  return (
+    host.endsWith('amazon.com') ||
+    host.endsWith('amazonaws.com') ||
+    host.endsWith('media-amazon.com') ||
+    host.endsWith('images-amazon.com') ||
+    host.endsWith('ssl-images-amazon.com') ||
+    host.endsWith('m.media-amazon.com') ||
+    host.endsWith('i.ebayimg.com') ||
+    host.endsWith('ebayimg.com')
+  )
+}
+
 export async function GET(req: NextRequest): Promise<Response> {
   const url = req.nextUrl.searchParams.get('url')
   if (!url) return new Response('Missing url', { status: 400 })
+  if (!isAllowedImageUrl(url)) return new Response('Invalid url', { status: 400 })
 
   try {
     const res = await fetch(url, {

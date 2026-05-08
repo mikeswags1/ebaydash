@@ -805,7 +805,10 @@ async function syncUnavailableListings(): Promise<{ ended: number; failed: numbe
 // ── Cron handler ─────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
-  if (cronSecret && req.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+  const authHeader = req.headers.get('authorization') || ''
+  const isVercelCron = req.headers.get('x-vercel-cron') === '1'
+  const authed = !cronSecret || authHeader === `Bearer ${cronSecret}` || isVercelCron
+  if (!authed) {
     return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
   }
 

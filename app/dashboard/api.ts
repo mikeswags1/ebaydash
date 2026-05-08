@@ -218,12 +218,27 @@ export async function fetchSubscriptionStatus() {
   return requestJson<{ ok: true; plan: string; status: string; trialLimit: number; listed: number }>('/api/subscription/status', { cache: 'no-store' })
 }
 
-export async function fetchAutoListingSettings() {
-  return requestJson<{ ok: true; settings: any }>('/api/auto-listing/settings', { cache: 'no-store' })
+type AutoListingMode = 'safe' | 'balanced' | 'aggressive'
+export type AutoListingSettingsDto = {
+  enabled: boolean
+  paused: boolean
+  emergency_stopped: boolean
+  listings_per_day: number
+  max_per_hour: number
+  cooldown_minutes: number
+  selected_account_id: number | null
+  allowed_niches: string[]
+  min_roi: number
+  mode: AutoListingMode
+  updated_at?: string
 }
 
-export async function saveAutoListingSettings(input: Record<string, unknown>) {
-  return requestJson<{ ok: true; settings: any }>('/api/auto-listing/settings', {
+export async function fetchAutoListingSettings() {
+  return requestJson<{ ok: true; settings: AutoListingSettingsDto }>('/api/auto-listing/settings', { cache: 'no-store' })
+}
+
+export async function saveAutoListingSettings(input: Partial<AutoListingSettingsDto>) {
+  return requestJson<{ ok: true; settings: AutoListingSettingsDto }>('/api/auto-listing/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -231,7 +246,16 @@ export async function saveAutoListingSettings(input: Record<string, unknown>) {
 }
 
 export async function fetchAutoListingStatus() {
-  return requestJson<{ ok: true } & Record<string, any>>('/api/auto-listing/status', { cache: 'no-store' })
+  return requestJson<{
+    ok: true
+    enabled: boolean
+    paused: boolean
+    emergency_stopped: boolean
+    postedToday: number
+    queue: { queued: number; processing: number; retry: number; failed: number; completed: number }
+    avgScore: number
+    estimatedDailyProfit: number
+  }>('/api/auto-listing/status', { cache: 'no-store' })
 }
 
 export async function fetchEbayAccounts() {

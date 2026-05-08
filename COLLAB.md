@@ -16,7 +16,7 @@ _Clear this section when done._
 
 | Agent | File(s) | What | Started |
 |-------|---------|------|---------|
-| — | — | — | — |
+| GPT-5.2 | repo-wide | Production audit + final optimization pass (stability, security, perf). Tracking fixes + risks. | 2026-05-08 |
 
 ---
 
@@ -131,3 +131,31 @@ _Clear this section when done._
 - **Niche cursor**: Stored in `product_cache` as `niche = '__cursor__'`. Advances 3 per catalog crawl. All 40 niches rotate every ~14 days.
 - **Scraper**: `scrapeAmazonSearch` in `lib/amazon-scrape.ts` hits amazon.com directly. RapidAPI is fallback only. 20 queries × 5 pages × 20 products = 2,500/niche.
 - **Amazon badges stripped**: `sanitizeContent()` + `cleanTitle` strip Amazon Choice, Overall Pick, Best Seller, etc.
+
+---
+
+## 🔍 Production Audit (2026-05-08)
+
+### Reviewed
+- **Static checks**: ESLint + TypeScript typecheck (passing locally).
+- **Build**: `next build` started; verify completion and runtime smoke after it finishes.
+- **Cron + background jobs**: `vercel.json` crons, `/api/cron/*` routes, and new Auto Bulk Listing scheduler.
+
+### Fixed
+- **Cron auth hardening**: accept `x-vercel-cron: 1` to avoid 401s for scheduled invocations while still supporting `CRON_SECRET` bearer auth.
+  - `app/api/cron/refresh-products/route.ts`
+  - `app/api/cron/auto-listing-tick/route.ts`
+- **SSRF guard**: locked `/api/image/proxy` to an allowlist of known image CDNs (Amazon/eBay) and HTTPS-only.
+  - `app/api/image/proxy/route.ts`
+- **DB indexes**: added composite index to support efficient “next job” selection for auto listing queue.
+  - `lib/auto-listing/db.ts`
+- **DX/typing cleanup**: removed `any` usage in Auto Bulk Listing dashboard client types.
+  - `app/dashboard/api.ts`
+  - `app/dashboard/components/SettingsTab.tsx`
+
+### Still needs testing
+- Auto Bulk Listing: enable → cron tick runs → queue fills → listing posts → retries/logging.
+- Cron auth behavior on Vercel (headers vs scheduled invocation).
+
+### Risks / concerns
+- Cron routes are now permissive for Vercel scheduler (`x-vercel-cron: 1`). If the route is reachable publicly, ensure only Vercel can set that header (expected) and that crons do not leak privileged operations beyond intended scope.

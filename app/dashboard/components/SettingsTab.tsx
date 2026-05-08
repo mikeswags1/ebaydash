@@ -1,6 +1,7 @@
 import { SectionIntro } from './shared'
 import type { ProductSourceHealth } from '../types'
 import { useEffect, useMemo, useState } from 'react'
+import type { AutoListingSettingsDto } from '../api'
 import { fetchAutoListingSettings, fetchAutoListingStatus, fetchEbayAccounts, saveAutoListingSettings, getErrorMessage } from '../api'
 
 export function SettingsTab({
@@ -36,8 +37,8 @@ export function SettingsTab({
   const [autoSaving, setAutoSaving] = useState(false)
   const [autoErr, setAutoErr] = useState<string | null>(null)
   const [accounts, setAccounts] = useState<Array<{ id: number; label: string }>>([])
-  const [autoSettings, setAutoSettings] = useState<any>(null)
-  const [autoStatus, setAutoStatus] = useState<any>(null)
+  const [autoSettings, setAutoSettings] = useState<AutoListingSettingsDto | null>(null)
+  const [autoStatus, setAutoStatus] = useState<Awaited<ReturnType<typeof fetchAutoListingStatus>> | null>(null)
 
   const allowedNichesText = useMemo(() => {
     const list = autoSettings?.allowed_niches || []
@@ -62,7 +63,7 @@ export function SettingsTab({
     return () => { alive = false }
   }, [])
 
-  const saveAuto = async (patch: Record<string, unknown>) => {
+  const saveAuto = async (patch: Partial<AutoListingSettingsDto>) => {
     setAutoSaving(true)
     setAutoErr(null)
     try {
@@ -179,7 +180,7 @@ export function SettingsTab({
               <input
                 value={String(autoSettings?.listings_per_day ?? 100)}
                 inputMode="numeric"
-                onChange={(e) => setAutoSettings((s: any) => ({ ...s, listings_per_day: e.target.value }))}
+                onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, listings_per_day: Number(e.target.value || 0) }) : s))}
                 onBlur={() => saveAuto({ listings_per_day: Number(autoSettings?.listings_per_day || 100) })}
                 className="pwa-orders__search-input"
               />
@@ -188,7 +189,7 @@ export function SettingsTab({
               <input
                 value={String(autoSettings?.max_per_hour ?? 25)}
                 inputMode="numeric"
-                onChange={(e) => setAutoSettings((s: any) => ({ ...s, max_per_hour: e.target.value }))}
+                onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, max_per_hour: Number(e.target.value || 0) }) : s))}
                 onBlur={() => saveAuto({ max_per_hour: Number(autoSettings?.max_per_hour || 25) })}
                 className="pwa-orders__search-input"
               />
@@ -197,7 +198,7 @@ export function SettingsTab({
               <input
                 value={String(autoSettings?.cooldown_minutes ?? 3)}
                 inputMode="numeric"
-                onChange={(e) => setAutoSettings((s: any) => ({ ...s, cooldown_minutes: e.target.value }))}
+                onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, cooldown_minutes: Number(e.target.value || 0) }) : s))}
                 onBlur={() => saveAuto({ cooldown_minutes: Number(autoSettings?.cooldown_minutes || 3) })}
                 className="pwa-orders__search-input"
               />
@@ -206,7 +207,7 @@ export function SettingsTab({
               <input
                 value={String(autoSettings?.min_roi ?? 45)}
                 inputMode="numeric"
-                onChange={(e) => setAutoSettings((s: any) => ({ ...s, min_roi: e.target.value }))}
+                onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, min_roi: Number(e.target.value || 0) }) : s))}
                 onBlur={() => saveAuto({ min_roi: Number(autoSettings?.min_roi || 45) })}
                 className="pwa-orders__search-input"
               />
@@ -214,7 +215,7 @@ export function SettingsTab({
             <Field label="Mode">
               <select
                 value={String(autoSettings?.mode || 'balanced')}
-                onChange={(e) => saveAuto({ mode: e.target.value })}
+                onChange={(e) => saveAuto({ mode: e.target.value as AutoListingSettingsDto['mode'] })}
                 className="pwa-orders__search-input"
               >
                 <option value="safe">Safe</option>
@@ -237,7 +238,7 @@ export function SettingsTab({
             <Field label="Allowed niches (comma separated)">
               <input
                 value={allowedNichesText}
-                onChange={(e) => setAutoSettings((s: any) => ({ ...s, allowed_niches: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) }))}
+                onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, allowed_niches: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) }) : s))}
                 onBlur={() => saveAuto({ allowed_niches: autoSettings?.allowed_niches || [] })}
                 className="pwa-orders__search-input"
                 placeholder="Phone Accessories, Home Decor"
