@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 import { useState } from 'react'
 import type { AsinResult, EbayOrder, OrderAsinMap } from '../types'
 
@@ -101,7 +102,13 @@ function AmazonAsinLookup() {
           {/* Product result */}
           <div style={{ display: 'flex', gap: '18px', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap' }}>
             {result.imageUrl ? (
-              <img src={result.imageUrl} alt={result.title} style={{ width: '88px', height: '88px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }} />
+              <Image
+                src={result.imageUrl}
+                alt={result.title}
+                width={88}
+                height={88}
+                style={{ width: '88px', height: '88px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }}
+              />
             ) : null}
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--grn)', marginBottom: '6px' }}>✓ Product Found</div>
@@ -298,7 +305,20 @@ export function AsinLookupTab({
               </div>
               <div style={{ display: 'flex', gap: '18px', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap' }}>
                 {asinResult.imageUrl ? (
-                  <img src={asinResult.imageUrl} alt={asinResult.title} style={{ width: '90px', height: '90px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }} />
+                  <Image
+                    src={asinResult.imageUrl}
+                    alt={asinResult.title}
+                    width={90}
+                    height={90}
+                    style={{
+                      width: '90px',
+                      height: '90px',
+                      objectFit: 'contain',
+                      borderRadius: '10px',
+                      background: 'rgba(255,255,255,0.05)',
+                      flexShrink: 0,
+                    }}
+                  />
                 ) : null}
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4, marginBottom: '8px' }}>{asinResult.title}</div>

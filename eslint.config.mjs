@@ -4,7 +4,7 @@ const require = createRequire(import.meta.url)
 
 const nextConfig = require('eslint-config-next/core-web-vitals')
 
-export default [
+const config = [
   ...nextConfig,
   {
     name: 'stackpilot-overrides',
@@ -14,4 +14,6 @@ export default [
     },
   },
 ]
+
+export default config
 

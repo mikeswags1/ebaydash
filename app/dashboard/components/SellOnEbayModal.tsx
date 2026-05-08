@@ -1,6 +1,7 @@
 import { EBAY_FEE_RATE } from '../constants'
 import type { FinderProduct, ListResult } from '../types'
 import { getListingPreview } from '../utils'
+import Image from 'next/image'
 
 export function SellOnEbayModal({
   product,
@@ -75,7 +76,23 @@ export function SellOnEbayModal({
         ) : (
           <>
             <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', marginBottom: '24px' }}>
-              {product.imageUrl ? <img src={product.imageUrl} alt={product.title} style={{ width: '64px', height: '64px', objectFit: 'contain', borderRadius: '10px', background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(125,211,252,0.12)', flexShrink: 0 }} /> : null}
+              {product.imageUrl ? (
+                <Image
+                  src={product.imageUrl}
+                  alt={product.title}
+                  width={64}
+                  height={64}
+                  style={{
+                    width: '64px',
+                    height: '64px',
+                    objectFit: 'contain',
+                    borderRadius: '10px',
+                    background: 'rgba(255,255,255,0.10)',
+                    border: '1px solid rgba(125,211,252,0.12)',
+                    flexShrink: 0,
+                  }}
+                />
+              ) : null}
               <div>
                 <div style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0, color: 'var(--plat)', marginBottom: '6px' }}>Sell on eBay</div>
                 <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--txt)', lineHeight: 1.4 }}>{product.title.slice(0, 90)}</div>

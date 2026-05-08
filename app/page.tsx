@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 
 const queueItems = [
   {
@@ -78,7 +79,7 @@ export default function Landing() {
       <section className="home-hero">
         <div className="home-plane-wrap" aria-hidden="true">
           <span className="home-flight-path" />
-          <img className="home-plane" src="/stackpilot-plane.svg" alt="" />
+          <Image className="home-plane" src="/stackpilot-plane.svg" alt="" width={240} height={240} priority />
         </div>
 
         <div className="home-hero-copy">

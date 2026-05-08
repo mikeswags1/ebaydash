@@ -1,7 +1,17 @@
 import type { Metadata, Viewport } from 'next'
+import { Cormorant_Garamond, Inter, Space_Grotesk } from 'next/font/google'
 import Providers from './providers'
 import { PwaRegistration } from './pwa-registration'
 import './globals.css'
+
+const inter = Inter({ subsets: ['latin'], display: 'swap', variable: '--font-inter' })
+const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], display: 'swap', variable: '--font-space-grotesk' })
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-cormorant',
+  weight: ['400', '500', '600', '700'],
+})
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://stackpilot-app.vercel.app'),
@@ -39,15 +49,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700;800&family=Cormorant+Garamond:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body>
+    <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable} ${cormorant.variable}`}>
+      <body className={inter.className}>
         <PwaRegistration />
         <Providers>{children}</Providers>
       </body>

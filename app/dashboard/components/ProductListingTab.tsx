@@ -1,4 +1,5 @@
 import type { FinderProduct, ListProgress } from '../types'
+import Image from 'next/image'
 
 const NICHE_GROUPS = [
   { group: 'Electronics', emoji: '⚡', items: ['Phone Accessories', 'Computer Parts', 'Audio & Headphones', 'Smart Home Devices', 'Gaming Gear'] },
@@ -373,7 +374,21 @@ function ProductCard({ product, onOpenListModal }: { product: FinderProduct; onO
         {/* Image + title */}
         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '14px' }}>
           {product.imageUrl ? (
-            <img src={product.imageUrl} alt={product.title} style={{ width: '54px', height: '54px', objectFit: 'contain', borderRadius: '8px', background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(125,211,252,0.12)', flexShrink: 0 }} />
+            <Image
+              src={product.imageUrl}
+              alt={product.title}
+              width={54}
+              height={54}
+              style={{
+                width: '54px',
+                height: '54px',
+                objectFit: 'contain',
+                borderRadius: '8px',
+                background: 'rgba(255,255,255,0.10)',
+                border: '1px solid rgba(125,211,252,0.12)',
+                flexShrink: 0,
+              }}
+            />
           ) : (
             <div style={{ width: '54px', height: '54px', borderRadius: '8px', background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(125,211,252,0.12)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>📦</div>
           )}
