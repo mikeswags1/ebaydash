@@ -64,7 +64,6 @@ export function CompactHomeTab({
             plan={trial.plan}
             listed={trial.listed}
             trialLimit={trial.trialLimit}
-            onOpenSettings={onOpenSettings}
           />
         </div>
       ) : null}

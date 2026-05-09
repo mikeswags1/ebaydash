@@ -16,7 +16,6 @@ export function ContinuousListingTab({
   connected,
   compact,
   trial,
-  onOpenSettings,
 }: {
   finderLoading: boolean
   finderResults: FinderProduct[] | null
@@ -30,7 +29,6 @@ export function ContinuousListingTab({
   connected: boolean
   compact?: boolean
   trial?: { loading: boolean; plan: string; listed: number; trialLimit: number }
-  onOpenSettings?: () => void
 }) {
   const hasResults = Boolean(finderResults?.length)
 
@@ -54,7 +52,6 @@ export function ContinuousListingTab({
               plan={trial.plan}
               listed={trial.listed}
               trialLimit={trial.trialLimit}
-              onOpenSettings={onOpenSettings}
             />
           </div>
         ) : null}

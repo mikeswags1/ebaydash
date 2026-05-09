@@ -49,7 +49,6 @@ export function OverviewTab({
               plan={trial.plan}
               listed={trial.listed}
               trialLimit={trial.trialLimit}
-              onOpenSettings={onOpenSettings}
             />
           </div>
         ) : null}

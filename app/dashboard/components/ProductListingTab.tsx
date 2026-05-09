@@ -34,7 +34,6 @@ export function ProductListingTab({
   connected,
   compact,
   trial,
-  onOpenSettings,
 }: {
   niche: string | null
   nicheSaving: boolean
@@ -55,7 +54,6 @@ export function ProductListingTab({
   connected: boolean
   compact?: boolean
   trial?: { loading: boolean; plan: string; listed: number; trialLimit: number }
-  onOpenSettings?: () => void
 }) {
   const isListing = !!listAllProgress && listAllProgress.done < listAllProgress.total
   const listingDone = !!listAllProgress && listAllProgress.done === listAllProgress.total
@@ -89,7 +87,6 @@ export function ProductListingTab({
               plan={trial.plan}
               listed={trial.listed}
               trialLimit={trial.trialLimit}
-              onOpenSettings={onOpenSettings}
             />
           </div>
         ) : null}
