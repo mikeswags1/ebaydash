@@ -53,6 +53,9 @@ function HomeWalkthroughGuide() {
           <Link href="/signup" className="btn btn-solid btn-sm">
             Request Access
           </Link>
+          <Link href="/guide" className="btn btn-ghost btn-sm">
+            Full guide
+          </Link>
           <Link href="/login" className="btn btn-ghost btn-sm">
             Sign In
           </Link>

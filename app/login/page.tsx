@@ -44,6 +44,12 @@ export default function Login() {
           </Link>
           <h1 style={{ fontFamily: 'var(--serif)', fontSize: '36px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px' }}>Welcome back</h1>
           <p style={{ color: 'var(--sil)', fontSize: '14px' }}>Sign in to your operations dashboard</p>
+          <p style={{ marginTop: '12px', fontSize: '13px', lineHeight: 1.5 }}>
+            <Link href="/guide" style={{ color: 'var(--gold)', fontWeight: 600, textDecoration: 'none' }}>
+              Simple how-to guide →
+            </Link>
+            <span style={{ color: 'var(--dim)' }}> · Trial: 5 live listings</span>
+          </p>
         </div>
 
         <div className="card" style={{ padding: '36px' }}>

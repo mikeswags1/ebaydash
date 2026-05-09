@@ -1,5 +1,6 @@
 import { NAV_ITEMS } from '../constants'
 import type { BannerState, Tab } from '../types'
+import { TrialMeter } from './TrialMeter'
 
 export function DashboardBanner({
   banner,
@@ -42,6 +43,8 @@ export function DashboardTopbar({
   onSync,
   onToggleNav,
   compact,
+  trial,
+  onOpenSettings,
 }: {
   tab: Tab
   syncTime: string | null
@@ -49,41 +52,66 @@ export function DashboardTopbar({
   onSync: () => void
   onToggleNav: () => void
   compact?: boolean
+  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number }
+  onOpenSettings?: () => void
 }) {
+  const showTrial = trial && !compact
+
   return (
     <header
       className={`dashboard-topbar${compact ? ' dashboard-topbar--compact' : ''}`}
       style={{
-        height: '56px',
+        height: showTrial ? 'auto' : '56px',
+        minHeight: '56px',
         background: 'rgba(8,17,31,0.84)',
         backdropFilter: 'blur(24px)',
         borderBottom: '1px solid rgba(125,211,252,0.14)',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 var(--xpad)',
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        padding: 0,
         position: 'sticky',
         top: 0,
         zIndex: 200,
         boxShadow: '0 1px 22px rgba(0,0,0,0.22)',
       }}
     >
-      <div className="dashboard-topbar-left">
-        {compact ? null : (
-          <button type="button" className="dashboard-nav-toggle" onClick={onToggleNav} aria-label="Open navigation">
-            Menu
+      <div
+        style={{
+          height: '56px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 var(--xpad)',
+        }}
+      >
+        <div className="dashboard-topbar-left">
+          {compact ? null : (
+            <button type="button" className="dashboard-nav-toggle" onClick={onToggleNav} aria-label="Open navigation">
+              Menu
+            </button>
+          )}
+          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plat)', letterSpacing: 0, textTransform: 'uppercase' }}>
+            {(NAV_ITEMS.find((item) => item.id === tab)?.label || '').replace(/^\p{Emoji}\s*/u, '').trim()}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {syncTime ? <span style={{ fontSize: '10px', color: 'var(--dim)' }}>Synced {syncTime}</span> : null}
+          <button onClick={onSync} className="btn btn-gold btn-sm" disabled={syncing}>
+            {syncing ? 'Syncing...' : 'Sync eBay'}
           </button>
-        )}
-        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--plat)', letterSpacing: 0, textTransform: 'uppercase' }}>
-          {(NAV_ITEMS.find((item) => item.id === tab)?.label || '').replace(/^\p{Emoji}\s*/u, '').trim()}
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        {syncTime ? <span style={{ fontSize: '10px', color: 'var(--dim)' }}>Synced {syncTime}</span> : null}
-        <button onClick={onSync} className="btn btn-gold btn-sm" disabled={syncing}>
-          {syncing ? 'Syncing...' : 'Sync eBay'}
-        </button>
-      </div>
+      {showTrial ? (
+        <TrialMeter
+          variant="topbar"
+          loading={trial.loading}
+          plan={trial.plan}
+          listed={trial.listed}
+          trialLimit={trial.trialLimit}
+          onOpenSettings={onOpenSettings}
+        />
+      ) : null}
     </header>
   )
 }

@@ -1,5 +1,6 @@
 import type { EbayOrder } from '../types'
 import { getOrderDisplayStatus } from '../order-status'
+import { TrialMeter } from './TrialMeter'
 
 export function OverviewTab({
   connected,
@@ -7,6 +8,7 @@ export function OverviewTab({
   awaitingCount,
   userName,
   onOpenSettings,
+  trial,
 }: {
   connected: boolean
   orders: EbayOrder[]
@@ -14,6 +16,7 @@ export function OverviewTab({
   grossRevenue: number // kept in type for prop compatibility
   userName?: string | null
   onOpenSettings: () => void
+  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number }
 }) {
   const recentOrders = orders.slice(0, 5)
   const hour = new Date().getHours()
@@ -39,6 +42,17 @@ export function OverviewTab({
               : `You're all caught up — no orders waiting to ship. Keep listing!`
             : `Connect your eBay account below to start tracking orders and revenue.`}
         </div>
+        {trial ? (
+          <div style={{ marginTop: '18px', maxWidth: '480px' }}>
+            <TrialMeter
+              loading={trial.loading}
+              plan={trial.plan}
+              listed={trial.listed}
+              trialLimit={trial.trialLimit}
+              onOpenSettings={onOpenSettings}
+            />
+          </div>
+        ) : null}
       </div>
 
       {/* Connect prompt */}

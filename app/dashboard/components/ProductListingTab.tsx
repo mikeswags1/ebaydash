@@ -1,6 +1,7 @@
 import type { FinderProduct, ListProgress } from '../types'
 import Image from 'next/image'
 import { dashboardDisplayImageUrl } from '@/lib/dashboard-display-image'
+import { TrialMeter } from './TrialMeter'
 
 const NICHE_GROUPS = [
   { group: 'Electronics', emoji: '⚡', items: ['Phone Accessories', 'Computer Parts', 'Audio & Headphones', 'Smart Home Devices', 'Gaming Gear'] },
@@ -32,6 +33,8 @@ export function ProductListingTab({
   listAllProgress,
   connected,
   compact,
+  trial,
+  onOpenSettings,
 }: {
   niche: string | null
   nicheSaving: boolean
@@ -51,6 +54,8 @@ export function ProductListingTab({
   listAllProgress: ListProgress | null
   connected: boolean
   compact?: boolean
+  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number }
+  onOpenSettings?: () => void
 }) {
   const isListing = !!listAllProgress && listAllProgress.done < listAllProgress.total
   const listingDone = !!listAllProgress && listAllProgress.done === listAllProgress.total
@@ -76,6 +81,18 @@ export function ProductListingTab({
             ? `Sourcing profitable products for ${niche}. Find items, review the numbers, and list directly to eBay in one click.`
             : 'Pick a category below to start sourcing. We\'ll scan Amazon for profitable products you can list on eBay right now.'}
         </div>
+        {trial ? (
+          <div style={{ marginTop: compact ? '14px' : '18px', maxWidth: '520px' }}>
+            <TrialMeter
+              variant={compact ? 'compact' : 'full'}
+              loading={trial.loading}
+              plan={trial.plan}
+              listed={trial.listed}
+              trialLimit={trial.trialLimit}
+              onOpenSettings={onOpenSettings}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div style={{ padding: '0 var(--xpad) 44px' }}>

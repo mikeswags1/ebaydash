@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import type { Tab } from '../types'
 
 type StepId = 'connect' | 'list' | 'fulfill'
@@ -147,6 +148,10 @@ export function GettingStartedChecklist({
             </button>
           </div>
         ))}
+      </div>
+
+      <div className="gs-card__footer">
+        <Link href="/guide">Full guide (simple, skimmable) →</Link>
       </div>
     </section>
   )

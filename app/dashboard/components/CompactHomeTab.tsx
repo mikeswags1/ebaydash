@@ -1,6 +1,7 @@
 import type { EbayOrder, Tab } from '../types'
 import { getOrderDisplayStatus } from '../order-status'
 import { GettingStartedChecklist } from './GettingStartedChecklist'
+import { TrialMeter } from './TrialMeter'
 
 function getFirstName(userName?: string | null) {
   const raw = String(userName || '').trim()
@@ -25,6 +26,7 @@ export function CompactHomeTab({
   userName,
   onOpenSettings,
   onGo,
+  trial,
 }: {
   connected: boolean
   awaitingCount: number
@@ -32,6 +34,7 @@ export function CompactHomeTab({
   userName?: string | null
   onOpenSettings: () => void
   onGo: (tab: Tab) => void
+  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number }
 }) {
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -52,6 +55,19 @@ export function CompactHomeTab({
         {greetingLine} <span aria-hidden>👋</span>
       </h1>
       <p className="pwa-home__sub">{subtext}</p>
+
+      {trial ? (
+        <div style={{ margin: '14px 0 18px' }}>
+          <TrialMeter
+            variant="compact"
+            loading={trial.loading}
+            plan={trial.plan}
+            listed={trial.listed}
+            trialLimit={trial.trialLimit}
+            onOpenSettings={onOpenSettings}
+          />
+        </div>
+      ) : null}
 
       {!connected ? (
         <button type="button" className="pwa-home__connect btn btn-gold" onClick={onOpenSettings}>

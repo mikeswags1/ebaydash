@@ -3032,3 +3032,98 @@ textarea{resize:vertical;min-height:100px}
   .admin-hero h1{font-size:44px}
   .admin-panel,.admin-status-card{padding:18px}
 }
+
+/* ── User guide (/guide) — scannable, low clutter ── */
+.guide-page .guide-hero{
+  padding:40px var(--xpad) 28px;
+  max-width:760px;
+  margin:0 auto;
+}
+.guide-page .guide-hero h1{
+  font-family:var(--serif);
+  font-size:clamp(2rem,4.5vw,2.75rem);
+  font-weight:700;
+  line-height:1.1;
+  color:var(--txt);
+  margin-top:10px;
+}
+.guide-lead{
+  color:var(--sil);
+  font-size:15px;
+  line-height:1.65;
+  margin-top:14px;
+  max-width:40ch;
+}
+.guide-hero-actions{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-top:22px;
+}
+.guide-stack{
+  max-width:640px;
+  margin:0 auto;
+  padding:8px var(--xpad) 72px;
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+}
+.guide-card{
+  padding:22px 20px;
+  border-radius:16px;
+  background:rgba(14,27,44,0.78);
+  border:1px solid var(--bdr);
+  scroll-margin-top:72px;
+}
+.guide-card h2{
+  font-family:var(--serif);
+  font-size:1.35rem;
+  font-weight:700;
+  margin-bottom:14px;
+  color:var(--txt);
+}
+.guide-card ul{
+  list-style:none;
+  padding:0;
+  margin:0;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.guide-card li{
+  font-size:14px;
+  line-height:1.55;
+  color:var(--sil);
+  padding-left:16px;
+  position:relative;
+}
+.guide-card li::before{
+  content:'';
+  position:absolute;
+  left:0;
+  top:0.55em;
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:var(--gold);
+  opacity:0.85;
+}
+.guide-card--muted{
+  border-style:dashed;
+  opacity:0.92;
+}
+.guide-card--muted li{color:rgba(155,211,242,0.88)}
+.guide-page .home-footer a{color:var(--gold);font-weight:600;text-decoration:none}
+.guide-page .home-footer a:hover{text-decoration:underline}
+.gs-card__footer{
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid rgba(125,211,252,0.12);
+  font-size:12px;
+}
+.gs-card__footer a{
+  color:var(--gold);
+  font-weight:600;
+  text-decoration:none;
+}
+.gs-card__footer a:hover{text-decoration:underline}

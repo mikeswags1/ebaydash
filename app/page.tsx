@@ -59,6 +59,7 @@ export default function Landing() {
           Stack<span>Pilot</span>
         </Link>
         <div className="home-nav-links" aria-label="Product sections">
+          <Link href="/guide">How it works</Link>
           <a href="#research">Research</a>
           <a href="#workflow">Workflow</a>
           <a href="#safety">Safety</a>
@@ -94,6 +95,9 @@ export default function Landing() {
           <div className="home-actions">
             <Link href="/signup" className="btn btn-solid">
               Request Access
+            </Link>
+            <Link href="/guide" className="btn btn-ghost">
+              How it works
             </Link>
             <Link href="/login" className="btn btn-ghost">
               Sign In

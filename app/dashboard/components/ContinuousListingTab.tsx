@@ -1,6 +1,7 @@
 import type { FinderProduct, ListProgress } from '../types'
 import { FinderResults } from './ProductListingTab'
 import { SectionIntro } from './shared'
+import { TrialMeter } from './TrialMeter'
 
 export function ContinuousListingTab({
   finderLoading,
@@ -14,6 +15,8 @@ export function ContinuousListingTab({
   listAllProgress,
   connected,
   compact,
+  trial,
+  onOpenSettings,
 }: {
   finderLoading: boolean
   finderResults: FinderProduct[] | null
@@ -26,6 +29,8 @@ export function ContinuousListingTab({
   listAllProgress: ListProgress | null
   connected: boolean
   compact?: boolean
+  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number }
+  onOpenSettings?: () => void
 }) {
   const hasResults = Boolean(finderResults?.length)
 
@@ -41,6 +46,18 @@ export function ContinuousListingTab({
       )}
 
       <div style={{ padding: '0 var(--xpad) 44px' }}>
+        {trial ? (
+          <div style={{ marginBottom: '16px', maxWidth: '520px' }}>
+            <TrialMeter
+              variant={compact ? 'compact' : 'full'}
+              loading={trial.loading}
+              plan={trial.plan}
+              listed={trial.listed}
+              trialLimit={trial.trialLimit}
+              onOpenSettings={onOpenSettings}
+            />
+          </div>
+        ) : null}
         {!connected ? (
           <div
             style={{

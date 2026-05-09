@@ -1076,6 +1076,13 @@ export default function Dashboard() {
             }}
             onToggleNav={() => setMobileNavOpen((prev) => !prev)}
             compact={false}
+            trial={{
+              loading: subscriptionState.loading,
+              plan: subscriptionState.plan,
+              listed: subscriptionState.listed,
+              trialLimit: subscriptionState.trialLimit,
+            }}
+            onOpenSettings={() => setTab('settings')}
           />
         )}
 
@@ -1089,6 +1096,12 @@ export default function Dashboard() {
                 userName={session?.user?.name || session?.user?.email || null}
                 onOpenSettings={() => setTab('settings')}
                 onGo={setTab}
+                trial={{
+                  loading: subscriptionState.loading,
+                  plan: subscriptionState.plan,
+                  listed: subscriptionState.listed,
+                  trialLimit: subscriptionState.trialLimit,
+                }}
               />
             ) : (
               <OverviewTab
@@ -1098,6 +1111,12 @@ export default function Dashboard() {
                 grossRevenue={grossRevenue}
                 userName={session?.user?.name || session?.user?.email || null}
                 onOpenSettings={() => setTab('settings')}
+                trial={{
+                  loading: subscriptionState.loading,
+                  plan: subscriptionState.plan,
+                  listed: subscriptionState.listed,
+                  trialLimit: subscriptionState.trialLimit,
+                }}
               />
             )
           ) : null}
@@ -1201,6 +1220,13 @@ export default function Dashboard() {
               listAllProgress={finderState.listAllProgress}
               connected={connectionState.ebayConnected}
               compact={compact}
+              trial={{
+                loading: subscriptionState.loading,
+                plan: subscriptionState.plan,
+                listed: subscriptionState.listed,
+                trialLimit: subscriptionState.trialLimit,
+              }}
+              onOpenSettings={() => setTab('settings')}
             />
           ) : null}
           {tab === 'continuous' ? (
@@ -1216,6 +1242,13 @@ export default function Dashboard() {
               listAllProgress={continuousFinderState.listAllProgress}
               connected={connectionState.ebayConnected}
               compact={compact}
+              trial={{
+                loading: subscriptionState.loading,
+                plan: subscriptionState.plan,
+                listed: subscriptionState.listed,
+                trialLimit: subscriptionState.trialLimit,
+              }}
+              onOpenSettings={() => setTab('settings')}
             />
           ) : null}
           {tab === 'campaigns' ? (

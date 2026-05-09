@@ -6,6 +6,7 @@ const betaNotes = [
   'Invite-only while onboarding is finalized',
   'Listing review, catalog research, and seller operations',
   'Approved users can sign in and connect eBay',
+  'Trial: list up to 5 items free (no card)',
 ]
 
 const betaChecks = [
@@ -47,6 +48,11 @@ export default function Signup() {
               </div>
             ))}
           </div>
+          <p style={{ marginTop: '18px', fontSize: '14px' }}>
+            <Link href="/guide" style={{ color: 'var(--gold)', fontWeight: 700, textDecoration: 'none' }}>
+              How StackPilot works →
+            </Link>
+          </p>
         </div>
 
         <div className="access-card" aria-label="Private beta signup status">

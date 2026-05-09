@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { NAV_ITEMS } from '../constants'
 import type { Tab } from '../types'
 
@@ -223,6 +224,26 @@ export function DashboardSidebar({
           </button>
         ))}
       </nav>
+
+      <div style={{ padding: '12px 16px 0' }}>
+        <Link
+          href="/guide"
+          style={{
+            display: 'block',
+            padding: '11px 14px',
+            borderRadius: '12px',
+            border: '1px solid rgba(56,189,248,0.2)',
+            background: 'rgba(56,189,248,0.06)',
+            color: 'rgba(186,230,253,0.92)',
+            fontSize: '12px',
+            fontWeight: 600,
+            textDecoration: 'none',
+            textAlign: 'center',
+          }}
+        >
+          How to use StackPilot →
+        </Link>
+      </div>
 
       <div className="dashboard-user" style={{ padding: '16px 20px', borderTop: '1px solid rgba(56,189,248,0.12)' }}>
         <div style={{ fontSize: '11px', color: 'rgba(148,212,255,0.65)', marginBottom: '10px', fontWeight: 500 }}>{userLabel}</div>
