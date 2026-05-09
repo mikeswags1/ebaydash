@@ -44,7 +44,6 @@ export function DashboardTopbar({
   onToggleNav,
   compact,
   trial,
-  onOpenSettings,
 }: {
   tab: Tab
   syncTime: string | null
@@ -53,7 +52,6 @@ export function DashboardTopbar({
   onToggleNav: () => void
   compact?: boolean
   trial?: { loading: boolean; plan: string; listed: number; trialLimit: number }
-  onOpenSettings?: () => void
 }) {
   const showTrial = trial && !compact
 
@@ -109,7 +107,6 @@ export function DashboardTopbar({
           plan={trial.plan}
           listed={trial.listed}
           trialLimit={trial.trialLimit}
-          onOpenSettings={onOpenSettings}
         />
       ) : null}
     </header>

@@ -1082,7 +1082,6 @@ export default function Dashboard() {
               listed: subscriptionState.listed,
               trialLimit: subscriptionState.trialLimit,
             }}
-            onOpenSettings={() => setTab('settings')}
           />
         )}
 
@@ -1226,7 +1225,6 @@ export default function Dashboard() {
                 listed: subscriptionState.listed,
                 trialLimit: subscriptionState.trialLimit,
               }}
-              onOpenSettings={() => setTab('settings')}
             />
           ) : null}
           {tab === 'continuous' ? (
@@ -1248,7 +1246,6 @@ export default function Dashboard() {
                 listed: subscriptionState.listed,
                 trialLimit: subscriptionState.trialLimit,
               }}
-              onOpenSettings={() => setTab('settings')}
             />
           ) : null}
           {tab === 'campaigns' ? (
