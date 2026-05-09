@@ -215,7 +215,22 @@ export async function publishProduct(input: {
 }
 
 export async function fetchSubscriptionStatus() {
-  return requestJson<{ ok: true; plan: string; status: string; trialLimit: number; listed: number }>('/api/subscription/status', { cache: 'no-store' })
+  return requestJson<{
+    ok: true
+    plan: string
+    status: string
+    trialLimit: number
+    listed: number
+    billing: { checkoutAvailable: boolean; portalAvailable: boolean }
+  }>('/api/subscription/status', { cache: 'no-store' })
+}
+
+export async function createStripeCheckoutSession() {
+  return requestJson<{ ok: true; url: string }>('/api/stripe/checkout', { method: 'POST' })
+}
+
+export async function createStripePortalSession() {
+  return requestJson<{ ok: true; url: string }>('/api/stripe/portal', { method: 'POST' })
 }
 
 type AutoListingMode = 'safe' | 'balanced' | 'aggressive'

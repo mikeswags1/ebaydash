@@ -25,6 +25,21 @@ import { CompactDesktopHint } from './components/CompactDesktopHint'
 import { SellOnEbayModal } from './components/SellOnEbayModal'
 import { useCompactDashboard } from './hooks/useCompactDashboard'
 import type { BannerState, EbayCredentialsSummary, FinancialItem, FinancialSummary, FinderProduct, ListProgress, OrderAsinMap, PerformanceData, ProductSourceHealth, ScriptMessage, Tab } from './types'
+
+const TAB_QUERY_KEYS = new Set<Tab>([
+  'overview',
+  'orders',
+  'fulfillment',
+  'financials',
+  'performance',
+  'scripts',
+  'asin',
+  'product',
+  'continuous',
+  'campaigns',
+  'settings',
+  'more',
+])
 import type { AsinResult, EbayOrder, ListResult } from './types'
 import {
   disconnectEbay,
@@ -62,6 +77,8 @@ type SubscriptionState = {
   plan: string
   trialLimit: number
   listed: number
+  billingCheckoutAvailable: boolean
+  billingPortalAvailable: boolean
 }
 
 type OrderState = {
@@ -179,6 +196,8 @@ export default function Dashboard() {
     plan: 'trial',
     trialLimit: 5,
     listed: 0,
+    billingCheckoutAvailable: false,
+    billingPortalAvailable: false,
   })
   const [connectionState, setConnectionState] = useState<ConnectionState>({
     ebayConnected: false,
@@ -490,14 +509,37 @@ export default function Dashboard() {
     }
 
     if (subResult.status === 'fulfilled') {
+      const v = subResult.value
       setSubscriptionState({
         loading: false,
-        plan: subResult.value.plan || 'trial',
-        trialLimit: subResult.value.trialLimit || 5,
-        listed: subResult.value.listed || 0,
+        plan: v.plan || 'trial',
+        trialLimit: v.trialLimit || 5,
+        listed: v.listed || 0,
+        billingCheckoutAvailable: v.billing?.checkoutAvailable ?? false,
+        billingPortalAvailable: v.billing?.portalAvailable ?? false,
       })
     }
   }, [getEbayConnectionState])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tabParam = params.get('tab')
+    if (tabParam && TAB_QUERY_KEYS.has(tabParam as Tab)) {
+      setTab(tabParam as Tab)
+    }
+    const billing = params.get('billing')
+    if (billing === 'success') {
+      setBanner({ tone: 'success', text: 'Subscription active — welcome to StackPilot Pro.' })
+      void loadDashboardBootstrap()
+    } else if (billing === 'canceled') {
+      setBanner({ tone: 'error', text: 'Checkout canceled. You can upgrade anytime from Settings.' })
+    }
+    if (params.has('billing')) {
+      params.delete('billing')
+      const q = params.toString()
+      router.replace(q ? `/dashboard?${q}` : '/dashboard', { scroll: false })
+    }
+  }, [router, loadDashboardBootstrap])
 
   const handleDisconnectEbay = useCallback(async () => {
     const confirmed = window.confirm('Disconnect eBay from this dashboard? You can reconnect it again from Settings.')
@@ -996,6 +1038,8 @@ export default function Dashboard() {
           plan: s.plan || 'trial',
           trialLimit: s.trialLimit || 5,
           listed: s.listed || 0,
+          billingCheckoutAvailable: s.billing?.checkoutAvailable ?? false,
+          billingPortalAvailable: s.billing?.portalAvailable ?? false,
         })
       } catch {
         /* optional */
@@ -1278,6 +1322,9 @@ export default function Dashboard() {
               sourceHealthError={sourceHealthState.error}
               onRefreshSourceHealth={() => void loadProductSourceHealth()}
               compact={compact}
+              subscriptionPlan={subscriptionState.plan}
+              billingCheckoutAvailable={subscriptionState.billingCheckoutAvailable}
+              billingPortalAvailable={subscriptionState.billingPortalAvailable}
             />
           ) : null}
         </div>

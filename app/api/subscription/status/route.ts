@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { isStripeBillingConfigured } from '@/lib/stripe'
 import { ensureSubscriptionRow, getTrialUsage, getUserPlan } from '@/lib/subscription'
 
 export async function GET() {
@@ -14,12 +15,19 @@ export async function GET() {
   const trialLimit = Number(process.env.TRIAL_LIST_LIMIT || '5')
   const usage = plan === 'trial' ? await getTrialUsage(session.user.id) : { listed: 0 }
 
+  const stripeReady = isStripeBillingConfigured()
+  const stripeCustomerId = sub?.stripeCustomerId || null
+
   return NextResponse.json({
     ok: true,
     plan,
     status,
     trialLimit: Number.isFinite(trialLimit) ? trialLimit : 5,
     listed: usage.listed,
+    billing: {
+      checkoutAvailable: stripeReady,
+      portalAvailable: stripeReady && Boolean(stripeCustomerId),
+    },
   })
 }
 

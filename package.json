@@ -19,7 +19,8 @@
     "next-auth": "^4.24.7",
     "react": "^18",
     "react-dom": "^18",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "stripe": "^17.7.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
@@ -27,10 +28,10 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "archiver": "^7.0.1",
     "eslint": "^9",
     "eslint-config-next": "^16.2.4",
     "pg": "^8.20.0",
-    "typescript": "^5",
-    "archiver": "^7.0.1"
+    "typescript": "^5"
   }
 }

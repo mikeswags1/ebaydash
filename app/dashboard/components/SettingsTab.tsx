@@ -2,7 +2,99 @@ import { SectionIntro } from './shared'
 import type { ProductSourceHealth } from '../types'
 import { useEffect, useMemo, useState } from 'react'
 import type { AutoListingSettingsDto } from '../api'
-import { fetchAutoListingSettings, fetchAutoListingStatus, fetchEbayAccounts, saveAutoListingSettings, getErrorMessage } from '../api'
+import {
+  createStripeCheckoutSession,
+  createStripePortalSession,
+  fetchAutoListingSettings,
+  fetchAutoListingStatus,
+  fetchEbayAccounts,
+  saveAutoListingSettings,
+  getErrorMessage,
+} from '../api'
+
+function BillingSection({
+  compact,
+  plan,
+  checkoutAvailable,
+  portalAvailable,
+}: {
+  compact?: boolean
+  plan: string
+  checkoutAvailable: boolean
+  portalAvailable: boolean
+}) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const showUpgrade = plan === 'trial' && checkoutAvailable
+  const showPortal = plan === 'pro' && portalAvailable
+  if (!showUpgrade && !showPortal) return null
+
+  return (
+    <div className="card" style={{ padding: compact ? '22px 18px' : '32px' }}>
+      <div style={{ color: 'var(--sky)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 900, marginBottom: '8px' }}>
+        Billing
+      </div>
+      <div style={{ fontFamily: 'var(--serif)', fontSize: compact ? '20px' : '22px', fontWeight: 700, color: 'var(--txt)', marginBottom: '8px' }}>
+        {plan === 'pro' ? 'StackPilot Pro' : 'StackPilot trial'}
+      </div>
+      <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.65, marginBottom: '18px' }}>
+        {plan === 'pro'
+          ? 'Manage payment method, invoices, and cancellation in the Stripe billing portal.'
+          : 'Upgrade to list beyond the free trial with unlimited active listings (fair-use automation limits still apply).'}
+      </div>
+      {err ? (
+        <div style={{ marginBottom: '12px', fontSize: '12px', color: 'var(--red)', border: '1px solid rgba(248,81,101,0.25)', borderRadius: '10px', padding: '10px 12px' }}>
+          {err}
+        </div>
+      ) : null}
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: compact ? 'stretch' : 'flex-start' }}>
+        {showUpgrade ? (
+          <button
+            type="button"
+            className="btn btn-solid"
+            disabled={busy}
+            style={{ padding: '12px 22px', fontSize: '13px' }}
+            onClick={async () => {
+              setBusy(true)
+              setErr(null)
+              try {
+                const { url } = await createStripeCheckoutSession()
+                window.location.href = url
+              } catch (e) {
+                setErr(getErrorMessage(e, 'Unable to start checkout.'))
+                setBusy(false)
+              }
+            }}
+          >
+            {busy ? 'Redirecting…' : 'Upgrade with Stripe'}
+          </button>
+        ) : null}
+        {showPortal ? (
+          <button
+            type="button"
+            className="btn btn-gold"
+            disabled={busy}
+            style={{ padding: '12px 22px', fontSize: '13px' }}
+            onClick={async () => {
+              setBusy(true)
+              setErr(null)
+              try {
+                const { url } = await createStripePortalSession()
+                window.location.href = url
+              } catch (e) {
+                setErr(getErrorMessage(e, 'Unable to open billing portal.'))
+                setBusy(false)
+              }
+            }}
+          >
+            {busy ? 'Opening…' : 'Manage billing'}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  )
+}
 
 export function SettingsTab({
   connected,
@@ -18,6 +110,9 @@ export function SettingsTab({
   sourceHealthError,
   onRefreshSourceHealth,
   compact,
+  subscriptionPlan,
+  billingCheckoutAvailable,
+  billingPortalAvailable,
 }: {
   connected: boolean
   needsReconnect: boolean
@@ -32,6 +127,9 @@ export function SettingsTab({
   sourceHealthError: string | null
   onRefreshSourceHealth: () => void
   compact?: boolean
+  subscriptionPlan: string
+  billingCheckoutAvailable: boolean
+  billingPortalAvailable: boolean
 }) {
   const [autoLoading, setAutoLoading] = useState(false)
   const [autoSaving, setAutoSaving] = useState(false)
@@ -135,6 +233,13 @@ export function SettingsTab({
             </>
           )}
         </div>
+
+        <BillingSection
+          compact={compact}
+          plan={subscriptionPlan}
+          checkoutAvailable={billingCheckoutAvailable}
+          portalAvailable={billingPortalAvailable}
+        />
 
         <ProductSourceHealthCard
           health={sourceHealth}

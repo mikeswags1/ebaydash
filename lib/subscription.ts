@@ -12,14 +12,20 @@ export async function ensureSubscriptionRow(userId: string | number) {
   `.catch(() => {})
 }
 
-export async function getUserPlan(userId: string | number): Promise<{ plan: SubscriptionPlan; status: string } | null> {
+export async function getUserPlan(
+  userId: string | number
+): Promise<{ plan: SubscriptionPlan; status: string; stripeCustomerId: string | null } | null> {
   const uid = Number(userId)
   if (!Number.isFinite(uid)) return null
-  const rows = await queryRows<{ plan: string; status: string }>`
-    SELECT plan, status FROM user_subscriptions WHERE user_id = ${uid} LIMIT 1
+  const rows = await queryRows<{ plan: string; status: string; stripe_customer_id: string | null }>`
+    SELECT plan, status, stripe_customer_id FROM user_subscriptions WHERE user_id = ${uid} LIMIT 1
   `.catch(() => [])
   if (!rows[0]) return null
-  return { plan: rows[0].plan || 'trial', status: rows[0].status || 'active' }
+  return {
+    plan: rows[0].plan || 'trial',
+    status: rows[0].status || 'active',
+    stripeCustomerId: rows[0].stripe_customer_id || null,
+  }
 }
 
 export async function getTrialUsage(userId: string | number) {
