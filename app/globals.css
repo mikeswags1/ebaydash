@@ -2525,6 +2525,14 @@ textarea{resize:vertical;min-height:100px}
   gap:42px;
   padding:72px clamp(22px,4vw,64px);
 }
+.access-shell__install-hint{
+  grid-column:1 / -1;
+  margin:-24px 0 8px;
+}
+.access-shell__install-hint .get-app-banner{
+  margin-left:0;
+  margin-right:0;
+}
 .access-copy h1{
   color:#061523;
   font-family:'Space Grotesk','Inter',sans-serif;

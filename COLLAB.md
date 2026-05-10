@@ -24,6 +24,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-08 | Cursor | **“Get our app”** install hint (Add to Home Screen / PWA): dismissible banner on **marketing home**, **login**, **signup**, **dashboard** (hidden when already in standalone PWA). Dismiss flag: `localStorage` key `stackpilot:get_the_app:dismissed:v2`. **Force show (testing):** add query `?installHint=1` to any URL. Branch pushed: `cursor/get-the-app-banner` — merge to `master` + deploy so production shows it. | `app/components/GetTheAppBanner.tsx`, `app/globals.css`, `app/page.tsx`, `app/login/page.tsx`, `app/signup/page.tsx`, `app/dashboard/page.tsx`, `COLLAB.md` |
 | 2026-05-08 | GPT-5.2 | **Release readiness tooling**: `/api/health` (DB ping + env flags, no secrets); `docs/RELEASE_CHECKLIST.md`; `npm run smoke` → `scripts/smoke-check.mjs`; CI runs **`npm run build`** with placeholder env for secrets-free GitHub Actions | `app/api/health/route.ts`, `docs/RELEASE_CHECKLIST.md`, `scripts/smoke-check.mjs`, `package.json`, `.github/workflows/ci.yml`, `COLLAB.md` |
 | 2026-05-08 | GPT-5.2 | Fulfillment tab: in-tab Amazon extension setup card; fulfill URLs carry `stackpilotOrigin` for the extension API; broader extension host permissions | `app/dashboard/components/FulfillmentTab.tsx`, `app/api/fulfillment/start/route.ts`, `extension/manifest.json`, `extension/background.js`, `extension/INSTALL.md` |
 | 2026-05-08 | GPT-5.2 | Host extension zip on StackPilot (`/stackpilot-fulfillment-extension.zip` via `prebuild`/`dev`); Fulfillment tab primary download button — no GitHub required | `scripts/zip-extension.mjs`, `package.json`, `app/dashboard/components/FulfillmentTab.tsx`, `.gitignore`, `extension/INSTALL.md` |
@@ -89,6 +90,7 @@ _Clear this section when done._
 - **Image pipeline**: Only `validatedAmazon.images` + provided `imageUrl` used in gallery. `fetchedAmazon.images` NEVER used for gallery — causes image contamination. Do not revert.
 - **Free shipping stamp**: `public/free-shipping-stamp.png` was replaced — do not overwrite.
 - **Brand name**: All UI is `StackPilot`. Vercel project = `stackpilot-app`. URL = `stackpilot-app.vercel.app`.
+- **Get the app banner (2026-05-08)**: Shown on `/`, `/login`, `/signup`, `/dashboard` unless user dismissed (`localStorage` `stackpilot:get_the_app:dismissed:v2`) or page is opened as installed PWA (standalone). If you do not see it after testing, try `?installHint=1` or clear that key. Production only shows it after the feature is **merged and deployed**.
 - **`NEXTAUTH_URL`** in Vercel = `https://stackpilot-app.vercel.app` — matches eBay Dev Console.
 - **Product Finder distribution**: Per-user seeded ranking, large shared pool, performance signals. Do not revert.
 - **Fee rates**: `lib/listing-pricing.ts` is the shared engine — use it everywhere. `constants.ts` = 13.25% (display only). `listing-pricing.ts` = 15% actual. Do not introduce separate fee math.

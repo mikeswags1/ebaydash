@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
-const STORAGE_KEY = 'stackpilot:get_the_app:dismissed:v1'
+/** Bump version when copy changes so QA/users see the updated banner after dismiss. */
+const STORAGE_KEY = 'stackpilot:get_the_app:dismissed:v2'
 
 function isInstalledPwa(): boolean {
   if (typeof window === 'undefined') return false
@@ -46,6 +47,15 @@ export function GetTheAppBanner({
   const copy = useMemo(() => hintForUserAgent(typeof navigator !== 'undefined' ? navigator.userAgent : ''), [])
 
   useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('installHint') === '1') {
+        setShow(true)
+        return
+      }
+    } catch {
+      /* ignore */
+    }
     if (isInstalledPwa()) return
     try {
       if (localStorage.getItem(STORAGE_KEY) === '1') return

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { GetTheAppBanner } from '@/app/components/GetTheAppBanner'
 
 const betaNotes = [
   'Invite-only while onboarding is finalized',
@@ -29,6 +30,9 @@ export default function Signup() {
       </nav>
 
       <section className="access-shell">
+        <div className="access-shell__install-hint">
+          <GetTheAppBanner variant="marketing" />
+        </div>
         <div className="access-copy">
           <div className="home-kicker">
             <span />
