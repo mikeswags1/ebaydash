@@ -11,6 +11,16 @@ const sections = [
     ],
   },
   {
+    id: 'install',
+    title: 'Install the app (home screen)',
+    bullets: [
+      'StackPilot is a website — “install” saves it to your home screen or desktop like an app (add to Home Screen / Install PWA). No App Store download.',
+      'iPhone & iPad (Safari): tap Share → Add to Home Screen → open StackPilot from the new icon.',
+      'Android (Chrome): tap ⋮ → Install app or Add to Home screen.',
+      'Desktop (Chrome / Edge): ⋮ menu → Save and share → Install page as app (or use Install in the address bar when Chrome offers it).',
+    ],
+  },
+  {
     id: 'trial',
     title: 'Free trial (5 listings)',
     bullets: [

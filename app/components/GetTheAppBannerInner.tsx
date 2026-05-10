@@ -143,7 +143,7 @@ export function GetTheAppBannerInner({
         <p className="get-app-banner__mini-lead">
           <strong>Get the app:</strong> Add StackPilot to your home screen for quicker access.
         </p>
-        <Link href="/guide" className="get-app-banner__mini-guide">
+        <Link href="/install" className="get-app-banner__mini-guide">
           How to install
         </Link>
       </div>
