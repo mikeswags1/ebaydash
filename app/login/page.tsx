@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { GetTheAppBanner } from '@/app/components/GetTheAppBanner'
 
 export default function Login() {
   const router = useRouter()
@@ -51,6 +52,8 @@ export default function Login() {
             <span style={{ color: 'var(--dim)' }}> · Trial: 5 live listings</span>
           </p>
         </div>
+
+        <GetTheAppBanner variant="login" />
 
         <div className="card" style={{ padding: '36px' }}>
 

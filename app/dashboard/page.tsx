@@ -16,6 +16,7 @@ import { ProductListingTab } from './components/ProductListingTab'
 import { ContinuousListingTab } from './components/ContinuousListingTab'
 import { CampaignsTab } from './components/CampaignsTab'
 import { SettingsTab } from './components/SettingsTab'
+import { GetTheAppBanner } from '@/app/components/GetTheAppBanner'
 import { CompactBottomNav } from './components/CompactBottomNav'
 import { CompactPwaTopbar } from './components/CompactPwaTopbar'
 import { CompactPwaMenu } from './components/CompactPwaMenu'
@@ -1084,6 +1085,7 @@ export default function Dashboard() {
 
       <main className="dashboard-main">
         <DashboardBanner banner={banner} onClose={() => setBanner(null)} />
+        <GetTheAppBanner compact={compact} />
         {compact ? (
           <>
             <CompactPwaTopbar

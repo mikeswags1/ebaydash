@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { HomeDemoVideo } from './components/HomeDemoVideo'
+import { GetTheAppBanner } from './components/GetTheAppBanner'
 
 const previews = [
   {
@@ -103,6 +104,7 @@ export default function Landing() {
               Sign In
             </Link>
           </div>
+          <GetTheAppBanner variant="marketing" />
         </div>
 
         <div className="home-command-preview" aria-label="StackPilot dashboard preview">

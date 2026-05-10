@@ -756,6 +756,92 @@ body:has(.dashboard-shell--compact)::after{
   flex-shrink:0;
 }
 .pwa-trial-banner__close:active{background:#f8fafc}
+
+/* Install / Add to Home Screen hint */
+.get-app-banner{
+  margin:0 var(--xpad) 14px;
+  padding:16px 18px;
+  border-radius:14px;
+  border:1px solid rgba(125,211,252,0.2);
+  background:linear-gradient(135deg,rgba(56,189,248,0.12),rgba(14,165,233,0.05));
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  flex-wrap:wrap;
+}
+.get-app-banner__main{flex:1;min-width:min(100%,220px)}
+.get-app-banner__kicker{
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:rgba(186,230,253,0.85);
+  margin-bottom:4px;
+}
+.get-app-banner__title{
+  font-family:var(--serif);
+  font-size:17px;
+  font-weight:700;
+  color:var(--txt);
+  line-height:1.2;
+  margin-bottom:8px;
+}
+.get-app-banner__lead{
+  margin:0;
+  font-size:13px;
+  line-height:1.55;
+  color:var(--sil);
+}
+.get-app-banner__lead strong{color:var(--plat);font-weight:700}
+.get-app-banner__dismiss{
+  flex-shrink:0;
+  border:1px solid rgba(125,211,252,0.28);
+  background:rgba(8,17,31,0.35);
+  color:var(--plat);
+  border-radius:999px;
+  padding:8px 16px;
+  font:inherit;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+  align-self:center;
+}
+.get-app-banner__dismiss:hover{background:rgba(56,189,248,0.12)}
+.get-app-banner--compact{
+  border-color:rgba(37,99,235,0.16);
+  background:rgba(37,99,235,0.06);
+}
+.get-app-banner--compact .get-app-banner__kicker{color:#0369a1}
+.get-app-banner--compact .get-app-banner__title{color:#0f172a}
+.get-app-banner--compact .get-app-banner__lead{color:#64748b}
+.get-app-banner--compact .get-app-banner__lead strong{color:#0f3550}
+.get-app-banner--compact .get-app-banner__dismiss{
+  border-color:rgba(37,99,235,0.22);
+  background:#fff;
+  color:#0f3550;
+}
+.get-app-banner--login{
+  margin:0 auto 22px;
+  max-width:420px;
+}
+.get-app-banner--marketing{
+  margin:28px auto 0;
+  max-width:min(920px,calc(100% - 48px));
+  border:1px solid var(--home-line);
+  background:#fff;
+  box-shadow:0 12px 36px rgba(12,37,56,0.07);
+}
+.get-app-banner--marketing .get-app-banner__kicker{color:#0369a1}
+.get-app-banner--marketing .get-app-banner__title{color:#061523}
+.get-app-banner--marketing .get-app-banner__lead{color:#496579}
+.get-app-banner--marketing .get-app-banner__lead strong{color:#0f3550}
+.get-app-banner--marketing .get-app-banner__dismiss{
+  border-color:rgba(7,24,39,0.12);
+  background:#f8fafc;
+  color:#0f3550;
+}
+
 .pwa-more__signout{
   width:100%;
   margin-top:20px;
