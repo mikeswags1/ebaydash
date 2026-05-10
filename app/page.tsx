@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { HomeDemoVideo } from './components/HomeDemoVideo'
+import { GetAppBanner } from './components/GetAppBanner'
 
 const previews = [
   {
@@ -60,6 +61,7 @@ export default function Landing() {
         </Link>
         <div className="home-nav-links" aria-label="Product sections">
           <Link href="/guide">How it works</Link>
+          <a href="#get-app">Get App</a>
           <a href="#research">Research</a>
           <a href="#workflow">Workflow</a>
           <a href="#safety">Safety</a>
@@ -142,6 +144,8 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      <GetAppBanner variant="home" />
 
       <section id="research" className="home-section">
         <div className="home-section-heading">

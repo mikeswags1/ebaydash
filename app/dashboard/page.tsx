@@ -23,6 +23,7 @@ import { CompactHomeTab } from './components/CompactHomeTab'
 import { CompactMoreTab } from './components/CompactMoreTab'
 import { CompactDesktopHint } from './components/CompactDesktopHint'
 import { SellOnEbayModal } from './components/SellOnEbayModal'
+import { GetAppBanner } from '../components/GetAppBanner'
 import { useCompactDashboard } from './hooks/useCompactDashboard'
 import type { BannerState, EbayCredentialsSummary, FinancialItem, FinancialSummary, FinderProduct, ListProgress, OrderAsinMap, PerformanceData, ProductSourceHealth, ScriptMessage, Tab } from './types'
 
@@ -1174,6 +1175,11 @@ export default function Dashboard() {
             }}
           />
         )}
+        {!compact ? (
+          <div className="dashboard-get-app-wrap">
+            <GetAppBanner variant="dashboard" />
+          </div>
+        ) : null}
 
         <div className="dashboard-content">
           {tab === 'overview' ? (
