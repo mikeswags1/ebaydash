@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { ensureSubscriptionRow, getTrialUsage, getUserPlan } from '@/lib/subscription'
+import { ensureSubscriptionRow, getTrialUsage, getUserPlan, releaseTrialListingSlot, reserveTrialListingSlot } from '@/lib/subscription'
 import { apiError, apiOk } from '@/lib/api-response'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { queryRows, sql } from '@/lib/db'
@@ -1292,8 +1292,10 @@ export async function POST(req: NextRequest) {
   await ensureSubscriptionRow(effectiveUserId)
   const sub = await getUserPlan(effectiveUserId)
   const plan = sub?.plan || 'trial'
-  const trialLimit = Number(process.env.TRIAL_LIST_LIMIT || '5')
-  if (plan === 'trial' && Number.isFinite(trialLimit) && trialLimit > 0) {
+  const parsedTrialLimit = Number(process.env.TRIAL_LIST_LIMIT || '5')
+  const trialLimit = Number.isFinite(parsedTrialLimit) && parsedTrialLimit > 0 ? Math.floor(parsedTrialLimit) : 5
+  const trialApplies = plan === 'trial' && trialLimit > 0
+  if (trialApplies) {
     const usage = await getTrialUsage(effectiveUserId)
     if (usage.listed >= trialLimit) {
       return apiError(`Trial limit reached. You can list ${trialLimit} items for free — upgrade to keep listing.`, {
@@ -2173,13 +2175,40 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Retry chain ──────────────────────────────────────────────────────────────
+  let trialSlotReserved = false
+  const releaseReservedTrialSlot = async () => {
+    if (!trialSlotReserved) return
+    trialSlotReserved = false
+    await releaseTrialListingSlot(effectiveUserId)
+  }
+
+  if (trialApplies) {
+    const reservation = await reserveTrialListingSlot(effectiveUserId, trialLimit)
+    if (!reservation.ok) {
+      return apiError(`Trial limit reached. You can list ${trialLimit} items for free — upgrade to keep listing.`, {
+        status: 402,
+        code: 'TRIAL_LIMIT_REACHED',
+        details: { trialLimit, listed: reservation.listed },
+      })
+    }
+    trialSlotReserved = true
+  }
+
+  let attempt: Awaited<ReturnType<typeof attemptListing>>
+  let responseText = ''
+  let p = { short: '', long: '', codes: [] as string[], longs: [] as string[] }
+  let et: 'leaf' | 'specific' | 'other' = 'other'
+  let finalCategoryId = verifiedParams.categoryId
+  let attemptedCategoryIds = [...verificationAttempts]
+
+  try {
   // Attempt 1: verified category with verified specifics
-  let attempt = await attemptListing({ ...xmlParams, ...verifiedParams })
-  let responseText = attempt.responseText
-  let p = attempt.parsed
-  let et = attempt.errorKind
-  let finalCategoryId = attempt.categoryId
-  let attemptedCategoryIds = [...verificationAttempts, ...attempt.attemptedCategoryIds]
+  attempt = await attemptListing({ ...xmlParams, ...verifiedParams })
+  responseText = attempt.responseText
+  p = attempt.parsed
+  et = attempt.errorKind
+  finalCategoryId = attempt.categoryId
+  attemptedCategoryIds = [...verificationAttempts, ...attempt.attemptedCategoryIds]
 
   // Attempt 2: same category + auto-extracted required specifics from error
   if (et === 'specific') {
@@ -2230,6 +2259,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  } catch (error) {
+    await releaseReservedTrialSlot()
+    throw error
+  }
+
   const categoryDebug = {
     asinCategory,
     comparableCategory,
@@ -2263,6 +2297,7 @@ export async function POST(req: NextRequest) {
       verificationError ||
       allLong[0] || allShort[0] ||
       responseText.slice(0, 400)
+    await releaseReservedTrialSlot()
     if (errMsg.toLowerCase().includes('expired') || errMsg.toLowerCase().includes('auth token')) {
       return apiError('Your eBay session expired. Reconnect your account in Settings.', {
         status: 401,

@@ -240,6 +240,10 @@ body:has(.dashboard-shell--compact)::after{
   to{transform:translateX(0);opacity:1}
 }
 .pwa-menu__head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
   font-size:13px;
   font-weight:800;
   letter-spacing:0.06em;
@@ -247,6 +251,26 @@ body:has(.dashboard-shell--compact)::after{
   color:var(--dim);
   padding:0 20px 16px;
   border-bottom:1px solid var(--bdr);
+}
+.pwa-menu__plan{
+  flex-shrink:0;
+  padding:4px 8px;
+  border-radius:999px;
+  background:rgba(56,189,248,0.10);
+  border:1px solid rgba(56,189,248,0.20);
+  color:var(--sky);
+  font-size:9px;
+  line-height:1;
+  letter-spacing:0.08em;
+}
+.pwa-menu__account{
+  padding:10px 20px 4px;
+  color:var(--sil);
+  font-size:12px;
+  font-weight:700;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
 }
 .pwa-menu__nav{
   display:flex;

@@ -12,8 +12,10 @@ export async function GET() {
   const sub = await getUserPlan(session.user.id)
   const plan = sub?.plan || 'trial'
   const status = sub?.status || 'active'
-  const trialLimit = Number(process.env.TRIAL_LIST_LIMIT || '5')
+  const parsedTrialLimit = Number(process.env.TRIAL_LIST_LIMIT || '5')
+  const trialLimit = Number.isFinite(parsedTrialLimit) && parsedTrialLimit > 0 ? Math.floor(parsedTrialLimit) : 5
   const usage = plan === 'trial' ? await getTrialUsage(session.user.id) : { listed: 0 }
+  const remaining = Math.max(0, trialLimit - usage.listed)
 
   const stripeReady = isStripeBillingConfigured()
   const stripeCustomerId = sub?.stripeCustomerId || null
@@ -22,8 +24,10 @@ export async function GET() {
     ok: true,
     plan,
     status,
-    trialLimit: Number.isFinite(trialLimit) ? trialLimit : 5,
+    trialLimit,
     listed: usage.listed,
+    trialRemaining: plan === 'trial' ? remaining : 0,
+    isPro: plan === 'pro',
     billing: {
       checkoutAvailable: stripeReady,
       portalAvailable: stripeReady && Boolean(stripeCustomerId),

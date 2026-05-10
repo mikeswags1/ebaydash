@@ -13,6 +13,7 @@ export function SellOnEbayModal({
   listLoading,
   listResult,
   listError,
+  trialLocked,
   onClose,
   onPublish,
 }: {
@@ -24,6 +25,7 @@ export function SellOnEbayModal({
   listLoading: boolean
   listResult: ListResult | null
   listError: string | null
+  trialLocked?: boolean
   onClose: () => void
   onPublish: () => Promise<void>
 }) {
@@ -157,9 +159,15 @@ export function SellOnEbayModal({
               </div>
             ) : null}
 
+            {trialLocked ? (
+              <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', background: 'rgba(232,63,80,0.08)', border: '1px solid rgba(232,63,80,0.2)', fontSize: '12px', color: 'var(--red)', lineHeight: 1.6 }}>
+                Free trial complete for this account. Upgrade in Settings to keep publishing.
+              </div>
+            ) : null}
+
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button className="btn btn-gold" style={{ flex: 1, fontSize: '14px', padding: '14px' }} disabled={listLoading || validating || !validated || !listPrice} onClick={onPublish}>
-                {listLoading ? 'Publishing...' : validating ? 'Validating Amazon Price...' : 'Publish to eBay'}
+              <button className="btn btn-gold" style={{ flex: 1, fontSize: '14px', padding: '14px' }} disabled={trialLocked || listLoading || validating || !validated || !listPrice} onClick={onPublish}>
+                {trialLocked ? 'Upgrade to Publish' : listLoading ? 'Publishing...' : validating ? 'Validating Amazon Price...' : 'Publish to eBay'}
               </button>
               <button onClick={onClose} className="btn btn-ghost" style={{ fontSize: '13px', padding: '14px 18px' }}>
                 Cancel

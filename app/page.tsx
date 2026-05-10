@@ -61,6 +61,7 @@ export default function Landing() {
         </Link>
         <div className="home-nav-links" aria-label="Product sections">
           <Link href="/guide">How it works</Link>
+          <a href="#get-app">Get App</a>
           <a href="#research">Research</a>
           <a href="#workflow">Workflow</a>
           <a href="#safety">Safety</a>
@@ -93,7 +94,9 @@ export default function Landing() {
           <div className="home-trial-note" aria-label="Trial note">
             No card required · Trial ends after 5 published listings
           </div>
-          <GetTheAppBanner variant="marketing" />
+          <div id="get-app">
+            <GetTheAppBanner variant="marketing" />
+          </div>
           <div className="home-actions">
             <Link href="/signup" className="btn btn-solid">
               Request Access
