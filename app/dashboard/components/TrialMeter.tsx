@@ -74,7 +74,7 @@ export function TrialMeter({
       <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.5, marginTop: variant === 'topbar' ? 6 : 8 }}>
         {complete
           ? 'Free trial complete for this account. Upgrade to keep listing.'
-          : 'Counts active listings you published here. Ending a listing on eBay can free a slot.'}
+          : 'Counts total listings published from this account during the free trial.'}
       </div>
     </div>
   )

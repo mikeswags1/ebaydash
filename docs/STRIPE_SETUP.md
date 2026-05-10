@@ -9,7 +9,7 @@
 | `STRIPE_WEBHOOK_SECRET` | Yes in prod | Webhook signing secret (`whsec_...`) |
 | `NEXTAUTH_URL` | Yes | Public site URL (used for Checkout / Portal return URLs) |
 
-After setting variables, redeploy. Call **`/api/setup-db` once** (or run migrations) so `user_subscriptions.stripe_customer_id` exists on older databases.
+After setting variables, redeploy. Call **`/api/setup-db` once** (or run migrations) so `user_subscriptions.stripe_customer_id` and `user_subscriptions.trial_listings_used` exist on older databases.
 
 ## Stripe Dashboard
 
@@ -34,4 +34,4 @@ Use the CLI’s `whsec_...` as `STRIPE_WEBHOOK_SECRET` in `.env.local` while tes
 - **Settings → Manage billing** (Pro + customer on file): Stripe Customer Portal.
 - Webhooks sync `user_subscriptions`: `plan` (`pro` / `trial`), `stripe_customer_id`, `external_subscription_id`, periods, amounts.
 
-Listing limits: **`trial`** uses `TRIAL_LIST_LIMIT`; **`pro`** bypasses the trial cap (same as before once `plan !== 'trial'` in the DB).
+Listing limits: **`trial`** uses `TRIAL_LIST_LIMIT` as a lifetime published-listing counter per account; **`pro`** bypasses the trial cap (same as before once `plan !== 'trial'` in the DB).

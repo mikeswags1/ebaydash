@@ -481,6 +481,26 @@ export default function Dashboard() {
     }
   }, [])
 
+  const applySubscriptionStatus = useCallback((v: Awaited<ReturnType<typeof fetchSubscriptionStatus>>) => {
+    setSubscriptionState({
+      loading: false,
+      plan: v.plan || 'trial',
+      status: v.status || 'active',
+      trialLimit: v.trialLimit || 5,
+      listed: v.listed || 0,
+      trialRemaining: v.trialRemaining ?? Math.max(0, (v.trialLimit || 5) - (v.listed || 0)),
+      isPro: v.isPro ?? v.plan === 'pro',
+      billingCheckoutAvailable: v.billing?.checkoutAvailable ?? false,
+      billingPortalAvailable: v.billing?.portalAvailable ?? false,
+    })
+  }, [])
+
+  const refreshSubscriptionStatus = useCallback(async () => {
+    const status = await fetchSubscriptionStatus()
+    applySubscriptionStatus(status)
+    return status
+  }, [applySubscriptionStatus])
+
   const loadDashboardBootstrap = useCallback(async () => {
     setSubscriptionState((prev) => ({ ...prev, loading: true }))
     const results = await Promise.allSettled([
@@ -516,22 +536,11 @@ export default function Dashboard() {
     }
 
     if (subResult.status === 'fulfilled') {
-      const v = subResult.value
-      setSubscriptionState({
-        loading: false,
-        plan: v.plan || 'trial',
-        status: v.status || 'active',
-        trialLimit: v.trialLimit || 5,
-        listed: v.listed || 0,
-        trialRemaining: v.trialRemaining ?? Math.max(0, (v.trialLimit || 5) - (v.listed || 0)),
-        isPro: v.isPro ?? v.plan === 'pro',
-        billingCheckoutAvailable: v.billing?.checkoutAvailable ?? false,
-        billingPortalAvailable: v.billing?.portalAvailable ?? false,
-      })
+      applySubscriptionStatus(subResult.value)
     } else {
       setSubscriptionState((prev) => ({ ...prev, loading: false }))
     }
-  }, [getEbayConnectionState])
+  }, [applySubscriptionStatus, getEbayConnectionState])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -862,8 +871,19 @@ export default function Dashboard() {
       setBanner({ tone: 'error', text: 'Connect eBay first in Settings.' })
       return
     }
+    if (subscriptionState.loading) {
+      setBanner({ tone: 'error', text: 'Checking your billing status. Try again in a moment.' })
+      return
+    }
+    if (subscriptionState.plan === 'trial' && subscriptionState.trialRemaining <= 0) {
+      setBanner({ tone: 'error', text: 'Free trial complete for this account. Upgrade in Settings to keep listing.' })
+      return
+    }
 
-    const products = visibleFinderResults || []
+    let products = visibleFinderResults || []
+    if (subscriptionState.plan === 'trial') {
+      products = products.slice(0, Math.max(0, subscriptionState.trialRemaining))
+    }
     if (products.length === 0) return
 
     const result = await listProductsInBatches({
@@ -890,6 +910,7 @@ export default function Dashboard() {
     const terminalAsins = [...result.listedAsins, ...result.failedAsins, ...result.skippedAsins]
     if (result.errors > 0) {
       await refillNicheFinderProducts(terminalAsins)
+      await refreshSubscriptionStatus().catch(() => {})
       setBanner({
         tone: 'error',
         text: summarizeBulkListResult(result),
@@ -898,20 +919,32 @@ export default function Dashboard() {
     }
 
     await refillNicheFinderProducts(terminalAsins)
+    await refreshSubscriptionStatus().catch(() => {})
 
     setBanner({
       tone: 'success',
       text: summarizeBulkListResult(result),
     })
-  }, [connectionState.ebayConnected, publishFinderProduct, refillNicheFinderProducts, visibleFinderResults])
+  }, [connectionState.ebayConnected, publishFinderProduct, refillNicheFinderProducts, refreshSubscriptionStatus, subscriptionState.loading, subscriptionState.plan, subscriptionState.trialRemaining, visibleFinderResults])
 
   const handleContinuousListAll = useCallback(async () => {
     if (!connectionState.ebayConnected) {
       setBanner({ tone: 'error', text: 'Connect eBay first in Settings.' })
       return
     }
+    if (subscriptionState.loading) {
+      setBanner({ tone: 'error', text: 'Checking your billing status. Try again in a moment.' })
+      return
+    }
+    if (subscriptionState.plan === 'trial' && subscriptionState.trialRemaining <= 0) {
+      setBanner({ tone: 'error', text: 'Free trial complete for this account. Upgrade in Settings to keep listing.' })
+      return
+    }
 
-    const products = tagFinderProducts(visibleContinuousResults || [], 'continuous')
+    let products = tagFinderProducts(visibleContinuousResults || [], 'continuous')
+    if (subscriptionState.plan === 'trial') {
+      products = products.slice(0, Math.max(0, subscriptionState.trialRemaining))
+    }
     if (products.length === 0) return
 
     const result = await listProductsInBatches({
@@ -937,6 +970,7 @@ export default function Dashboard() {
     const terminalAsins = [...result.listedAsins, ...result.failedAsins, ...result.skippedAsins]
     if (result.errors > 0) {
       await refillContinuousProducts(terminalAsins)
+      await refreshSubscriptionStatus().catch(() => {})
       setBanner({
         tone: 'error',
         text: summarizeBulkListResult(result),
@@ -945,11 +979,12 @@ export default function Dashboard() {
     }
 
     await refillContinuousProducts(terminalAsins)
+    await refreshSubscriptionStatus().catch(() => {})
     setBanner({
       tone: 'success',
       text: summarizeBulkListResult(result),
     })
-  }, [connectionState.ebayConnected, publishFinderProduct, refillContinuousProducts, visibleContinuousResults])
+  }, [connectionState.ebayConnected, publishFinderProduct, refillContinuousProducts, refreshSubscriptionStatus, subscriptionState.loading, subscriptionState.plan, subscriptionState.trialRemaining, visibleContinuousResults])
 
   const handleRunScript = useCallback(async (file: string) => {
     setScriptRunning(file)
@@ -991,6 +1026,14 @@ export default function Dashboard() {
 
   const handlePublishCurrentProduct = useCallback(async () => {
     if (!listingState.modal) return
+    if (subscriptionState.loading) {
+      setListingState((prev) => ({ ...prev, error: 'Checking your billing status. Try again in a moment.' }))
+      return
+    }
+    if (subscriptionState.plan === 'trial' && subscriptionState.trialRemaining <= 0) {
+      setListingState((prev) => ({ ...prev, error: 'Free trial complete for this account. Upgrade in Settings to keep publishing.' }))
+      return
+    }
 
     let productToPublish = listingState.modal
     let priceValue = listingState.price
@@ -1043,22 +1086,7 @@ export default function Dashboard() {
       }
       setBanner({ tone: 'success', text: `Listing ${data.listingId} is now live on eBay.` })
       // Refresh trial counter after publishing.
-      try {
-        const s = await fetchSubscriptionStatus()
-        setSubscriptionState({
-          loading: false,
-          plan: s.plan || 'trial',
-          status: s.status || 'active',
-          trialLimit: s.trialLimit || 5,
-          listed: s.listed || 0,
-          trialRemaining: s.trialRemaining ?? Math.max(0, (s.trialLimit || 5) - (s.listed || 0)),
-          isPro: s.isPro ?? s.plan === 'pro',
-          billingCheckoutAvailable: s.billing?.checkoutAvailable ?? false,
-          billingPortalAvailable: s.billing?.portalAvailable ?? false,
-        })
-      } catch {
-        /* optional */
-      }
+      await refreshSubscriptionStatus().catch(() => {})
     } catch (error) {
       setListingState((prev) => ({
         ...prev,
@@ -1070,7 +1098,7 @@ export default function Dashboard() {
     } finally {
       setListingState((prev) => ({ ...prev, loading: false }))
     }
-  }, [listingState.modal, listingState.price, listingState.validated, nicheState.value, refillContinuousProducts, refillNicheFinderProducts, validateListingProduct])
+  }, [listingState.modal, listingState.price, listingState.validated, nicheState.value, refillContinuousProducts, refillNicheFinderProducts, refreshSubscriptionStatus, subscriptionState.loading, subscriptionState.plan, subscriptionState.trialRemaining, validateListingProduct])
 
   const grossRevenue = useMemo(() => getGrossRevenue(orderState.orders), [orderState.orders])
 
@@ -1286,6 +1314,7 @@ export default function Dashboard() {
                 plan: subscriptionState.plan,
                 listed: subscriptionState.listed,
                 trialLimit: subscriptionState.trialLimit,
+                trialRemaining: subscriptionState.trialRemaining,
               }}
             />
           ) : null}
@@ -1307,6 +1336,7 @@ export default function Dashboard() {
                 plan: subscriptionState.plan,
                 listed: subscriptionState.listed,
                 trialLimit: subscriptionState.trialLimit,
+                trialRemaining: subscriptionState.trialRemaining,
               }}
             />
           ) : null}
@@ -1365,6 +1395,7 @@ export default function Dashboard() {
         listLoading={listingState.loading}
         listResult={listingState.result}
         listError={listingState.error}
+        trialLocked={!subscriptionState.loading && subscriptionState.plan === 'trial' && subscriptionState.trialRemaining <= 0}
         onClose={closeListModal}
         onPublish={() => handlePublishCurrentProduct()}
       />

@@ -28,9 +28,15 @@ export function ContinuousListingTab({
   listAllProgress: ListProgress | null
   connected: boolean
   compact?: boolean
-  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number }
+  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number; trialRemaining?: number }
 }) {
   const hasResults = Boolean(finderResults?.length)
+  const trialLocked = Boolean(
+    trial &&
+    !trial.loading &&
+    trial.plan === 'trial' &&
+    (trial.trialRemaining ?? Math.max(0, trial.trialLimit - trial.listed)) <= 0
+  )
 
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
@@ -80,7 +86,7 @@ export function ContinuousListingTab({
             <button
               className="btn btn-solid"
               style={{ padding: '14px', fontSize: '13px', fontWeight: 700 }}
-              disabled={!!listAllProgress && listAllProgress.done < listAllProgress.total}
+              disabled={!connected || trialLocked || (!!listAllProgress && listAllProgress.done < listAllProgress.total)}
               onClick={onListAll}
             >
               {listAllProgress && listAllProgress.done < listAllProgress.total ? `Listing ${listAllProgress.done + 1}/${listAllProgress.total}...` : `List All (${finderResults.length})`}
@@ -124,6 +130,7 @@ export function ContinuousListingTab({
             onListAll={onListAll}
             listAllProgress={listAllProgress}
             compact={compact}
+            trialLocked={trialLocked}
           />
         ) : null}
       </div>

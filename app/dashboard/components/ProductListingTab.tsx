@@ -53,7 +53,7 @@ export function ProductListingTab({
   listAllProgress: ListProgress | null
   connected: boolean
   compact?: boolean
-  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number }
+  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number; trialRemaining?: number }
 }) {
   const isListing = !!listAllProgress && listAllProgress.done < listAllProgress.total
   const listingDone = !!listAllProgress && listAllProgress.done === listAllProgress.total
@@ -62,6 +62,12 @@ export function ProductListingTab({
   const failedCount = listAllProgress ? Math.max(0, listAllProgress.errors - skippedCount) : 0
   const listedCount = listAllProgress ? Math.max(0, listAllProgress.total - listAllProgress.errors) : 0
   const hasResults = Boolean(finderResults?.length)
+  const trialLocked = Boolean(
+    trial &&
+    !trial.loading &&
+    trial.plan === 'trial' &&
+    (trial.trialRemaining ?? Math.max(0, trial.trialLimit - trial.listed)) <= 0
+  )
 
   return (
     <div style={{ animation: 'fadein 0.22s ease' }}>
@@ -188,7 +194,7 @@ export function ProductListingTab({
                 <button
                   className="btn btn-solid"
                   onClick={onListAll}
-                  disabled={!connected}
+                  disabled={!connected || trialLocked}
                   style={{ padding: '13px 22px', fontSize: '13px', fontWeight: 700, flex: '1 1 140px' }}
                 >
                   List All ({finderResults.length})
@@ -267,6 +273,7 @@ export function ProductListingTab({
                 onListAll={onListAll}
                 listAllProgress={listAllProgress}
                 compact={compact}
+                trialLocked={trialLocked}
               />
             ) : null}
           </>
@@ -286,6 +293,7 @@ export function FinderResults({
   onListAll,
   listAllProgress,
   compact,
+  trialLocked,
 }: {
   connected: boolean
   niche: string
@@ -296,6 +304,7 @@ export function FinderResults({
   onListAll: () => void
   listAllProgress: ListProgress | null
   compact?: boolean
+  trialLocked?: boolean
 }) {
   const isListing = !!listAllProgress && listAllProgress.done < listAllProgress.total
   const listingDone = !!listAllProgress && listAllProgress.done === listAllProgress.total
@@ -320,7 +329,7 @@ export function FinderResults({
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           {!isListing && !listingDone ? (
-            <button className="btn btn-gold btn-sm" style={{ fontSize: '10px' }} disabled={!connected} onClick={onListAll}>
+            <button className="btn btn-gold btn-sm" style={{ fontSize: '10px' }} disabled={!connected || trialLocked} onClick={onListAll}>
               List All ({results.length})
             </button>
           ) : null}

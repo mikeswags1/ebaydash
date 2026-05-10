@@ -59,7 +59,7 @@ function BillingSection({
         {isPro
           ? `This account is on Pro${status && status !== 'active' ? ` (${status})` : ''}. Manage payment method, invoices, and cancellation in the Stripe billing portal.`
           : remaining > 0
-            ? `This account has ${remaining} free listing${remaining === 1 ? '' : 's'} left. Upgrade to list beyond the free trial with unlimited active listings.`
+            ? `This account has ${remaining} free listing${remaining === 1 ? '' : 's'} left. Trial usage is tied to total published listings on this account.`
             : 'Free trial complete for this account. Upgrade to keep listing with unlimited active listings.'}
       </div>
 

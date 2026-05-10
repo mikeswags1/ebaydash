@@ -71,12 +71,14 @@ export async function GET() {
         payment_method VARCHAR(100),
         external_subscription_id VARCHAR(255),
         stripe_customer_id VARCHAR(255),
+        trial_listings_used INTEGER NOT NULL DEFAULT 0,
         notes TEXT,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `
     await sql`ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255)`.catch(() => {})
+    await sql`ALTER TABLE user_subscriptions ADD COLUMN IF NOT EXISTS trial_listings_used INTEGER NOT NULL DEFAULT 0`.catch(() => {})
     await ensureListedAsinsFinancialColumns()
     await ensureProductSourceTables()
     await ensureAutoListingTables()

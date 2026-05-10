@@ -14,8 +14,8 @@ const sections = [
     id: 'trial',
     title: 'Free trial (5 listings)',
     bullets: [
-      'You can publish up to 5 active listings while on trial.',
-      'We count listings that are still live. Ending a listing on eBay can free a slot.',
+      'You can publish up to 5 listings while on trial.',
+      'Trial usage is tied to total listings published from the account, even if an item is ended later.',
       'After the limit, upgrade / contact your invite to keep publishing.',
     ],
   },
