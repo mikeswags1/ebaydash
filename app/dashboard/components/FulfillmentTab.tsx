@@ -5,125 +5,63 @@ import type { EbayOrder, EbayShipToAddress, OrderAsinMap } from '../types'
 import { fetchFulfillmentStatuses, getErrorMessage, startFulfillment } from '../api'
 import { EmptyState, SectionIntro } from './shared'
 
-function FulfillmentAmazonSteps() {
-  const steps = ['Sign in to Amazon (2FA if prompted).', 'At checkout, confirm ship-to matches eBay, then pay and place the order.']
-  return (
-    <ol
-      style={{
-        margin: '10px 0 0',
-        paddingLeft: '18px',
-        fontSize: '12px',
-        color: 'var(--sil)',
-        lineHeight: 1.65,
-      }}
-    >
-      {steps.map((text) => (
-        <li key={text} style={{ marginBottom: '6px' }}>
-          {text}
-        </li>
-      ))}
-    </ol>
-  )
-}
-
-/** Always renders visible copy + download + install steps — must never ship as an empty box. */
+/** Collapsible — keeps the tab calm while preserving full install docs. */
 function FulfillmentExtensionTip() {
   const zipFilename = 'stackpilot-fulfillment-extension.zip'
   return (
-    <div
-      className="card"
-      style={{
-        marginBottom: '20px',
-        padding: '16px 20px',
-        border: '1px solid rgba(56,189,248,0.28)',
-        background: 'rgba(14,27,44,0.65)',
-      }}
-    >
-      <div
-        style={{
-          fontSize: '11px',
-          fontWeight: 800,
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-          color: 'var(--plat)',
-          marginBottom: '10px',
-        }}
-      >
-        Optional: Chrome / Edge autofill (desktop only)
+    <details className="fulfillment-details">
+      <summary>
+        <span>Optional Chrome / Edge checkout helper</span>
+        <span className="fulfillment-details__hint">Desktop · unzip &amp; load unpacked</span>
+      </summary>
+      <div className="fulfillment-details__body">
+        <p>
+          Autofill for shipping fields when Amazon shows checkout; uses the same secure token as <strong>Fulfill</strong>. You still sign in, complete 2FA, and place the order.
+        </p>
+        <div className="fulfillment-details__actions">
+          <a className="btn btn-gold btn-sm" href={`/${zipFilename}`} download={zipFilename} style={{ textDecoration: 'none', fontWeight: 700 }}>
+            Download zip
+          </a>
+          <span style={{ fontSize: '11px', color: 'var(--dim)' }}>
+            <code style={{ fontSize: '10px', color: 'rgba(148,212,255,0.85)' }}>/{zipFilename}</code>
+          </span>
+        </div>
+        <ol>
+          <li>
+            <strong style={{ color: 'var(--plat)' }}>Unzip</strong> into a permanent folder (Chrome keeps referencing it).
+          </li>
+          <li>
+            Open <code style={{ fontSize: '11px' }}>chrome://extensions</code> or <code style={{ fontSize: '11px' }}>edge://extensions</code>, enable <strong>Developer mode</strong>.
+          </li>
+          <li>
+            <strong>Load unpacked</strong> → choose the folder → <strong>StackPilot Fulfillment</strong> appears.
+          </li>
+          <li>
+            Use <strong style={{ color: 'var(--gold)' }}>Fulfill</strong> here first so the Amazon tab receives the token.
+          </li>
+        </ol>
+        <div className="fulfillment-details__note">
+          <strong>Toolbar icon:</strong> May look inactive on StackPilot — autofill runs on the <strong>Amazon</strong> tab. Reload the extension after replacing the zip.
+        </div>
+        <div className="fulfillment-details__devhint">
+          If the zip 404s locally, run <code style={{ fontSize: '10px' }}>npm run zip:ext</code> so <code style={{ fontSize: '10px' }}>/public/{zipFilename}</code> exists.
+        </div>
       </div>
-      <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.65 }}>
-        Install once on your computer. It reads the secure token from the Amazon tab, stores the buyer address for checkout, and tries <strong>Buy Now</strong> + shipping fields when Amazon shows those screens. You still sign in, complete 2FA, and place the order.
-      </div>
-
-      <div style={{ marginTop: '14px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
-        <a
-          className="btn btn-gold btn-sm"
-          href={`/${zipFilename}`}
-          download={zipFilename}
-          style={{ textDecoration: 'none', fontWeight: 700 }}
-        >
-          Download extension (zip)
-        </a>
-        <span style={{ fontSize: '11px', color: 'var(--dim)', maxWidth: '420px', lineHeight: 1.5 }}>
-          File: <code style={{ fontSize: '10px', color: 'rgba(148,212,255,0.85)' }}>/{zipFilename}</code>
-        </span>
-      </div>
-
-      <div style={{ marginTop: '14px', fontSize: '12px', color: 'var(--plat)', fontWeight: 700 }}>Install in the browser</div>
-      <ol
-        style={{
-          margin: '8px 0 0',
-          paddingLeft: '18px',
-          fontSize: '12px',
-          color: 'var(--sil)',
-          lineHeight: 1.7,
-        }}
-      >
-        <li style={{ marginBottom: '6px' }}>
-          <strong style={{ color: 'var(--plat)' }}>Unzip</strong> the download into a permanent folder (Chrome needs that folder to stay on disk).
-        </li>
-        <li style={{ marginBottom: '6px' }}>
-          Open{' '}
-          <code style={{ fontSize: '11px' }}>chrome://extensions</code> (Chrome) or <code style={{ fontSize: '11px' }}>edge://extensions</code> (Edge). Turn on{' '}
-          <strong>Developer mode</strong>.
-        </li>
-        <li style={{ marginBottom: '6px' }}>
-          Click <strong>Load unpacked</strong> and choose the unzipped folder. You should see <strong>StackPilot Fulfillment</strong> in the list.
-        </li>
-        <li>
-          Come back here with a mapped ASIN and click <strong style={{ color: 'var(--gold)' }}>Fulfill</strong> — the Amazon tab will carry the token the extension needs.
-        </li>
-      </ol>
-
-      <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '8px', background: 'rgba(14,27,44,0.85)', border: '1px solid rgba(125,211,252,0.12)', fontSize: '11px', color: 'var(--dim)', lineHeight: 1.55 }}>
-        <strong style={{ color: 'var(--plat)' }}>Chrome toolbar:</strong> On the StackPilot site the extension may look dimmed — Chrome only “lights up” tools that inject into the open page. Autofill runs in the <strong>Amazon</strong> tab after you click{' '}
-        <strong style={{ color: 'var(--gold)' }}>Fulfill</strong>. Reload the extension in chrome://extensions after updating the zip.
-      </div>
-
-      <div style={{ marginTop: '14px', fontSize: '11px', color: 'var(--dim)', lineHeight: 1.55 }}>
-        If the download returns 404, run <code style={{ fontSize: '10px' }}>npm install</code> then <code style={{ fontSize: '10px' }}>npm run zip:ext</code> locally and refresh; your host must run the prebuild zip step so{' '}
-        <code style={{ fontSize: '10px' }}>/public/{zipFilename}</code> exists.
-      </div>
-    </div>
+    </details>
   )
 }
 
 function FulfillmentPrimaryTip() {
   return (
-    <div
-      className="card"
-      style={{
-        marginBottom: '14px',
-        padding: '16px 20px',
-        border: '1px solid rgba(56,189,248,0.18)',
-        background: 'rgba(14,27,44,0.5)',
-      }}
-    >
-      <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.65 }}>
-        Works on <strong style={{ color: 'var(--plat)' }}>phone and laptop</strong>: click <strong style={{ color: 'var(--gold)' }}>Fulfill</strong> — we copy the buyer&apos;s ship-to and open Amazon on a secure link (same link the optional
-        Chrome helper uses). Paste the address at checkout if the product page doesn&apos;t send you straight into shipping. <strong style={{ color: 'var(--plat)' }}>No install needed.</strong>
-      </div>
-      <FulfillmentAmazonSteps />
+    <div className="fulfillment-help-card">
+      <h2 className="fulfillment-help-card__title">How it works</h2>
+      <p className="fulfillment-help-card__lead">
+        Tap <strong>Fulfill</strong> to copy the buyer&apos;s ship-to and open Amazon — works on <strong>phone and laptop</strong>. No extension required.
+      </p>
+      <ul className="fulfillment-steps">
+        <li>Sign in on Amazon (2FA if prompted).</li>
+        <li>Match ship-to to eBay at checkout, then pay and place the order.</li>
+      </ul>
     </div>
   )
 }
@@ -169,33 +107,24 @@ function StateBadge({ state }: { state?: string }) {
   if (!state || state === 'NOT_STARTED') return null
   const label =
     state === 'PREFILLED'
-      ? 'Checkout ready — pay & place order'
+      ? 'Checkout ready'
       : state === 'PURCHASED'
-        ? 'Marked purchased'
+        ? 'Purchased'
         : state === 'ISSUE'
-          ? 'Finish checkout on Amazon'
+          ? 'Finish on Amazon'
           : state
-  const color =
+  const pillClass =
     state === 'PREFILLED'
-      ? 'rgba(52,211,153,0.95)'
+      ? 'fulfillment-status-pill fulfillment-status-pill--ok'
       : state === 'PURCHASED'
-        ? 'rgba(251,191,36,0.95)'
+        ? 'fulfillment-status-pill fulfillment-status-pill--warn'
         : state === 'ISSUE'
-          ? 'rgba(148,212,255,0.85)'
-          : 'var(--dim)'
+          ? 'fulfillment-status-pill fulfillment-status-pill--muted'
+          : 'fulfillment-status-pill fulfillment-status-pill--muted'
   return (
-    <div
-      style={{
-        fontSize: '10px',
-        fontWeight: 700,
-        textTransform: 'uppercase',
-        letterSpacing: '0.02em',
-        color,
-        marginTop: '6px',
-      }}
-    >
+    <span className={pillClass} title={label}>
       {label}
-    </div>
+    </span>
   )
 }
 
@@ -275,11 +204,7 @@ export function FulfillmentTab({
             <div style={{ fontSize: '12px', color: 'var(--sil)', marginTop: '6px', lineHeight: 1.5 }}>Connect eBay to load orders waiting to ship.</div>
           </div>
         ) : (
-          <SectionIntro
-            eyebrow="Operations"
-            title="Fulfillment"
-            subtitle="Connect eBay, then use Fulfill to copy ship-to and open Amazon."
-          />
+          <SectionIntro eyebrow="Operations" title="Fulfillment" subtitle="Connect eBay, then use Fulfill to copy ship-to and open Amazon." />
         )}
         <div className="dashboard-section" style={{ padding: sectionPad }}>
           <EmptyState connected={false} onConnect={onOpenSettings} msg="Connect eBay in Settings to load your awaiting shipment queue." />
@@ -294,61 +219,41 @@ export function FulfillmentTab({
         <div style={{ padding: '20px var(--xpad) 12px' }}>
           <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 700, color: 'var(--txt)' }}>Fulfillment</div>
           <div style={{ fontSize: '12px', color: 'var(--sil)', marginTop: '6px', lineHeight: 1.5 }}>
-            Tap <strong style={{ color: 'var(--gold)' }}>Fulfill</strong> to copy the address and open Amazon. No browser extension required on your phone.
+            Tap <strong style={{ color: 'var(--gold)' }}>Fulfill</strong> to copy the address and open Amazon. No extension required on your phone.
           </div>
         </div>
       ) : (
         <SectionIntro
           eyebrow="Operations"
           title="Fulfillment"
-          subtitle="One tap: copy buyer address and open the Amazon listing — works on laptop and phone."
+          subtitle="Copy buyer ship-to and jump to Amazon in one flow — desktop or mobile."
         />
       )}
 
       <div className="dashboard-section" style={{ padding: sectionPad, maxWidth: '1200px', display: 'flex', flexDirection: 'column' }}>
-        {compact ? null : <FulfillmentPrimaryTip />}
-        {compact ? null : <FulfillmentExtensionTip />}
-        {fulfillErr ? (
-          <div
-            className="card"
-            style={{
-              marginBottom: '16px',
-              padding: '12px 16px',
-              border: '1px solid rgba(248,113,113,0.35)',
-              color: 'var(--sil)',
-              fontSize: '12px',
-            }}
-          >
-            {fulfillErr}
+        {compact ? null : (
+          <div className="fulfillment-help">
+            <FulfillmentPrimaryTip />
+            <FulfillmentExtensionTip />
           </div>
-        ) : null}
+        )}
+
+        {fulfillErr ? <div className="fulfillment-alert">{fulfillErr}</div> : null}
+
         {rows.length === 0 ? (
           <EmptyState connected={true} onConnect={() => {}} msg="No awaiting shipment orders right now." />
         ) : (
-          <div className="card" style={{ overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="fulfillment-table-wrap">
+            <table className="fulfillment-table">
               <thead>
-                <tr style={{ background: 'rgba(15,35,56,0.92)', borderBottom: '1px solid rgba(125,211,252,0.12)' }}>
+                <tr>
                   {['Order', 'Item', 'ASIN', 'Ship to', 'Actions'].map((heading) => (
-                    <th
-                      key={heading}
-                      style={{
-                        color: 'var(--plat)',
-                        fontSize: '7.5px',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: 0,
-                        padding: '13px 16px',
-                        textAlign: 'left',
-                      }}
-                    >
-                      {heading}
-                    </th>
+                    <th key={heading}>{heading}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, index) => {
+                {rows.map((row) => {
                   const title = row.order.lineItems?.[0]?.title || row.order.orderId
                   const qty = row.order.lineItems?.[0]?.quantity || 1
                   const line = row.shipToLines.join('\n')
@@ -356,45 +261,40 @@ export function FulfillmentTab({
                   const st = statusByKey[copyKey]
 
                   return (
-                    <tr
-                      key={copyKey}
-                      style={{
-                        background: index % 2 === 0 ? 'rgba(14,27,44,0.88)' : 'rgba(11,22,36,0.88)',
-                        borderBottom: '1px solid rgba(125,211,252,0.08)',
-                        verticalAlign: 'top',
-                      }}
-                    >
-                      <td style={{ padding: '14px 16px', color: 'var(--txt)', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                        <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontWeight: 700 }}>{row.order.orderId}</div>
-                        <div style={{ color: 'var(--dim)', fontSize: '10px', marginTop: '4px' }}>{new Date(row.order.creationDate).toLocaleDateString()}</div>
+                    <tr key={copyKey}>
+                      <td style={{ color: 'var(--txt)', whiteSpace: 'nowrap' }}>
+                        <div className="fulfillment-table__order-id">{row.order.orderId}</div>
+                        <div className="fulfillment-table__date">{new Date(row.order.creationDate).toLocaleDateString()}</div>
                       </td>
 
-                      <td style={{ padding: '14px 16px', color: 'var(--txt)', fontSize: '12px', minWidth: '240px' }}>
-                        <div style={{ fontWeight: 600, marginBottom: '6px' }}>{title}</div>
-                        <div style={{ color: 'var(--dim)', fontSize: '10px' }}>
+                      <td style={{ minWidth: '220px' }}>
+                        <div className="fulfillment-table__title">{title}</div>
+                        <div className="fulfillment-table__meta">
                           Qty {qty}
                           {row.legacyItemId ? ` · Item ${row.legacyItemId}` : ''}
                         </div>
                       </td>
 
-                      <td style={{ padding: '14px 16px', color: 'var(--sil)', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                      <td style={{ whiteSpace: 'nowrap' }}>
                         {row.asin ? (
-                          <a href={row.amazonUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--gold)', textDecoration: 'none', fontWeight: 700 }}>
-                            {row.asin}
-                          </a>
+                          <span className="fulfillment-table__asin">
+                            <a href={row.amazonUrl} target="_blank" rel="noreferrer">
+                              {row.asin}
+                            </a>
+                          </span>
                         ) : (
-                          <span style={{ color: 'var(--dim)' }} title="Map an ASIN in ASIN Lookup to open the product from Fulfill.">
+                          <span className="fulfillment-table__asin-missing" title="Map an ASIN in ASIN Lookup to open the product from Fulfill.">
                             Missing
                           </span>
                         )}
                       </td>
 
-                      <td style={{ padding: '14px 16px', color: 'var(--sil)', fontSize: '11px', minWidth: '260px' }}>
-                        <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit', lineHeight: 1.5 }}>{line}</pre>
+                      <td>
+                        <pre className="fulfillment-table__address">{line}</pre>
                       </td>
 
-                      <td style={{ padding: '14px 16px', minWidth: '200px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <td>
+                        <div className="fulfillment-queue-actions">
                           <button
                             type="button"
                             className="btn btn-solid btn-sm"
@@ -426,17 +326,15 @@ export function FulfillmentTab({
                               }
                             }}
                           >
-                            {fulfillFlash === copyKey
-                              ? row.amazonUrl
-                                ? 'Copied · opened Amazon'
-                                : 'Address copied'
-                              : 'Fulfill'}
+                            {fulfillFlash === copyKey ? (row.amazonUrl ? 'Copied · opened Amazon' : 'Address copied') : 'Fulfill'}
                           </button>
+
                           <StateBadge state={st} />
 
                           <button
                             type="button"
-                            className="btn btn-gold btn-sm"
+                            className="btn btn-ghost btn-sm"
+                            style={{ alignSelf: 'flex-start', fontSize: '11px' }}
                             onClick={async () => {
                               try {
                                 await navigator.clipboard.writeText(line)
@@ -447,12 +345,12 @@ export function FulfillmentTab({
                               }
                             }}
                           >
-                            {copiedId === copyKey ? 'Copied' : 'Copy only'}
+                            {copiedId === copyKey ? 'Copied address' : 'Copy address only'}
                           </button>
 
                           {!row.amazonUrl ? (
-                            <span style={{ color: 'var(--dim)', fontSize: '11px', lineHeight: 1.45 }}>
-                              Map the ASIN in <strong style={{ color: 'rgba(148,212,255,0.85)' }}>ASIN Lookup</strong> so Fulfill can open the Amazon product page.
+                            <span className="fulfillment-queue-actions__hint">
+                              Map ASIN in <strong style={{ color: 'rgba(148,212,255,0.85)' }}>ASIN Lookup</strong> to open Amazon from here.
                             </span>
                           ) : null}
                         </div>

@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { GetTheAppBanner } from '@/app/components/GetTheAppBanner'
 import { NAV_ITEMS } from '../constants'
 import type { Tab } from '../types'
 
@@ -76,10 +75,6 @@ export function DashboardSidebar({
         >
           Operations Dashboard
         </div>
-      </div>
-
-      <div className="dashboard-sidebar-get-app">
-        <GetTheAppBanner sidebar />
       </div>
 
       <div className="dashboard-status" style={{ padding: '14px 20px', borderBottom: '1px solid rgba(56,189,248,0.10)' }}>

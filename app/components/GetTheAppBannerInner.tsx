@@ -1,9 +1,10 @@
 'use client'
 
+import Link from 'next/link'
 import { useLayoutEffect, useMemo, useState } from 'react'
 
 /** Bump version when copy changes so QA/users see the updated banner after dismiss. */
-const STORAGE_KEY = 'stackpilot:get_the_app:dismissed:v2'
+const STORAGE_KEY = 'stackpilot:get_the_app:dismissed:v3'
 
 function isInstalledPwa(): boolean {
   if (typeof window === 'undefined') return false
@@ -44,14 +45,28 @@ export type GetTheAppBannerProps = {
   compact?: boolean
   /** Narrow left sidebar on desktop dashboard */
   sidebar?: boolean
+  /** Full-width strip under desktop top bar (below tab title, above free trial) */
+  topRail?: boolean
 }
 
-export function GetTheAppBannerInner({ variant = 'dashboard', compact = false, sidebar = false }: GetTheAppBannerProps) {
-  const [show, setShow] = useState(false)
+export function GetTheAppBannerInner({
+  variant = 'dashboard',
+  compact = false,
+  sidebar = false,
+  topRail = false,
+}: GetTheAppBannerProps) {
+  /** null until mounted — avoids flashing full banner when already dismissed */
+  const [phase, setPhase] = useState<'full' | 'mini' | 'gone' | null>(null)
 
   const copy = useMemo(() => hintForUserAgent(typeof navigator !== 'undefined' ? navigator.userAgent : ''), [])
 
+  const dashboardSurface = topRail || compact || sidebar
+
   useLayoutEffect(() => {
+    if (isInstalledPwa()) {
+      setPhase('gone')
+      return
+    }
     try {
       const params = new URLSearchParams(window.location.search)
       if (params.get('installHint') === '1') {
@@ -60,22 +75,30 @@ export function GetTheAppBannerInner({ variant = 'dashboard', compact = false, s
         } catch {
           /* ignore */
         }
-        setShow(true)
+        setPhase('full')
         return
       }
     } catch {
       /* ignore */
     }
-    if (isInstalledPwa()) return
     try {
-      if (localStorage.getItem(STORAGE_KEY) === '1') return
+      if (localStorage.getItem(STORAGE_KEY) === '1') {
+        if (variant === 'marketing' || variant === 'login') {
+          setPhase('gone')
+        } else if (dashboardSurface) {
+          setPhase('mini')
+        } else {
+          setPhase('gone')
+        }
+        return
+      }
     } catch {
       /* ignore */
     }
-    setShow(true)
-  }, [])
+    setPhase('full')
+  }, [variant, dashboardSurface])
 
-  if (!show) return null
+  if (phase === null || phase === 'gone') return null
 
   const dismiss = () => {
     try {
@@ -83,7 +106,13 @@ export function GetTheAppBannerInner({ variant = 'dashboard', compact = false, s
     } catch {
       /* ignore */
     }
-    setShow(false)
+    if (variant === 'marketing' || variant === 'login') {
+      setPhase('gone')
+    } else if (dashboardSurface) {
+      setPhase('mini')
+    } else {
+      setPhase('gone')
+    }
   }
 
   const mods = [
@@ -92,9 +121,34 @@ export function GetTheAppBannerInner({ variant = 'dashboard', compact = false, s
     variant === 'marketing' ? 'get-app-banner--marketing' : '',
     compact ? 'get-app-banner--compact' : '',
     sidebar ? 'get-app-banner--sidebar' : '',
+    topRail ? 'get-app-banner--toprail' : '',
   ]
     .filter(Boolean)
     .join(' ')
+
+  if (phase === 'mini') {
+    const miniMods = [
+      'get-app-banner',
+      'get-app-banner--mini-strip',
+      variant === 'marketing' ? 'get-app-banner--marketing' : '',
+      compact ? 'get-app-banner--compact' : '',
+      sidebar ? 'get-app-banner--sidebar' : '',
+      topRail ? 'get-app-banner--toprail' : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+
+    return (
+      <div className={miniMods} role="region" aria-label="Install StackPilot on your device">
+        <p className="get-app-banner__mini-lead">
+          <strong>Get the app:</strong> Add StackPilot to your home screen for quicker access.
+        </p>
+        <Link href="/guide" className="get-app-banner__mini-guide">
+          How to install
+        </Link>
+      </div>
+    )
+  }
 
   return (
     <div className={mods} role="region" aria-label="Install StackPilot on your device">

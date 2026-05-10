@@ -1,3 +1,4 @@
+import { GetTheAppBanner } from '@/app/components/GetTheAppBanner'
 import { NAV_ITEMS } from '../constants'
 import type { BannerState, Tab } from '../types'
 import { TrialMeter } from './TrialMeter'
@@ -59,7 +60,7 @@ export function DashboardTopbar({
     <header
       className={`dashboard-topbar${compact ? ' dashboard-topbar--compact' : ''}`}
       style={{
-        height: showTrial ? 'auto' : '56px',
+        height: !compact || showTrial ? 'auto' : '56px',
         minHeight: '56px',
         background: 'rgba(8,17,31,0.84)',
         backdropFilter: 'blur(24px)',
@@ -100,6 +101,7 @@ export function DashboardTopbar({
           </button>
         </div>
       </div>
+      {!compact ? <GetTheAppBanner topRail /> : null}
       {showTrial ? (
         <TrialMeter
           variant="topbar"
