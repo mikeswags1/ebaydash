@@ -93,6 +93,7 @@ export default function Landing() {
           <div className="home-trial-note" aria-label="Trial note">
             No card required · Trial ends after 5 published listings
           </div>
+          <GetTheAppBanner variant="marketing" />
           <div className="home-actions">
             <Link href="/signup" className="btn btn-solid">
               Request Access
@@ -104,7 +105,6 @@ export default function Landing() {
               Sign In
             </Link>
           </div>
-          <GetTheAppBanner variant="marketing" />
         </div>
 
         <div className="home-command-preview" aria-label="StackPilot dashboard preview">
