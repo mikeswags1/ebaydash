@@ -28,7 +28,8 @@ function BillingSection({
 
   const showUpgrade = plan === 'trial' && checkoutAvailable
   const showPortal = plan === 'pro' && portalAvailable
-  if (!showUpgrade && !showPortal) return null
+  const trialButStripeOff = plan === 'trial' && !checkoutAvailable
+  const proButNoPortal = plan === 'pro' && !portalAvailable
 
   return (
     <div className="card" style={{ padding: compact ? '22px 18px' : '32px' }}>
@@ -43,6 +44,44 @@ function BillingSection({
           ? 'Manage payment method, invoices, and cancellation in the Stripe billing portal.'
           : 'Upgrade to list beyond the free trial with unlimited active listings (fair-use automation limits still apply).'}
       </div>
+
+      {trialButStripeOff ? (
+        <div
+          style={{
+            marginBottom: '14px',
+            padding: '12px 14px',
+            borderRadius: '10px',
+            fontSize: '12px',
+            lineHeight: 1.55,
+            color: 'var(--dim)',
+            border: '1px solid rgba(251,191,36,0.35)',
+            background: 'rgba(251,191,36,0.08)',
+          }}
+        >
+          Upgrade button is hidden until the server sees Stripe env vars. In Vercel add{' '}
+          <strong style={{ color: 'var(--txt)' }}>STRIPE_SECRET_KEY</strong> and{' '}
+          <strong style={{ color: 'var(--txt)' }}>STRIPE_PRICE_PRO</strong> for <strong>Production</strong>, then{' '}
+          <strong style={{ color: 'var(--txt)' }}>Redeploy</strong>. Refresh this page after deploy.
+        </div>
+      ) : null}
+
+      {proButNoPortal ? (
+        <div
+          style={{
+            marginBottom: '14px',
+            padding: '12px 14px',
+            borderRadius: '10px',
+            fontSize: '12px',
+            lineHeight: 1.55,
+            color: 'var(--dim)',
+            border: '1px solid rgba(125,211,252,0.2)',
+            background: 'rgba(56,189,248,0.06)',
+          }}
+        >
+          Your account is marked Pro but there is no Stripe customer on file yet. Complete one checkout from this app, or ask support to link billing.
+        </div>
+      ) : null}
+
       {err ? (
         <div style={{ marginBottom: '12px', fontSize: '12px', color: 'var(--red)', border: '1px solid rgba(248,81,101,0.25)', borderRadius: '10px', padding: '10px 12px' }}>
           {err}
