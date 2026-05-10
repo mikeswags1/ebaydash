@@ -42,9 +42,11 @@ export type GetTheAppBannerProps = {
   variant?: 'dashboard' | 'login' | 'marketing'
   /** Light PWA shell — match card styling */
   compact?: boolean
+  /** Narrow left sidebar on desktop dashboard */
+  sidebar?: boolean
 }
 
-export function GetTheAppBannerInner({ variant = 'dashboard', compact = false }: GetTheAppBannerProps) {
+export function GetTheAppBannerInner({ variant = 'dashboard', compact = false, sidebar = false }: GetTheAppBannerProps) {
   const [show, setShow] = useState(false)
 
   const copy = useMemo(() => hintForUserAgent(typeof navigator !== 'undefined' ? navigator.userAgent : ''), [])
@@ -89,6 +91,7 @@ export function GetTheAppBannerInner({ variant = 'dashboard', compact = false }:
     variant === 'login' ? 'get-app-banner--login' : '',
     variant === 'marketing' ? 'get-app-banner--marketing' : '',
     compact ? 'get-app-banner--compact' : '',
+    sidebar ? 'get-app-banner--sidebar' : '',
   ]
     .filter(Boolean)
     .join(' ')

@@ -823,6 +823,36 @@ body:has(.dashboard-shell--compact)::after{
   background:#fff;
   color:#0f3550;
 }
+/* Desktop dashboard left rail — fits narrow column */
+.dashboard-sidebar-get-app{
+  padding:10px 16px 12px;
+  border-bottom:1px solid rgba(56,189,248,0.10);
+}
+.get-app-banner--sidebar{
+  margin:0;
+  flex-direction:column;
+  align-items:stretch;
+  gap:10px;
+  padding:12px 12px 14px;
+  border-radius:12px;
+}
+.get-app-banner--sidebar .get-app-banner__main{min-width:0}
+.get-app-banner--sidebar .get-app-banner__title{
+  font-family:var(--font-inter);
+  font-size:13px;
+  font-weight:700;
+  margin-bottom:6px;
+}
+.get-app-banner--sidebar .get-app-banner__lead{
+  font-size:11px;
+  line-height:1.45;
+}
+.get-app-banner--sidebar .get-app-banner__dismiss{
+  align-self:stretch;
+  width:100%;
+  text-align:center;
+  padding:8px 12px;
+}
 .get-app-banner--login{
   margin:0 auto 22px;
   max-width:420px;

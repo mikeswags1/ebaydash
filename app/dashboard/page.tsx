@@ -1085,7 +1085,7 @@ export default function Dashboard() {
 
       <main className="dashboard-main">
         <DashboardBanner banner={banner} onClose={() => setBanner(null)} />
-        <GetTheAppBanner compact={compact} />
+        {compact ? <GetTheAppBanner compact /> : null}
         {compact ? (
           <>
             <CompactPwaTopbar
