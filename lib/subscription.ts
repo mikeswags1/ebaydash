@@ -3,6 +3,42 @@ import { queryRows, sql } from '@/lib/db'
 export type SubscriptionPlan = 'trial' | 'pro' | string
 
 const TERMINAL_SUBSCRIPTION_STATUSES = new Set(['canceled', 'unpaid', 'incomplete', 'incomplete_expired'])
+
+/** Comma-separated — bypass trial limits & show Pro in UI (no Stripe row required). */
+function parseOwnerUserIds(): Set<string> {
+  return new Set(
+    String(process.env.STACKPILOT_OWNER_USER_IDS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  )
+}
+
+function parseOwnerEmails(): Set<string> {
+  return new Set(
+    String(process.env.STACKPILOT_OWNER_EMAILS || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+  )
+}
+
+async function isSubscriptionOwner(userId: number): Promise<boolean> {
+  if (!Number.isFinite(userId)) return false
+  const idStr = String(userId)
+  if (parseOwnerUserIds().has(idStr)) return true
+
+  const emails = parseOwnerEmails()
+  if (emails.size === 0) return false
+
+  const rows = await queryRows<{ email: string | null }>`
+    SELECT email FROM users WHERE id = ${userId} LIMIT 1
+  `.catch(() => [])
+  const email = String(rows[0]?.email || '')
+    .trim()
+    .toLowerCase()
+  return Boolean(email && emails.has(email))
+}
 let subscriptionSchemaReady = false
 
 async function ensureSubscriptionSchema() {
@@ -42,6 +78,18 @@ export async function getUserPlan(
 ): Promise<{ plan: SubscriptionPlan; status: string; stripeCustomerId: string | null } | null> {
   const uid = Number(userId)
   if (!Number.isFinite(uid)) return null
+
+  if (await isSubscriptionOwner(uid)) {
+    const ownerRows = await queryRows<{ stripe_customer_id: string | null }>`
+      SELECT stripe_customer_id FROM user_subscriptions WHERE user_id = ${uid} LIMIT 1
+    `.catch(() => [])
+    return {
+      plan: 'pro',
+      status: 'active',
+      stripeCustomerId: ownerRows[0]?.stripe_customer_id || null,
+    }
+  }
+
   const rows = await queryRows<{ plan: string; status: string; stripe_customer_id: string | null }>`
     SELECT plan, status, stripe_customer_id FROM user_subscriptions WHERE user_id = ${uid} LIMIT 1
   `.catch(() => [])
