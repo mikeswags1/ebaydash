@@ -24,6 +24,7 @@ _Clear this section when done._
 
 | Date | Agent | What Was Done | Key Files |
 |------|-------|---------------|-----------|
+| 2026-05-10 | Codex | Synced Cursor/GPT's latest `master` work locally and verified the current live production commit `0c32418`: `npm run lint`, `npm run typecheck`, `npm run build`, and live smoke check against `https://stackpilot-app.vercel.app` all passed. No code changes were needed. | `COLLAB.md` |
 | 2026-05-08 | GPT-5.2 | **Release readiness tooling**: `/api/health` (DB ping + env flags, no secrets); `docs/RELEASE_CHECKLIST.md`; `npm run smoke` → `scripts/smoke-check.mjs`; CI runs **`npm run build`** with placeholder env for secrets-free GitHub Actions | `app/api/health/route.ts`, `docs/RELEASE_CHECKLIST.md`, `scripts/smoke-check.mjs`, `package.json`, `.github/workflows/ci.yml`, `COLLAB.md` |
 | 2026-05-08 | GPT-5.2 | Fulfillment tab: in-tab Amazon extension setup card; fulfill URLs carry `stackpilotOrigin` for the extension API; broader extension host permissions | `app/dashboard/components/FulfillmentTab.tsx`, `app/api/fulfillment/start/route.ts`, `extension/manifest.json`, `extension/background.js`, `extension/INSTALL.md` |
 | 2026-05-08 | GPT-5.2 | Host extension zip on StackPilot (`/stackpilot-fulfillment-extension.zip` via `prebuild`/`dev`); Fulfillment tab primary download button — no GitHub required | `scripts/zip-extension.mjs`, `package.json`, `app/dashboard/components/FulfillmentTab.tsx`, `.gitignore`, `extension/INSTALL.md` |
