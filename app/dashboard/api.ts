@@ -221,6 +221,8 @@ export async function fetchSubscriptionStatus() {
     status: string
     trialLimit: number
     listed: number
+    trialRemaining: number
+    isPro: boolean
     billing: { checkoutAvailable: boolean; portalAvailable: boolean }
   }>('/api/subscription/status', { cache: 'no-store' })
 }

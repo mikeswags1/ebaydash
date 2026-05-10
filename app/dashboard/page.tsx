@@ -75,8 +75,11 @@ type ConnectionState = {
 type SubscriptionState = {
   loading: boolean
   plan: string
+  status: string
   trialLimit: number
   listed: number
+  trialRemaining: number
+  isPro: boolean
   billingCheckoutAvailable: boolean
   billingPortalAvailable: boolean
 }
@@ -192,10 +195,13 @@ export default function Dashboard() {
   const [pwaMenuOpen, setPwaMenuOpen] = useState(false)
   const [banner, setBanner] = useState<BannerState | null>(null)
   const [subscriptionState, setSubscriptionState] = useState<SubscriptionState>({
-    loading: false,
+    loading: true,
     plan: 'trial',
+    status: 'active',
     trialLimit: 5,
     listed: 0,
+    trialRemaining: 5,
+    isPro: false,
     billingCheckoutAvailable: false,
     billingPortalAvailable: false,
   })
@@ -476,6 +482,7 @@ export default function Dashboard() {
   }, [])
 
   const loadDashboardBootstrap = useCallback(async () => {
+    setSubscriptionState((prev) => ({ ...prev, loading: true }))
     const results = await Promise.allSettled([
       fetchEbayCredentials(),
       fetchUserNiche(),
@@ -513,11 +520,16 @@ export default function Dashboard() {
       setSubscriptionState({
         loading: false,
         plan: v.plan || 'trial',
+        status: v.status || 'active',
         trialLimit: v.trialLimit || 5,
         listed: v.listed || 0,
+        trialRemaining: v.trialRemaining ?? Math.max(0, (v.trialLimit || 5) - (v.listed || 0)),
+        isPro: v.isPro ?? v.plan === 'pro',
         billingCheckoutAvailable: v.billing?.checkoutAvailable ?? false,
         billingPortalAvailable: v.billing?.portalAvailable ?? false,
       })
+    } else {
+      setSubscriptionState((prev) => ({ ...prev, loading: false }))
     }
   }, [getEbayConnectionState])
 
@@ -1036,8 +1048,11 @@ export default function Dashboard() {
         setSubscriptionState({
           loading: false,
           plan: s.plan || 'trial',
+          status: s.status || 'active',
           trialLimit: s.trialLimit || 5,
           listed: s.listed || 0,
+          trialRemaining: s.trialRemaining ?? Math.max(0, (s.trialLimit || 5) - (s.listed || 0)),
+          isPro: s.isPro ?? s.plan === 'pro',
           billingCheckoutAvailable: s.billing?.checkoutAvailable ?? false,
           billingPortalAvailable: s.billing?.portalAvailable ?? false,
         })
@@ -1076,6 +1091,7 @@ export default function Dashboard() {
         niche={nicheState.value}
         awaitingCount={orderState.awaiting.length}
         userLabel={session?.user?.name || session?.user?.email}
+        subscriptionPlan={subscriptionState.loading ? null : subscriptionState.plan}
         onSignOut={() => signOut({ callbackUrl: '/' })}
         mobileOpen={mobileNavOpen}
         onRequestClose={() => setMobileNavOpen(false)}
@@ -1104,6 +1120,8 @@ export default function Dashboard() {
               syncTime={orderState.syncTime}
               onFulfillment={() => setTab('fulfillment')}
               onSettings={() => setTab('settings')}
+              userLabel={session?.user?.name || session?.user?.email}
+              subscriptionPlan={subscriptionState.loading ? null : subscriptionState.plan}
               onSignOut={() => signOut({ callbackUrl: '/' })}
             />
           </>
@@ -1323,6 +1341,10 @@ export default function Dashboard() {
               onRefreshSourceHealth={() => void loadProductSourceHealth()}
               compact={compact}
               subscriptionPlan={subscriptionState.plan}
+              subscriptionStatus={subscriptionState.status}
+              trialListed={subscriptionState.listed}
+              trialLimit={subscriptionState.trialLimit}
+              trialRemaining={subscriptionState.trialRemaining}
               billingCheckoutAvailable={subscriptionState.billingCheckoutAvailable}
               billingPortalAvailable={subscriptionState.billingPortalAvailable}
             />

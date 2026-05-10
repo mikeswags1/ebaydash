@@ -1,8 +1,7 @@
 'use client'
 
 /**
- * Free-trial progress — only while plan is trial AND still inside the listing allowance.
- * Past the limit or upgraded (plan !== trial): hidden (no redundant banners).
+ * Free-trial progress: only trial accounts see this. Pro accounts never see trial messaging.
  */
 export function TrialMeter({
   loading,
@@ -19,10 +18,11 @@ export function TrialMeter({
 }) {
   const limit = Math.max(1, trialLimit)
   const used = Math.max(0, listed)
-  if (loading || plan !== 'trial' || used >= limit) return null
+  if (loading || plan !== 'trial') return null
 
   const pct = Math.min(100, (used / limit) * 100)
   const remaining = Math.max(0, limit - used)
+  const complete = remaining === 0
 
   const pad =
     variant === 'topbar'
@@ -34,7 +34,7 @@ export function TrialMeter({
   return (
     <div
       role="status"
-      aria-label={`Free trial: ${used} of ${limit} listings used, ${remaining} remaining`}
+      aria-label={`Free trial: ${Math.min(used, limit)} of ${limit} listings used, ${remaining} remaining`}
       style={{
         padding: pad,
         borderRadius: variant === 'topbar' ? 0 : 12,
@@ -58,7 +58,7 @@ export function TrialMeter({
           Free trial
         </div>
         <div style={{ fontSize: variant === 'topbar' ? 10 : 11, color: 'var(--sil)', fontWeight: 600 }}>
-          {remaining} left · {used} / {limit} used
+          {remaining} left - {Math.min(used, limit)} / {limit} used
         </div>
       </div>
       <div
@@ -72,7 +72,9 @@ export function TrialMeter({
         <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,var(--gold),var(--gld2))', transition: 'width 0.25s ease' }} />
       </div>
       <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.5, marginTop: variant === 'topbar' ? 6 : 8 }}>
-        Counts active listings you published here. Ending a listing on eBay can free a slot.
+        {complete
+          ? 'Free trial complete for this account. Upgrade to keep listing.'
+          : 'Counts active listings you published here. Ending a listing on eBay can free a slot.'}
       </div>
     </div>
   )

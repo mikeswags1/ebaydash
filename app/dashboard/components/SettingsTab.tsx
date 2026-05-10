@@ -15,34 +15,52 @@ import {
 function BillingSection({
   compact,
   plan,
+  status,
+  listed,
+  trialLimit,
+  trialRemaining,
   checkoutAvailable,
   portalAvailable,
 }: {
   compact?: boolean
   plan: string
+  status: string
+  listed: number
+  trialLimit: number
+  trialRemaining: number
   checkoutAvailable: boolean
   portalAvailable: boolean
 }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const showUpgrade = plan === 'trial' && checkoutAvailable
-  const showPortal = plan === 'pro' && portalAvailable
-  const trialButStripeOff = plan === 'trial' && !checkoutAvailable
-  const proButNoPortal = plan === 'pro' && !portalAvailable
+  const isPro = plan === 'pro'
+  const showUpgrade = !isPro && checkoutAvailable
+  const showPortal = isPro && portalAvailable
+  const trialButStripeOff = !isPro && !checkoutAvailable
+  const proButNoPortal = isPro && !portalAvailable
+  const used = Math.min(Math.max(0, listed), Math.max(1, trialLimit))
+  const remaining = Math.max(0, trialRemaining)
 
   return (
     <div className="card" style={{ padding: compact ? '22px 18px' : '32px' }}>
-      <div style={{ color: 'var(--sky)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 900, marginBottom: '8px' }}>
-        Billing
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px' }}>
+        <div style={{ color: 'var(--sky)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 900 }}>
+          Billing
+        </div>
+        <span style={{ padding: '5px 9px', borderRadius: '999px', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', color: isPro ? '#062014' : 'var(--sky)', background: isPro ? 'linear-gradient(135deg,#34d399,#f8d776)' : 'rgba(56,189,248,0.10)', border: isPro ? '1px solid rgba(248,215,118,0.45)' : '1px solid rgba(56,189,248,0.22)' }}>
+          {isPro ? 'Pro' : 'Trial'}
+        </span>
       </div>
       <div style={{ fontFamily: 'var(--serif)', fontSize: compact ? '20px' : '22px', fontWeight: 700, color: 'var(--txt)', marginBottom: '8px' }}>
-        {plan === 'pro' ? 'StackPilot Pro' : 'StackPilot trial'}
+        {isPro ? 'StackPilot Pro' : `Free trial - ${used} / ${Math.max(1, trialLimit)} used`}
       </div>
       <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.65, marginBottom: '18px' }}>
-        {plan === 'pro'
-          ? 'Manage payment method, invoices, and cancellation in the Stripe billing portal.'
-          : 'Upgrade to list beyond the free trial with unlimited active listings (fair-use automation limits still apply).'}
+        {isPro
+          ? `This account is on Pro${status && status !== 'active' ? ` (${status})` : ''}. Manage payment method, invoices, and cancellation in the Stripe billing portal.`
+          : remaining > 0
+            ? `This account has ${remaining} free listing${remaining === 1 ? '' : 's'} left. Upgrade to list beyond the free trial with unlimited active listings.`
+            : 'Free trial complete for this account. Upgrade to keep listing with unlimited active listings.'}
       </div>
 
       {trialButStripeOff ? (
@@ -150,6 +168,10 @@ export function SettingsTab({
   onRefreshSourceHealth,
   compact,
   subscriptionPlan,
+  subscriptionStatus,
+  trialListed,
+  trialLimit,
+  trialRemaining,
   billingCheckoutAvailable,
   billingPortalAvailable,
 }: {
@@ -167,6 +189,10 @@ export function SettingsTab({
   onRefreshSourceHealth: () => void
   compact?: boolean
   subscriptionPlan: string
+  subscriptionStatus: string
+  trialListed: number
+  trialLimit: number
+  trialRemaining: number
   billingCheckoutAvailable: boolean
   billingPortalAvailable: boolean
 }) {
@@ -276,6 +302,10 @@ export function SettingsTab({
         <BillingSection
           compact={compact}
           plan={subscriptionPlan}
+          status={subscriptionStatus}
+          listed={trialListed}
+          trialLimit={trialLimit}
+          trialRemaining={trialRemaining}
           checkoutAvailable={billingCheckoutAvailable}
           portalAvailable={billingPortalAvailable}
         />

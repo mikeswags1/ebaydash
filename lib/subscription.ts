@@ -2,6 +2,19 @@ import { queryRows, sql } from '@/lib/db'
 
 export type SubscriptionPlan = 'trial' | 'pro' | string
 
+const TERMINAL_SUBSCRIPTION_STATUSES = new Set(['canceled', 'unpaid', 'incomplete', 'incomplete_expired'])
+
+export function normalizeSubscriptionPlan(plan?: string | null, status?: string | null): SubscriptionPlan {
+  const normalizedPlan = String(plan || 'trial').toLowerCase()
+  const normalizedStatus = String(status || 'active').toLowerCase()
+
+  if (normalizedPlan === 'pro' && !TERMINAL_SUBSCRIPTION_STATUSES.has(normalizedStatus)) {
+    return 'pro'
+  }
+
+  return 'trial'
+}
+
 export async function ensureSubscriptionRow(userId: string | number) {
   const uid = Number(userId)
   if (!Number.isFinite(uid)) return
@@ -21,9 +34,11 @@ export async function getUserPlan(
     SELECT plan, status, stripe_customer_id FROM user_subscriptions WHERE user_id = ${uid} LIMIT 1
   `.catch(() => [])
   if (!rows[0]) return null
+  const rawPlan = rows[0].plan || 'trial'
+  const status = rows[0].status || 'active'
   return {
-    plan: rows[0].plan || 'trial',
-    status: rows[0].status || 'active',
+    plan: normalizeSubscriptionPlan(rawPlan, status),
+    status,
     stripeCustomerId: rows[0].stripe_customer_id || null,
   }
 }

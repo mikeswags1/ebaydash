@@ -9,6 +9,7 @@ export function DashboardSidebar({
   niche,
   awaitingCount,
   userLabel,
+  subscriptionPlan,
   onSignOut,
   mobileOpen,
   onRequestClose,
@@ -20,6 +21,7 @@ export function DashboardSidebar({
   niche: string | null
   awaitingCount: number
   userLabel?: string | null
+  subscriptionPlan?: string | null
   onSignOut: () => void
   mobileOpen: boolean
   onRequestClose: () => void
@@ -246,12 +248,42 @@ export function DashboardSidebar({
       </div>
 
       <div className="dashboard-user" style={{ padding: '16px 20px', borderTop: '1px solid rgba(56,189,248,0.12)' }}>
-        <div style={{ fontSize: '11px', color: 'rgba(148,212,255,0.65)', marginBottom: '10px', fontWeight: 500 }}>{userLabel}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+          <div style={{ fontSize: '11px', color: 'rgba(148,212,255,0.65)', fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{userLabel}</div>
+          <PlanBadge plan={subscriptionPlan} />
+        </div>
         <button onClick={onSignOut} className="btn btn-ghost btn-sm btn-full" style={{ fontSize: '11px', color: 'rgba(148,212,255,0.6)', borderColor: 'rgba(56,189,248,0.18)' }}>
           Sign Out
         </button>
       </div>
       </aside>
     </>
+  )
+}
+
+function PlanBadge({ plan }: { plan?: string | null }) {
+  if (!plan) return null
+
+  const isPro = String(plan).toLowerCase() === 'pro'
+  const label = isPro ? 'Pro' : 'Trial'
+
+  return (
+    <span
+      style={{
+        flexShrink: 0,
+        padding: '3px 7px',
+        borderRadius: 999,
+        fontSize: '8px',
+        lineHeight: 1,
+        fontWeight: 900,
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+        color: isPro ? '#062014' : 'rgba(186,230,253,0.86)',
+        background: isPro ? 'linear-gradient(135deg,#34d399,#f8d776)' : 'rgba(56,189,248,0.10)',
+        border: isPro ? '1px solid rgba(248,215,118,0.5)' : '1px solid rgba(125,211,252,0.20)',
+      }}
+    >
+      {label}
+    </span>
   )
 }
