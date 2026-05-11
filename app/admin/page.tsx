@@ -359,7 +359,7 @@ export default function AdminPage() {
               </button>
               <button className="admin-tool" disabled={pool.state === 'running'} onClick={() => pool.trigger('catalog')}>
                 <strong>Deep Catalog Crawl</strong>
-                <span>Run the heavier rotating source-pool crawl.</span>
+                <span>Heavy on-demand crawl (3 niches). Production runs hourly background catalog via cron (2-job limit keeps auto-listing).</span>
               </button>
               <button className="admin-tool" disabled={toolState.active !== null} onClick={() => runTool('setup', 'Database setup', '/api/setup-db')}>
                 <strong>Repair Database</strong>

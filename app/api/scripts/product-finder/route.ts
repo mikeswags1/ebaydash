@@ -171,7 +171,8 @@ function parsePrice(v: unknown): number {
 const parseSales = (v?: string) => {
   if (!v) return 1
   const n = parseInt(v.replace(/[^0-9]/g, ''), 10)
-  return isNaN(n) ? 1 : Math.max(1, n)
+  if (isNaN(n)) return 1
+  return Math.max(1, Math.min(80_000, n))
 }
 
 function hashString(value: string) {
@@ -225,14 +226,25 @@ function getProductScore(product: Product) {
   const margin = product.ebayPrice > 0 ? product.profit / product.ebayPrice : 0
   const roi = product.roi / 100
   const demandWeight = Math.log10(sales + 10)
-  const ratingWeight = Math.max(0.55, Math.min(1.08, rating / 4.6))
+  const ratingWeight = Math.max(0.55, Math.min(1.1, rating / 4.55))
   const reviewWeight = Math.log10(reviews + 25)
-  const marginWeight = Math.max(0.35, Math.min(1.5, margin * 3.5))
-  const roiWeight = Math.max(0.35, Math.min(1.45, roi * 1.4))
+  const marginWeight = Math.max(0.38, Math.min(1.55, margin * 3.6))
+  const roiWeight = Math.max(0.38, Math.min(1.5, roi * 1.45))
+  const reviewTrust = reviews >= 80 ? 1.06 : reviews >= 35 ? 1.03 : reviews < 8 ? 0.93 : 1
   const priceSweetSpot = product.amazonPrice >= 12 && product.amazonPrice <= 120 ? 1.08 : product.amazonPrice > 180 ? 0.78 : 0.95
   const riskPenalty = product.risk === 'HIGH' ? 0.68 : product.risk === 'MEDIUM' ? 0.88 : 1
   const imageWeight = product.imageUrl ? 1 : 0.72
-  const score = product.profit * demandWeight * ratingWeight * reviewWeight * marginWeight * roiWeight * priceSweetSpot * riskPenalty * imageWeight
+  const score =
+    product.profit *
+    demandWeight *
+    ratingWeight *
+    reviewWeight *
+    marginWeight *
+    roiWeight *
+    priceSweetSpot *
+    riskPenalty *
+    imageWeight *
+    reviewTrust
   return Number.isFinite(score) ? parseFloat(score.toFixed(2)) : 0
 }
 

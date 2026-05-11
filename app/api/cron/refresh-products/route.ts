@@ -20,6 +20,9 @@ const STANDARD_NICHE_TARGET = 200
 const CATALOG_NICHE_TARGET = 2500
 const SCHEDULED_NICHE_BATCH_SIZE = 8
 const CATALOG_NICHE_BATCH_SIZE = 3
+/** Hourly background: one niche, medium depth — keeps catalog advancing 24/7 without huge bursts */
+const BACKGROUND_CATALOG_TARGET = 780
+const BACKGROUND_CATALOG_BATCH = 1
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -822,7 +825,11 @@ export async function GET(req: NextRequest) {
   const report: Record<string, unknown> = {}
   const rollingRefresh = req.nextUrl.searchParams.get('rolling') === '1'
   const sourceOnly = req.nextUrl.searchParams.get('sourceOnly') === '1'
-  const catalogRefresh = req.nextUrl.searchParams.get('catalog') === '1' || req.nextUrl.searchParams.get('deep') === '1'
+  const backgroundCatalog = req.nextUrl.searchParams.get('backgroundCatalog') === '1'
+  const catalogRefresh =
+    req.nextUrl.searchParams.get('catalog') === '1' ||
+    req.nextUrl.searchParams.get('deep') === '1' ||
+    backgroundCatalog
   const fullRefresh = req.nextUrl.searchParams.get('full') === '1' || (!rollingRefresh && !catalogRefresh)
   const requestedBatchSize = Number(req.nextUrl.searchParams.get('batch') || '')
   const hasExplicitStart = req.nextUrl.searchParams.has('start')
@@ -867,8 +874,19 @@ export async function GET(req: NextRequest) {
   // 2. Refresh product cache for all niches
   const rapidKey = process.env.RAPIDAPI_KEY
   const allNiches = Object.keys(NICHE_QUERIES)
-  const targetProducts = catalogRefresh ? CATALOG_NICHE_TARGET : STANDARD_NICHE_TARGET
-  const defaultBatchSize = catalogRefresh ? CATALOG_NICHE_BATCH_SIZE : (fullRefresh ? allNiches.length : SCHEDULED_NICHE_BATCH_SIZE)
+  const targetProducts = backgroundCatalog
+    ? BACKGROUND_CATALOG_TARGET
+    : catalogRefresh
+      ? CATALOG_NICHE_TARGET
+      : STANDARD_NICHE_TARGET
+  const sourceRebuildLimit = backgroundCatalog ? 220 : catalogRefresh ? 250 : 120
+  const defaultBatchSize = backgroundCatalog
+    ? BACKGROUND_CATALOG_BATCH
+    : catalogRefresh
+      ? CATALOG_NICHE_BATCH_SIZE
+      : fullRefresh
+        ? allNiches.length
+        : SCHEDULED_NICHE_BATCH_SIZE
   const batchSize = Math.max(1, Math.min(allNiches.length, Number.isFinite(requestedBatchSize) && requestedBatchSize > 0 ? Math.floor(requestedBatchSize) : defaultBatchSize))
 
   // For catalog refresh: use a persistent cursor stored in DB so every click advances
@@ -898,19 +916,25 @@ export async function GET(req: NextRequest) {
       : fullRefresh && !catalogRefresh ? 0 : (rotation * batchSize) % allNiches.length
     niches = Array.from({ length: Math.min(batchSize, allNiches.length) }, (_, index) => allNiches[(startIndex + index) % allNiches.length])
   }
-  const rapidOptions = catalogRefresh
-    ? { target: targetProducts, queryLimit: 6, pages: [1, 2], timeoutMs: 4500 }
-    : { target: targetProducts, queryLimit: 4, pages: [1], timeoutMs: 8000 }
-  const scrapeOptions = catalogRefresh
-    ? { target: targetProducts, queryLimit: 4, pages: [1, 2], timeoutMs: 3500 }
-    : { target: targetProducts, queryLimit: 3, pages: [1], timeoutMs: 6000 }
+  const rapidOptions = !catalogRefresh
+    ? { target: targetProducts, queryLimit: 4, pages: [1], timeoutMs: 8000 }
+    : backgroundCatalog
+      ? { target: targetProducts, queryLimit: 5, pages: [1, 2], timeoutMs: 5000 }
+      : { target: targetProducts, queryLimit: 6, pages: [1, 2], timeoutMs: 4500 }
+  const scrapeOptions = !catalogRefresh
+    ? { target: targetProducts, queryLimit: 3, pages: [1], timeoutMs: 6000 }
+    : backgroundCatalog
+      ? { target: targetProducts, queryLimit: 4, pages: [1, 2], timeoutMs: 4000 }
+      : { target: targetProducts, queryLimit: 4, pages: [1, 2], timeoutMs: 3500 }
+  const primaryScrapeBudgetMs = backgroundCatalog ? 150_000 : catalogRefresh ? 165_000 : 200_000
+  const fallbackScrapeBudgetMs = backgroundCatalog ? 220_000 : catalogRefresh ? 235_000 : 270_000
   const runProductRefresh = async () => {
     let refreshed = 0
     let quotaHit = false
 
     if (rapidKey) {
       for (const niche of niches) {
-        if (quotaHit || Date.now() - startedAt > (catalogRefresh ? 165_000 : 200_000)) break
+        if (quotaHit || Date.now() - startedAt > primaryScrapeBudgetMs) break
         const count = await refreshNiche(niche, rapidKey, rapidOptions)
         if (count === -1) { quotaHit = true; break }
         if (count > 0) refreshed++
@@ -923,7 +947,7 @@ export async function GET(req: NextRequest) {
     // If quota hit, fill remaining niches via direct Amazon scrape
     if (quotaHit) {
       for (const niche of niches) {
-        if (Date.now() - startedAt > (catalogRefresh ? 235_000 : 270_000)) break
+        if (Date.now() - startedAt > fallbackScrapeBudgetMs) break
         try {
           const count = await refreshNicheScrape(niche, scrapeOptions)
           if (count > 0) refreshed++
@@ -936,15 +960,16 @@ export async function GET(req: NextRequest) {
       nichesRefreshed: refreshed,
       nichesAttempted: niches,
       catalogRefresh,
+      backgroundCatalog,
       targetProductsPerNiche: targetProducts,
       batchSize,
       quotaHit,
-      sourceProducts: await rebuildProductSourceFromCache(catalogRefresh ? 250 : 120),
+      sourceProducts: await rebuildProductSourceFromCache(sourceRebuildLimit),
       continuousProducts: await refreshContinuousCache(),
     }
   }
 
-  if (catalogRefresh && req.nextUrl.searchParams.get('wait') !== '1') {
+  if (catalogRefresh && !backgroundCatalog && req.nextUrl.searchParams.get('wait') !== '1') {
     // Fast daily cron path — runs every day via Vercel schedule (?catalog=1, no wait=1).
     // Does NOT re-scrape Amazon (that's for manual Deep Catalog Crawl); instead it:
     //  1. Rebuilds source pool from existing product_cache
@@ -971,8 +996,11 @@ export async function GET(req: NextRequest) {
   }
 
   Object.assign(report, await runProductRefresh())
-  // Warm cache + sync run after response so they don't risk the 300s scrape budget
+  // After hourly background crawl: reprice pool (similar to daily fast-catalog path)
   after(async () => {
+    if (backgroundCatalog) {
+      await repriceProductSourceItems().catch(() => 0)
+    }
     await warmAmazonProductCache(20).catch(() => {})
     await syncUnavailableListings().catch(() => {})
   })

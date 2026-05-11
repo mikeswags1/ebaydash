@@ -60,10 +60,12 @@ function parseNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+/** Cap parsed “sold” counts so bogus listing text cannot dominate log-scored demand. */
 function parseSales(value?: string) {
   if (!value) return 1
   const parsed = Number.parseInt(value.replace(/[^0-9]/g, ''), 10)
-  return Number.isFinite(parsed) ? Math.max(1, parsed) : 1
+  if (!Number.isFinite(parsed)) return 1
+  return Math.max(1, Math.min(80_000, parsed))
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -87,16 +89,18 @@ function scoreProduct(product: SourceEngineProduct) {
   const sales = parseSales(product.salesVolume)
   const margin = product.ebayPrice > 0 ? (product.profit / product.ebayPrice) * 100 : 0
   const demandScore =
-    Math.log10(sales + 10) * 18 +
-    Math.log10(reviews + 25) * 14 +
-    clamp(rating / 5, 0.65, 1.05) * 18
-  const profitScore = clamp(product.profit, 0, 120)
-  const roiScore = clamp(product.roi / 70, 0.35, 1.8) * 24
-  const marginScore = clamp(margin / 32, 0.35, 1.5) * 18
+    Math.log10(sales + 10) * 16 +
+    Math.log10(reviews + 25) * 15 +
+    clamp(rating / 5, 0.65, 1.05) * 19
+  const profitScore = clamp(product.profit, 0, 120) * 1.02
+  const roiScore = clamp(product.roi / 65, 0.38, 1.85) * 26
+  const marginScore = clamp(margin / 30, 0.38, 1.55) * 19
+  const reviewTrust = reviews >= 80 ? 1.08 : reviews >= 35 ? 1.04 : reviews < 8 ? 0.92 : 1
   const priceSweetSpot = product.amazonPrice >= 12 && product.amazonPrice <= 120 ? 18 : product.amazonPrice > 180 ? 7 : 12
   const riskPenalty = product.risk === 'HIGH' ? 0.72 : product.risk === 'MEDIUM' ? 0.9 : 1
   const imageBoost = product.imageUrl ? 6 : -8
-  const total = (profitScore + roiScore + marginScore + demandScore + priceSweetSpot + imageBoost) * riskPenalty
+  const total =
+    (profitScore + roiScore + marginScore + demandScore + priceSweetSpot + imageBoost) * riskPenalty * reviewTrust
   return Number.isFinite(total) ? Number(total.toFixed(2)) : 0
 }
 
