@@ -85,6 +85,12 @@ export interface FinderProduct {
 export interface ListResult {
   listingUrl: string
   listingId: string
+  subscription?: {
+    plan: string
+    trialLimit: number
+    listed: number
+    trialRemaining: number
+  }
 }
 
 export interface FinancialSummary {

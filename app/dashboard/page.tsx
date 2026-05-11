@@ -571,6 +571,19 @@ export default function Dashboard() {
     })
   }, [])
 
+  const applyPublishedSubscription = useCallback((subscription: ListResult['subscription'] | undefined) => {
+    if (!subscription) return
+    setSubscriptionState((prev) => ({
+      ...prev,
+      loading: false,
+      plan: subscription.plan || prev.plan,
+      trialLimit: subscription.trialLimit || prev.trialLimit,
+      listed: subscription.listed,
+      trialRemaining: subscription.trialRemaining,
+      isPro: (subscription.plan || prev.plan) === 'pro',
+    }))
+  }, [])
+
   const refreshSubscriptionStatus = useCallback(async () => {
     const status = await fetchSubscriptionStatus()
     applySubscriptionStatus(status)
@@ -1156,6 +1169,7 @@ export default function Dashboard() {
       })
 
       setListingState((prev) => ({ ...prev, result: data }))
+      applyPublishedSubscription(data.subscription)
       if (sourceMode === 'continuous') {
         await refillContinuousProducts([productToPublish.asin])
       } else {
@@ -1195,7 +1209,7 @@ export default function Dashboard() {
     } finally {
       setListingState((prev) => ({ ...prev, loading: false }))
     }
-  }, [listingState.modal, listingState.price, listingState.validated, nicheState.value, refillContinuousProducts, refillNicheFinderProducts, refreshSubscriptionStatus, subscriptionState.loading, subscriptionState.plan, subscriptionState.trialRemaining, validateListingProduct])
+  }, [applyPublishedSubscription, listingState.modal, listingState.price, listingState.validated, nicheState.value, refillContinuousProducts, refillNicheFinderProducts, refreshSubscriptionStatus, subscriptionState.loading, subscriptionState.plan, subscriptionState.trialRemaining, validateListingProduct])
 
   const grossRevenue = useMemo(() => getGrossRevenue(orderState.orders), [orderState.orders])
 

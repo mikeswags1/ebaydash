@@ -37,12 +37,12 @@ function BillingSection({
   const [err, setErr] = useState<string | null>(null)
 
   const isPro = plan === 'pro'
-  const showUpgrade = !isPro && checkoutAvailable
+  const showUpgrade = !isPro
   const showPortal = isPro && portalAvailable
-  const trialButStripeOff = !isPro && !checkoutAvailable
   const proButNoPortal = isPro && !portalAvailable && !ownerBillingBypass
   const used = Math.min(Math.max(0, listed), Math.max(1, trialLimit))
   const remaining = Math.max(0, trialRemaining)
+  const checkoutEnvironmentHint = !isPro && !checkoutAvailable
 
   return (
     <div className="card" style={{ padding: compact ? '22px 18px' : '32px' }}>
@@ -67,26 +67,6 @@ function BillingSection({
             : 'Free trial complete for this account. Upgrade to keep listing with unlimited active listings.'}
       </div>
 
-      {trialButStripeOff ? (
-        <div
-          style={{
-            marginBottom: '14px',
-            padding: '12px 14px',
-            borderRadius: '10px',
-            fontSize: '12px',
-            lineHeight: 1.55,
-            color: 'var(--dim)',
-            border: '1px solid rgba(251,191,36,0.35)',
-            background: 'rgba(251,191,36,0.08)',
-          }}
-        >
-          Upgrade button is hidden until the server sees Stripe env vars. In Vercel add{' '}
-          <strong style={{ color: 'var(--txt)' }}>STRIPE_SECRET_KEY</strong> and{' '}
-          <strong style={{ color: 'var(--txt)' }}>STRIPE_PRICE_PRO</strong> for <strong>Production</strong>, then{' '}
-          <strong style={{ color: 'var(--txt)' }}>Redeploy</strong>. Refresh this page after deploy.
-        </div>
-      ) : null}
-
       {proButNoPortal ? (
         <div
           style={{
@@ -101,6 +81,12 @@ function BillingSection({
           }}
         >
           Your account is marked Pro but there is no Stripe customer on file yet. Complete one checkout from this app, or ask support to link billing.
+        </div>
+      ) : null}
+
+      {checkoutEnvironmentHint ? (
+        <div style={{ marginBottom: '12px', fontSize: '12px', color: 'var(--dim)', lineHeight: 1.55 }}>
+          Checkout will open in Stripe. If this environment is missing billing keys, the button will show a setup error instead of hiding the upgrade path.
         </div>
       ) : null}
 

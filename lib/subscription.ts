@@ -114,25 +114,20 @@ export async function getUserPlan(userId: string | number): Promise<UserPlanRow 
 export async function getTrialUsage(userId: string | number) {
   const uid = Number(userId)
   if (!Number.isFinite(uid)) return { listed: 0 }
+  await ensureSubscriptionRow(uid)
   await ensureSubscriptionSchema()
-  // Trial usage is lifetime account usage, not active inventory slots.
-  // Use the larger of the durable counter and historical listings so older
-  // accounts cannot regain free listings by ending items.
-  const rows = await queryRows<{ stored: number; historical: number }>`
-    WITH history AS (
-      SELECT COUNT(*)::int AS historical
-      FROM listed_asins
-      WHERE user_id = ${uid}
-    )
+  // Trial usage is the durable counter reserved by StackPilot publishes.
+  // Do not count imported/old eBay listings, or a seller with an existing
+  // store would lose the free trial before trying StackPilot.
+  const rows = await queryRows<{ stored: number }>`
     SELECT
-      COALESCE(us.trial_listings_used, 0)::int AS stored,
-      COALESCE(history.historical, 0)::int AS historical
-    FROM (SELECT ${uid}::int AS user_id) current_user
-    LEFT JOIN user_subscriptions us ON us.user_id = current_user.user_id
-    CROSS JOIN history
+      COALESCE(trial_listings_used, 0)::int AS stored
+    FROM user_subscriptions
+    WHERE user_id = ${uid}
+    LIMIT 1
   `.catch(() => [])
   const row = rows[0]
-  return { listed: Math.max(row?.stored || 0, row?.historical || 0) }
+  return { listed: Math.max(0, row?.stored || 0) }
 }
 
 async function syncTrialUsageFloor(userId: number, minimum: number) {

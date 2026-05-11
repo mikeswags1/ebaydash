@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getAppOrigin } from '@/lib/app-url'
-import { getStripe, isStripeBillingConfigured } from '@/lib/stripe'
+import { getStripe, getStripeProPriceId, isStripeBillingConfigured } from '@/lib/stripe'
 
 export async function POST(req: NextRequest) {
   if (!isStripeBillingConfigured()) {
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: { message: 'Unauthorized' } }, { status: 401 })
   }
 
-  const priceId = process.env.STRIPE_PRICE_PRO!.trim()
+  const priceId = getStripeProPriceId()
   const origin = getAppOrigin(req)
   const userId = String(session.user.id)
 

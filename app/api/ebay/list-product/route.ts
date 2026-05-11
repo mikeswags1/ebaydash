@@ -2374,10 +2374,21 @@ export async function POST(req: NextRequest) {
       ended_at = NULL
   `.catch(() => {})
 
+  trialSlotReserved = false
+  const latestTrialUsage = trialApplies ? await getTrialUsage(effectiveUserId) : null
+
   return apiOk({
     success: true,
     listingId,
     listingUrl: `https://www.ebay.com/itm/${listingId}`,
+    subscription: latestTrialUsage
+      ? {
+          plan,
+          trialLimit,
+          listed: latestTrialUsage.listed,
+          trialRemaining: Math.max(0, trialLimit - latestTrialUsage.listed),
+        }
+      : undefined,
     _debug: {
       amazonImages: amazon.images.length,
       featuresCount: amazon.features.length,
