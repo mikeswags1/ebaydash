@@ -1,6 +1,6 @@
 import { SectionIntro } from './shared'
 import type { ProductSourceHealth } from '../types'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { AutoListingSettingsDto } from '../api'
 import {
   createStripeCheckoutSession,
@@ -11,6 +11,51 @@ import {
   saveAutoListingSettings,
   getErrorMessage,
 } from '../api'
+
+const ALL_NICHES_VALUE = '__all__'
+
+const AUTO_BULK_NICHE_OPTIONS = [
+  'Phone Accessories',
+  'Computer Parts',
+  'Audio & Headphones',
+  'Smart Home Devices',
+  'Gaming Gear',
+  'Kitchen Gadgets',
+  'Home Decor',
+  'Furniture & Lighting',
+  'Cleaning Supplies',
+  'Storage & Organization',
+  'Camping & Hiking',
+  'Garden & Tools',
+  'Sporting Goods',
+  'Fishing & Hunting',
+  'Cycling',
+  'Fitness Equipment',
+  'Personal Care',
+  'Supplements & Vitamins',
+  'Medical Supplies',
+  'Mental Wellness',
+  'Car Parts',
+  'Car Accessories',
+  'Motorcycle Gear',
+  'Truck & Towing',
+  'Car Care',
+  'Pet Supplies',
+  'Baby & Kids',
+  'Toys & Games',
+  'Clothing & Accessories',
+  'Jewelry & Watches',
+  'Office Supplies',
+  'Industrial Equipment',
+  'Safety Gear',
+  'Janitorial & Cleaning',
+  'Packaging Materials',
+  'Trading Cards',
+  'Vintage & Antiques',
+  'Coins & Currency',
+  'Comics & Manga',
+  'Sports Memorabilia',
+]
 
 function BillingSection({
   compact,
@@ -43,20 +88,37 @@ function BillingSection({
   const used = Math.min(Math.max(0, listed), Math.max(1, trialLimit))
   const remaining = Math.max(0, trialRemaining)
   const checkoutEnvironmentHint = !isPro && !checkoutAvailable
+  const trialTotal = Math.max(1, trialLimit)
+  const usedPct = Math.min(100, Math.round((used / trialTotal) * 100))
 
   return (
-    <div className="card" style={{ padding: compact ? '22px 18px' : '32px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px' }}>
-        <div style={{ color: 'var(--sky)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 900 }}>
-          Billing
+    <div className="card" style={{ padding: compact ? '20px 18px' : '28px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: '16px' }}>
+        <div>
+          <div style={{ color: 'var(--sky)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 900, marginBottom: '8px' }}>
+            Billing
+          </div>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: compact ? '20px' : '22px', fontWeight: 700, color: 'var(--txt)' }}>
+            {isPro ? 'StackPilot Pro' : `Free trial - ${used} / ${trialTotal} used`}
+          </div>
         </div>
         <span style={{ padding: '5px 9px', borderRadius: '999px', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', color: isPro ? '#062014' : 'var(--sky)', background: isPro ? 'linear-gradient(135deg,#34d399,#f8d776)' : 'rgba(56,189,248,0.10)', border: isPro ? '1px solid rgba(248,215,118,0.45)' : '1px solid rgba(56,189,248,0.22)' }}>
           {isPro ? 'Pro' : 'Trial'}
         </span>
       </div>
-      <div style={{ fontFamily: 'var(--serif)', fontSize: compact ? '20px' : '22px', fontWeight: 700, color: 'var(--txt)', marginBottom: '8px' }}>
-        {isPro ? 'StackPilot Pro' : `Free trial - ${used} / ${Math.max(1, trialLimit)} used`}
-      </div>
+
+      {!isPro ? (
+        <div style={{ marginBottom: '14px' }}>
+          <div style={{ height: '8px', borderRadius: '999px', overflow: 'hidden', background: 'rgba(125,211,252,0.10)', border: '1px solid rgba(125,211,252,0.12)' }}>
+            <div style={{ width: `${usedPct}%`, height: '100%', borderRadius: '999px', background: remaining > 0 ? 'linear-gradient(90deg,var(--sky),var(--grn))' : 'linear-gradient(90deg,var(--red),var(--gold))' }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '7px', fontSize: '11px', color: 'var(--dim)', gap: '10px', flexWrap: 'wrap' }}>
+            <span>{remaining} left</span>
+            <span>{trialTotal} total trial listings</span>
+          </div>
+        </div>
+      ) : null}
+
       <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.65, marginBottom: '18px' }}>
         {isPro
           ? ownerBillingBypass
@@ -195,10 +257,17 @@ export function SettingsTab({
   const [autoSettings, setAutoSettings] = useState<AutoListingSettingsDto | null>(null)
   const [autoStatus, setAutoStatus] = useState<Awaited<ReturnType<typeof fetchAutoListingStatus>> | null>(null)
 
-  const allowedNichesText = useMemo(() => {
-    const list = autoSettings?.allowed_niches || []
-    return Array.isArray(list) ? list.join(', ') : ''
-  }, [autoSettings])
+  const selectedAutoNiche = autoSettings?.allowed_niches?.[0] || ALL_NICHES_VALUE
+  const customAutoNiche = selectedAutoNiche !== ALL_NICHES_VALUE && !AUTO_BULK_NICHE_OPTIONS.includes(selectedAutoNiche)
+  const queueCount = (autoStatus?.queue?.queued ?? 0) + (autoStatus?.queue?.retry ?? 0)
+  const autoState = autoStatus?.enabled
+    ? autoStatus?.emergency_stopped
+      ? 'Stopped'
+      : autoStatus?.paused
+        ? 'Paused'
+        : 'Running'
+    : 'Off'
+  const autoStateColor = autoState === 'Running' ? 'var(--grn)' : autoState === 'Stopped' ? 'var(--red)' : autoState === 'Paused' ? 'var(--gold)' : 'var(--dim)'
 
   useEffect(() => {
     let alive = true
@@ -245,13 +314,21 @@ export function SettingsTab({
       )}
 
       <div style={{ padding: '0 var(--xpad) 44px', maxWidth: '980px', display: 'flex', flexDirection: 'column', gap: compact ? '14px' : '20px' }}>
-        <div className="card" style={{ padding: compact ? '24px 18px' : '40px', textAlign: 'center' }}>
+        <div className="card" style={{ padding: compact ? '22px 18px' : '28px' }}>
           {connected ? (
             <>
-              <StatusIcon tone="success" label="OK" />
-              <div style={{ fontFamily: 'var(--serif)', fontSize: '24px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px' }}>eBay Connected</div>
-              <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '28px', lineHeight: 1.7 }}>Your eBay account is linked. Orders and listings can sync normally.</div>
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+                  <StatusIcon tone="success" label="OK" compact />
+                  <div>
+                    <div style={{ color: 'var(--sky)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 900, marginBottom: '6px' }}>eBay connection</div>
+                    <div style={{ fontFamily: 'var(--serif)', fontSize: '24px', fontWeight: 600, color: 'var(--txt)' }}>Connected</div>
+                    <div style={{ fontSize: '13px', color: 'var(--sil)', marginTop: '6px', lineHeight: 1.5 }}>Orders, financials, campaigns, and listing actions can sync normally.</div>
+                  </div>
+                </div>
+                <span style={{ padding: '7px 12px', borderRadius: '999px', fontSize: '11px', color: 'var(--grn)', border: '1px solid rgba(46,207,118,0.28)', background: 'rgba(46,207,118,0.08)', fontWeight: 900, textTransform: 'uppercase' }}>Live</span>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '22px' }}>
                 <button onClick={onSync} className="btn btn-gold">
                   Sync Now
                 </button>
@@ -270,19 +347,24 @@ export function SettingsTab({
             </>
           ) : (
             <>
-              <StatusIcon tone="warning" label="eB" />
-              <div style={{ fontFamily: 'var(--serif)', fontSize: '24px', fontWeight: 600, color: 'var(--txt)', marginBottom: '8px' }}>
-                {needsReconnect ? 'Reconnect Your eBay Account' : 'Connect Your eBay Account'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                <StatusIcon tone="warning" label="eB" compact />
+                <div>
+                  <div style={{ color: 'var(--sky)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 900, marginBottom: '6px' }}>eBay connection</div>
+                  <div style={{ fontFamily: 'var(--serif)', fontSize: '24px', fontWeight: 600, color: 'var(--txt)' }}>
+                    {needsReconnect ? 'Reconnect eBay' : 'Connect eBay'}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--sil)', marginTop: '6px', lineHeight: 1.5 }}>
+                    {needsReconnect
+                      ? 'Your eBay session expired. Reconnect to restore order sync, listing, and dashboard actions.'
+                      : 'Authorize eBay to sync orders and publish listings from StackPilot.'}
+                  </div>
+                </div>
               </div>
-              <div style={{ fontSize: '13px', color: 'var(--sil)', marginBottom: '28px', lineHeight: 1.7 }}>
-                {needsReconnect
-                  ? 'Your eBay session expired. Reconnect to restore order sync, listing, and dashboard actions.'
-                  : 'Authorize your eBay account to load orders, sync listings, and publish products from the dashboard.'}
-              </div>
-              <a href="/api/ebay/connect" className="btn btn-solid" style={{ padding: '14px 36px', fontSize: '14px', display: 'inline-flex' }}>
-                {needsReconnect ? 'Reconnect eBay Account' : 'Connect eBay Account'}
-              </a>
-              <div style={{ marginTop: '14px' }}>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '22px' }}>
+                <a href="/api/ebay/connect" className="btn btn-solid" style={{ padding: '14px 28px', fontSize: '14px', display: 'inline-flex' }}>
+                  {needsReconnect ? 'Reconnect eBay Account' : 'Connect eBay Account'}
+                </a>
                 <a href="/api/ebay/connect?minimal=1" className="btn btn-ghost btn-sm" style={{ fontSize: '11px' }}>
                   Try Basic eBay Connect
                 </a>
@@ -310,19 +392,22 @@ export function SettingsTab({
           onRefresh={onRefreshSourceHealth}
         />
 
-        <div className="card" style={{ padding: compact ? '18px' : '28px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline', flexWrap: 'wrap', marginBottom: '10px' }}>
+        <div className="card" style={{ padding: compact ? '20px 18px' : '28px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: '18px' }}>
             <div>
-              <div style={{ color: 'var(--sky)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 900, marginBottom: '6px' }}>
+              <div style={{ color: 'var(--sky)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 900, marginBottom: '8px' }}>
                 Auto Bulk Listing
               </div>
-              <div style={{ color: 'var(--sil)', fontSize: '13px', lineHeight: 1.6 }}>
-                Drip-lists products throughout the day using your source pool and safety checks.
+              <div style={{ fontFamily: 'var(--serif)', color: 'var(--txt)', fontSize: '22px', fontWeight: 700, marginBottom: '6px' }}>
+                Listing autopilot
+              </div>
+              <div style={{ color: 'var(--sil)', fontSize: '13px', lineHeight: 1.55, maxWidth: '580px' }}>
+                Controls how many approved products StackPilot can list, how fast it runs, and which product pool it can pull from.
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--dim)' }}>
-                {autoStatus?.enabled ? (autoStatus?.paused ? 'Paused' : 'Running') : 'Off'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <span style={{ padding: '7px 12px', borderRadius: '999px', border: `1px solid ${autoStateColor === 'var(--dim)' ? 'rgba(125,211,252,0.16)' : autoStateColor}`, background: autoState === 'Running' ? 'rgba(46,207,118,0.08)' : autoState === 'Stopped' ? 'rgba(248,81,101,0.08)' : 'rgba(125,211,252,0.06)', color: autoStateColor, fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                {autoLoading ? 'Loading' : autoState}
               </span>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
                 <input
@@ -331,9 +416,16 @@ export function SettingsTab({
                   disabled={autoLoading || autoSaving}
                   onChange={(e) => saveAuto({ enabled: e.target.checked, paused: false, emergency_stopped: false })}
                 />
-                <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--txt)' }}>Enable</span>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--txt)' }}>Enabled</span>
               </label>
             </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+            <SettingMetric label="Posted today" value={String(autoStatus?.postedToday ?? 0)} />
+            <SettingMetric label="Ready queue" value={String(queueCount)} />
+            <SettingMetric label="Avg score" value={String(Math.round(autoStatus?.avgScore ?? 0))} />
+            <SettingMetric label="Est. profit" value={`$${Math.round(autoStatus?.estimatedDailyProfit ?? 0)}`} />
           </div>
 
           {autoErr ? (
@@ -342,7 +434,7 @@ export function SettingsTab({
             </div>
           ) : null}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px', marginTop: '14px' }}>
             <Field label="Listings / day">
               <input
                 value={String(autoSettings?.listings_per_day ?? 100)}
@@ -402,14 +494,24 @@ export function SettingsTab({
                 ))}
               </select>
             </Field>
-            <Field label="Allowed niches (comma separated)">
-              <input
-                value={allowedNichesText}
-                onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, allowed_niches: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) }) : s))}
-                onBlur={() => saveAuto({ allowed_niches: autoSettings?.allowed_niches || [] })}
+            <Field label="Desired niche">
+              <select
+                value={customAutoNiche ? selectedAutoNiche : selectedAutoNiche}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const allowed_niches = value === ALL_NICHES_VALUE ? [] : [value]
+                  setAutoSettings((s) => (s ? ({ ...s, allowed_niches }) : s))
+                  void saveAuto({ allowed_niches })
+                }}
                 className="pwa-orders__search-input"
-                placeholder="Phone Accessories, Home Decor"
-              />
+                disabled={autoLoading || autoSaving}
+              >
+                <option value={ALL_NICHES_VALUE}>All Niches</option>
+                {customAutoNiche ? <option value={selectedAutoNiche}>{selectedAutoNiche}</option> : null}
+                {AUTO_BULK_NICHE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
             </Field>
           </div>
 
@@ -431,11 +533,8 @@ export function SettingsTab({
             >
               Emergency stop
             </button>
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', color: 'var(--dim)' }}>Posted today</span>
-              <span style={{ fontSize: '12px', fontWeight: 900, color: 'var(--txt)' }}>{autoStatus?.postedToday ?? 0}</span>
-              <span style={{ fontSize: '12px', color: 'var(--dim)' }}>Queue</span>
-              <span style={{ fontSize: '12px', fontWeight: 900, color: 'var(--txt)' }}>{(autoStatus?.queue?.queued ?? 0) + (autoStatus?.queue?.retry ?? 0)}</span>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', color: 'var(--dim)', fontSize: '12px' }}>
+              <span>{autoSettings?.allowed_niches?.length ? `Focused on ${autoSettings.allowed_niches[0]}` : 'Using all niches'}</span>
             </div>
           </div>
         </div>
@@ -451,6 +550,19 @@ export function SettingsTab({
             </button>
           </div>
         ) : null}
+      </div>
+    </div>
+  )
+}
+
+function SettingMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ padding: '13px 14px', borderRadius: '12px', background: 'rgba(125,211,252,0.06)', border: '1px solid rgba(125,211,252,0.12)' }}>
+      <div style={{ fontSize: '10px', fontWeight: 900, color: 'var(--dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px' }}>
+        {label}
+      </div>
+      <div style={{ color: 'var(--txt)', fontSize: '20px', fontWeight: 900, lineHeight: 1 }}>
+        {value}
       </div>
     </div>
   )
@@ -496,11 +608,11 @@ function ProductSourceHealthCard({
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: '22px' }}>
         <div>
           <div style={{ color: 'var(--sky)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 800, marginBottom: '8px' }}>Product Source Health</div>
-          <div style={{ color: 'var(--sil)', fontSize: '13px', lineHeight: 1.6 }}>
-            Tracks source pool depth, niche cache readiness, and Continuous Listing stock.
+          <div style={{ fontFamily: 'var(--serif)', color: 'var(--txt)', fontSize: '22px', fontWeight: 700, marginBottom: '6px' }}>
+            Product pool readiness
           </div>
-          <div style={{ color: 'var(--dim)', fontSize: '12px', lineHeight: 1.6, marginTop: '8px', maxWidth: '620px' }}>
-            Source Pool is the big Amazon product warehouse. Niche Pools are saved 30-item category queues. Continuous Queue is the randomized ready-to-list pool. Crawling means StackPilot is adding fresh products in the background.
+          <div style={{ color: 'var(--sil)', fontSize: '13px', lineHeight: 1.55, maxWidth: '620px' }}>
+            Source depth, image coverage, cached category queues, and Continuous Listing stock.
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -600,13 +712,14 @@ function formatHealthDate(value: string) {
   return date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
-function StatusIcon({ tone, label }: { tone: 'success' | 'warning'; label: string }) {
+function StatusIcon({ tone, label, compact }: { tone: 'success' | 'warning'; label: string; compact?: boolean }) {
   const background = tone === 'success' ? 'rgba(46,207,118,0.12)' : 'rgba(14,165,233,0.10)'
   const border = tone === 'success' ? '1px solid rgba(46,207,118,0.3)' : '1px solid rgba(14,165,233,0.25)'
   const color = tone === 'success' ? 'var(--grn)' : 'var(--gold)'
+  const size = compact ? '48px' : '56px'
 
   return (
-    <div style={{ width: '56px', height: '56px', borderRadius: '50%', background, border, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px', fontSize: '18px', color, fontWeight: 700 }}>
+    <div style={{ width: size, height: size, borderRadius: '50%', background, border, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: compact ? 0 : '0 auto 18px', fontSize: compact ? '15px' : '18px', color, fontWeight: 700, flexShrink: 0 }}>
       {label}
     </div>
   )
