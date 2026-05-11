@@ -1479,6 +1479,99 @@ input:focus,textarea:focus{
 }
 textarea{resize:vertical;min-height:100px}
 
+.settings-input,
+.settings-select{
+  width:100%;
+  min-height:46px;
+  border:1px solid rgba(125,211,252,0.18)!important;
+  border-radius:12px;
+  background:rgba(10,25,42,0.94)!important;
+  color:#eaf6ff!important;
+  font:inherit;
+  font-size:14px;
+  font-weight:700;
+  padding:11px 13px;
+  outline:none;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.settings-select{
+  color-scheme:dark;
+  cursor:pointer;
+}
+.settings-select option{
+  background:#0b1726;
+  color:#eaf6ff;
+}
+.settings-select option:checked,
+.settings-select option:hover{
+  background:#12547c;
+  color:#fff;
+}
+.settings-input:focus,
+.settings-select:focus{
+  border-color:rgba(56,189,248,0.52)!important;
+  box-shadow:0 0 0 3px rgba(56,189,248,0.11),inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.settings-details{
+  margin-top:14px;
+  border:1px solid rgba(125,211,252,0.12);
+  border-radius:12px;
+  background:rgba(125,211,252,0.04);
+  overflow:hidden;
+}
+.settings-details > summary{
+  list-style:none;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:13px 14px;
+  color:var(--txt);
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  user-select:none;
+}
+.settings-details > summary::-webkit-details-marker{display:none}
+.settings-details > summary::after{
+  content:'';
+  width:8px;
+  height:8px;
+  border-right:2px solid var(--sky);
+  border-bottom:2px solid var(--sky);
+  transform:rotate(45deg);
+  transition:transform .18s ease;
+}
+.settings-details[open] > summary::after{transform:rotate(225deg)}
+.settings-details > summary span:last-child{
+  color:var(--sil);
+  font-size:11px;
+  font-weight:800;
+  text-transform:none;
+  letter-spacing:0;
+  margin-left:auto;
+}
+.settings-details__grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:12px;
+  padding:0 14px 14px;
+}
+
+.dashboard-shell--compact .settings-input,
+.dashboard-shell--compact .settings-select{
+  background:#fff!important;
+  color:#0f172a!important;
+  border-color:rgba(15,23,42,0.10)!important;
+  color-scheme:light;
+}
+.dashboard-shell--compact .settings-select option{
+  background:#fff;
+  color:#0f172a;
+}
+
 /* ── BUTTONS ── */
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:8px;

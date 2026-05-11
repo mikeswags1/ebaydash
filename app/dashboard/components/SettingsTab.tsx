@@ -385,13 +385,6 @@ export function SettingsTab({
           ownerBillingBypass={billingOwnerBypass}
         />
 
-        <ProductSourceHealthCard
-          health={sourceHealth}
-          loading={sourceHealthLoading}
-          error={sourceHealthError}
-          onRefresh={onRefreshSourceHealth}
-        />
-
         <div className="card" style={{ padding: compact ? '20px 18px' : '28px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: '18px' }}>
             <div>
@@ -434,48 +427,31 @@ export function SettingsTab({
             </div>
           ) : null}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px', marginTop: '14px' }}>
-            <Field label="Listings / day">
-              <input
-                value={String(autoSettings?.listings_per_day ?? 100)}
-                inputMode="numeric"
-                onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, listings_per_day: Number(e.target.value || 0) }) : s))}
-                onBlur={() => saveAuto({ listings_per_day: Number(autoSettings?.listings_per_day || 100) })}
-                className="pwa-orders__search-input"
-              />
-            </Field>
-            <Field label="Max / hour">
-              <input
-                value={String(autoSettings?.max_per_hour ?? 25)}
-                inputMode="numeric"
-                onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, max_per_hour: Number(e.target.value || 0) }) : s))}
-                onBlur={() => saveAuto({ max_per_hour: Number(autoSettings?.max_per_hour || 25) })}
-                className="pwa-orders__search-input"
-              />
-            </Field>
-            <Field label="Cooldown (min)">
-              <input
-                value={String(autoSettings?.cooldown_minutes ?? 3)}
-                inputMode="numeric"
-                onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, cooldown_minutes: Number(e.target.value || 0) }) : s))}
-                onBlur={() => saveAuto({ cooldown_minutes: Number(autoSettings?.cooldown_minutes || 3) })}
-                className="pwa-orders__search-input"
-              />
-            </Field>
-            <Field label="Minimum ROI %">
-              <input
-                value={String(autoSettings?.min_roi ?? 45)}
-                inputMode="numeric"
-                onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, min_roi: Number(e.target.value || 0) }) : s))}
-                onBlur={() => saveAuto({ min_roi: Number(autoSettings?.min_roi || 45) })}
-                className="pwa-orders__search-input"
-              />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '14px' }}>
+            <Field label="Product pool">
+              <select
+                value={selectedAutoNiche}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const allowed_niches = value === ALL_NICHES_VALUE ? [] : [value]
+                  setAutoSettings((s) => (s ? ({ ...s, allowed_niches }) : s))
+                  void saveAuto({ allowed_niches })
+                }}
+                className="settings-select"
+                disabled={autoLoading || autoSaving}
+              >
+                <option value={ALL_NICHES_VALUE}>All Niches</option>
+                {customAutoNiche ? <option value={selectedAutoNiche}>{selectedAutoNiche}</option> : null}
+                {AUTO_BULK_NICHE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
             </Field>
             <Field label="Mode">
               <select
                 value={String(autoSettings?.mode || 'balanced')}
                 onChange={(e) => saveAuto({ mode: e.target.value as AutoListingSettingsDto['mode'] })}
-                className="pwa-orders__search-input"
+                className="settings-select"
               >
                 <option value="safe">Safe</option>
                 <option value="balanced">Balanced</option>
@@ -486,7 +462,7 @@ export function SettingsTab({
               <select
                 value={String(autoSettings?.selected_account_id ?? '')}
                 onChange={(e) => saveAuto({ selected_account_id: e.target.value ? Number(e.target.value) : null })}
-                className="pwa-orders__search-input"
+                className="settings-select"
               >
                 <option value="">Default</option>
                 {accounts.map((a) => (
@@ -494,28 +470,54 @@ export function SettingsTab({
                 ))}
               </select>
             </Field>
-            <Field label="Desired niche">
-              <select
-                value={customAutoNiche ? selectedAutoNiche : selectedAutoNiche}
-                onChange={(e) => {
-                  const value = e.target.value
-                  const allowed_niches = value === ALL_NICHES_VALUE ? [] : [value]
-                  setAutoSettings((s) => (s ? ({ ...s, allowed_niches }) : s))
-                  void saveAuto({ allowed_niches })
-                }}
-                className="pwa-orders__search-input"
-                disabled={autoLoading || autoSaving}
-              >
-                <option value={ALL_NICHES_VALUE}>All Niches</option>
-                {customAutoNiche ? <option value={selectedAutoNiche}>{selectedAutoNiche}</option> : null}
-                {AUTO_BULK_NICHE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-            </Field>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
+          <details className="settings-details">
+            <summary>
+              <span>Limits and filters</span>
+              <span>{autoSettings?.listings_per_day ?? 100}/day - {autoSettings?.max_per_hour ?? 25}/hour - {autoSettings?.min_roi ?? 45}% ROI</span>
+            </summary>
+            <div className="settings-details__grid">
+              <Field label="Listings / day">
+                <input
+                  value={String(autoSettings?.listings_per_day ?? 100)}
+                  inputMode="numeric"
+                  onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, listings_per_day: Number(e.target.value || 0) }) : s))}
+                  onBlur={() => saveAuto({ listings_per_day: Number(autoSettings?.listings_per_day || 100) })}
+                  className="settings-input"
+                />
+              </Field>
+              <Field label="Max / hour">
+                <input
+                  value={String(autoSettings?.max_per_hour ?? 25)}
+                  inputMode="numeric"
+                  onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, max_per_hour: Number(e.target.value || 0) }) : s))}
+                  onBlur={() => saveAuto({ max_per_hour: Number(autoSettings?.max_per_hour || 25) })}
+                  className="settings-input"
+                />
+              </Field>
+              <Field label="Cooldown (min)">
+                <input
+                  value={String(autoSettings?.cooldown_minutes ?? 3)}
+                  inputMode="numeric"
+                  onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, cooldown_minutes: Number(e.target.value || 0) }) : s))}
+                  onBlur={() => saveAuto({ cooldown_minutes: Number(autoSettings?.cooldown_minutes || 3) })}
+                  className="settings-input"
+                />
+              </Field>
+              <Field label="Minimum ROI %">
+                <input
+                  value={String(autoSettings?.min_roi ?? 45)}
+                  inputMode="numeric"
+                  onChange={(e) => setAutoSettings((s) => (s ? ({ ...s, min_roi: Number(e.target.value || 0) }) : s))}
+                  onBlur={() => saveAuto({ min_roi: Number(autoSettings?.min_roi || 45) })}
+                  className="settings-input"
+                />
+              </Field>
+            </div>
+          </details>
+
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '16px' }}>
             <button
               type="button"
               className="btn btn-ghost btn-sm"
@@ -538,6 +540,13 @@ export function SettingsTab({
             </div>
           </div>
         </div>
+
+        <ProductSourceHealthCard
+          health={sourceHealth}
+          loading={sourceHealthLoading}
+          error={sourceHealthError}
+          onRefresh={onRefreshSourceHealth}
+        />
 
         {niche ? (
           <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(125,211,252,0.08)', border: '1px solid rgba(125,211,252,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
