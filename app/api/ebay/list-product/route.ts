@@ -1493,8 +1493,8 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Availability: if cache confirms out-of-stock, trust it
-        if (!cached.available && cached.amazonPrice === 0) {
+        // Availability: if cache confirms out-of-stock, trust it even if it still has an old price.
+        if (!cached.available) {
           validatedAmazon = { ...validatedAmazon, available: false }
         }
 
@@ -1507,6 +1507,13 @@ export async function POST(req: NextRequest) {
   // Block listings where Amazon shows the product as unavailable (out of stock, no price).
   // Applies to both live-validated (non-trusted) and cache-supplemented (trusted) paths.
   if (!validatedAmazon.available) {
+    await sql`
+      UPDATE product_source_items
+      SET active = FALSE, last_seen_at = NOW()
+      WHERE asin = ${String(asin).toUpperCase()}
+    `.catch(() => {})
+    saveCachedAmazonProduct({ ...validatedAmazon, available: false }).catch(() => {})
+
     return apiError(
       `This product is currently unavailable on Amazon and cannot be listed. Remove it from your queue and reload to get fresh products.`,
       { status: 400, code: 'PRODUCT_UNAVAILABLE' }

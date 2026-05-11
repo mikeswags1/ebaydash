@@ -62,6 +62,16 @@ function countUniqueProductImages(product: FinderProduct) {
 export function getBulkPreflightIssue(product: FinderProduct): BulkListFailure | null {
   const imageCount = countUniqueProductImages(product)
 
+  if (product.available === false) {
+    return {
+      asin: product.asin,
+      title: product.title,
+      code: 'PRODUCT_UNAVAILABLE',
+      message: 'Skipped before publish: Amazon says this product is currently unavailable.',
+      skipped: true,
+    }
+  }
+
   if (isWeakListingTitle(product.title)) {
     return {
       asin: product.asin,

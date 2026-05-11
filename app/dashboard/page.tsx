@@ -287,6 +287,60 @@ export default function Dashboard() {
     [continuousFinderState.results, finderRotationTick]
   )
 
+  const replaceUnavailableProduct = useCallback(
+    async (product: FinderProduct) => {
+      const removeAsins = [product.asin]
+      const listed = new Set(removeAsins.map((asin) => asin.toUpperCase()))
+      const sourceMode = product.sourceMode === 'continuous' ? 'continuous' : 'niche'
+
+      if (sourceMode === 'continuous') {
+        const remainingAsins = (continuousFinderState.results || [])
+          .filter((entry) => !listed.has(entry.asin.toUpperCase()))
+          .map((entry) => entry.asin)
+
+        try {
+          const refreshed = await fetchFinderProducts('', true, {
+            mode: 'continuous',
+            limit: FINDER_ROTATION_POOL_TARGET,
+            excludeAsins: [...remainingAsins, ...removeAsins],
+          })
+          setContinuousFinderState((prev) => ({
+            ...prev,
+            results: mergeRefilledProducts(prev.results || continuousFinderState.results, refreshed.results || [], removeAsins, 'continuous'),
+          }))
+        } catch {
+          setContinuousFinderState((prev) => ({
+            ...prev,
+            results: prev.results ? prev.results.filter((entry) => !listed.has(entry.asin.toUpperCase())) : prev.results,
+          }))
+        }
+        return
+      }
+
+      if (!nicheState.value) return
+      const remainingAsins = (finderState.results || [])
+        .filter((entry) => !listed.has(entry.asin.toUpperCase()))
+        .map((entry) => entry.asin)
+
+      try {
+        const refreshed = await fetchFinderProducts(nicheState.value, true, {
+          limit: FINDER_ROTATION_POOL_TARGET,
+          excludeAsins: [...remainingAsins, ...removeAsins],
+        })
+        setFinderState((prev) => ({
+          ...prev,
+          results: mergeRefilledProducts(prev.results || finderState.results, refreshed.results || [], removeAsins, 'niche'),
+        }))
+      } catch {
+        setFinderState((prev) => ({
+          ...prev,
+          results: prev.results ? prev.results.filter((entry) => !listed.has(entry.asin.toUpperCase())) : prev.results,
+        }))
+      }
+    },
+    [continuousFinderState.results, finderState.results, nicheState.value]
+  )
+
   const validateListingProduct = useCallback(async (product: FinderProduct) => {
     const originalPrice = product.ebayPrice.toFixed(2)
 
@@ -300,6 +354,23 @@ export default function Dashboard() {
         const validated = await validateAmazonAsin(product.asin)
         const resolvedImageUrl = validated.imageUrl || product.imageUrl || validated.images?.[0]
         const hasValidAmazonData = Boolean(resolvedImageUrl && validated.amazonPrice > 0)
+
+        if (validated.available === false) {
+          const message = 'This Amazon source is currently unavailable, so StackPilot removed it from the queue and is pulling a replacement.'
+          setListingState((prev) => {
+            if (!prev.modal || prev.modal.asin !== product.asin) return prev
+            return {
+              ...prev,
+              modal: { ...product, available: false },
+              validating: false,
+              validated: false,
+              error: message,
+            }
+          })
+          setBanner({ tone: 'error', text: message })
+          void replaceUnavailableProduct(product)
+          return { validated: false as const, product, unavailable: true as const }
+        }
 
         if (!hasValidAmazonData) {
           throw new Error('INCOMPLETE_AMAZON_VALIDATION')
@@ -319,6 +390,7 @@ export default function Dashboard() {
           features: validated.features || product.features,
           description: validated.description || product.description,
           specs: validated.specs || product.specs,
+          available: validated.available,
         }
 
         setFinderState((prev) => ({
@@ -368,7 +440,7 @@ export default function Dashboard() {
     })
 
     return { validated: false as const, product }
-  }, [])
+  }, [replaceUnavailableProduct])
 
   useEffect(() => {
     const nextBanner = parseDashboardSearchMessage(window.location.search)
@@ -1047,7 +1119,9 @@ export default function Dashboard() {
       if (!validationResult.validated) {
         setListingState((prev) => ({
           ...prev,
-          error: 'Amazon validation did not finish cleanly. Validation was retried once but still did not confirm a live Amazon title, image, and cost.',
+          error: 'unavailable' in validationResult && validationResult.unavailable
+            ? 'This Amazon source is currently unavailable, so StackPilot removed it from the queue and is pulling a replacement.'
+            : 'Amazon validation did not finish cleanly. Validation was retried once but still did not confirm a live Amazon title, image, and cost.',
         }))
         return
       }
@@ -1064,11 +1138,10 @@ export default function Dashboard() {
     }
 
     setListingState((prev) => ({ ...prev, loading: true, error: null }))
+    const sourceMode = productToPublish.sourceMode === 'continuous' ? 'continuous' : 'niche'
+    const productNiche = sourceMode === 'continuous' ? productToPublish.sourceNiche || null : nicheState.value
 
     try {
-      const sourceMode = productToPublish.sourceMode === 'continuous' ? 'continuous' : 'niche'
-      const productNiche = sourceMode === 'continuous' ? productToPublish.sourceNiche || null : nicheState.value
-
       const data = await publishProduct({
         asin: productToPublish.asin,
         title: productToPublish.title,
@@ -1092,9 +1165,29 @@ export default function Dashboard() {
       // Refresh trial counter after publishing.
       await refreshSubscriptionStatus().catch(() => {})
     } catch (error) {
+      const errorCode = error instanceof DashboardApiError ? error.code : undefined
+      const message = getErrorMessage(error, 'Something went wrong. Please try again.')
+      const unavailableSource = errorCode === 'PRODUCT_UNAVAILABLE' || /currently unavailable on Amazon|Amazon source/i.test(message)
+
+      if (unavailableSource) {
+        const friendly = 'This Amazon source is currently unavailable, so StackPilot removed it from the queue and is pulling a replacement.'
+        setListingState((prev) => ({
+          ...prev,
+          validated: false,
+          error: friendly,
+        }))
+        if (sourceMode === 'continuous') {
+          await refillContinuousProducts([productToPublish.asin])
+        } else {
+          await refillNicheFinderProducts([productToPublish.asin])
+        }
+        setBanner({ tone: 'error', text: friendly })
+        return
+      }
+
       setListingState((prev) => ({
         ...prev,
-        error: isReconnectError(error) ? 'RECONNECT_REQUIRED' : getErrorMessage(error, 'Something went wrong. Please try again.'),
+        error: isReconnectError(error) ? 'RECONNECT_REQUIRED' : message,
       }))
       if (isReconnectError(error)) {
         setConnectionState((prev) => ({ ...prev, ebayConnected: false, ebayNeedsReconnect: true }))

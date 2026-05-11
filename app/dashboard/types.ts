@@ -79,6 +79,7 @@ export interface FinderProduct {
   sourceNiche?: string
   sourceMode?: 'niche' | 'continuous'
   qualityScore?: number
+  available?: boolean
 }
 
 export interface ListResult {

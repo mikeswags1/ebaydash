@@ -50,6 +50,7 @@ type Product = {
   images?: string[]; features?: string[]; description?: string; specs?: Array<[string, string]>
   sourceNiche?: string; qualityScore?: number
   distributionScore?: number
+  available?: boolean
   _rating?: number; _numRatings?: number
 }
 
@@ -623,7 +624,8 @@ export async function GET(req: NextRequest) {
   const matchesActiveListing = (title: string) =>
     listedTitles.some((listedTitle) => getTitleScore(listedTitle, title) >= 0.82)
 
-  const shouldBlockProduct = (product: Pick<Product, 'asin' | 'title'>) =>
+  const shouldBlockProduct = (product: Pick<Product, 'asin' | 'title' | 'available'>) =>
+    product.available === false ||
     listedAsins.has(product.asin.toUpperCase()) ||
     excludeAsins.has(product.asin.toUpperCase()) ||
     matchesActiveListing(product.title) ||
@@ -645,12 +647,16 @@ export async function GET(req: NextRequest) {
     // Catalog-crawl products only store imageUrl (1 image). If this ASIN was ever validated
     // by the niche finder, the full images/features/description are already in the cache.
     // A single batch DB lookup here — no new API calls — fixes bulk listing image/description issues.
+    const topRankedAsins = ranked
+      .slice(0, Math.max(targetCount, TARGET_STOCK))
+      .map(p => p.asin)
     const sparseAsins = ranked
       .filter(p => (p.images?.length ?? 0) < 2)
       .slice(0, targetCount)
       .map(p => p.asin)
+    const cacheLookupAsins = Array.from(new Set([...topRankedAsins, ...sparseAsins]))
 
-    if (sparseAsins.length > 0) {
+    if (cacheLookupAsins.length > 0) {
       try {
         const cachedRows = await queryRows<{
           asin: string
@@ -659,16 +665,33 @@ export async function GET(req: NextRequest) {
           features: string[]
           description: string | null
           specs: Array<[string, string]>
+          available: boolean | null
         }>`
-          SELECT asin, primary_image, images, features, description, specs
+          SELECT asin, primary_image, images, features, description, specs, available
           FROM amazon_product_cache
-          WHERE asin = ANY(${sparseAsins})
+          WHERE asin = ANY(${cacheLookupAsins})
         `
         if (cachedRows.length > 0) {
-          const cacheMap = new Map(cachedRows.map(r => [r.asin, r]))
+          const cacheMap = new Map(cachedRows.map(r => [r.asin.toUpperCase(), r]))
+          const unavailableAsins = new Set(
+            cachedRows
+              .filter(r => r.available === false)
+              .map(r => r.asin.toUpperCase())
+          )
+          if (unavailableAsins.size > 0) {
+            ranked = ranked.filter(product => !unavailableAsins.has(product.asin.toUpperCase()))
+            after(async () => {
+              await sql`
+                UPDATE product_source_items
+                SET active = FALSE, last_seen_at = NOW()
+                WHERE asin = ANY(${Array.from(unavailableAsins)})
+              `.catch(() => {})
+            })
+          }
+
           ranked = ranked.map(product => {
             if ((product.images?.length ?? 0) >= 2) return product
-            const cached = cacheMap.get(product.asin)
+            const cached = cacheMap.get(product.asin.toUpperCase())
             if (!cached) return product
 
             const mergedImages = [
@@ -682,6 +705,7 @@ export async function GET(req: NextRequest) {
               ...product,
               images: deduped,
               imageUrl: deduped[0] || product.imageUrl,
+              available: cached.available ?? product.available,
               features: (product.features?.length ?? 0) > 0
                 ? product.features
                 : (Array.isArray(cached.features) ? cached.features : product.features),
@@ -1050,6 +1074,7 @@ export async function GET(req: NextRequest) {
             features: validated.features,
             description: validated.description,
             specs: validated.specs,
+            available: validated.available,
           }
         })
       )

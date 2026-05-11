@@ -33,6 +33,7 @@ export function SellOnEbayModal({
 
   const preview = getListingPreview(listPrice, product.amazonPrice, '0', EBAY_FEE_RATE)
   const modalThumb = dashboardDisplayImageUrl(product.imageUrl)
+  const showVerifiedState = validated && !listError
 
   return (
     <div
@@ -127,10 +128,10 @@ export function SellOnEbayModal({
               <PreviewStat label="Margin" value={`${preview.margin.toFixed(1)}%`} tone={preview.margin >= 0 ? 'var(--gold)' : 'var(--red)'} />
             </div>
 
-            <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', background: validated ? 'rgba(46,207,118,0.08)' : 'rgba(14,165,233,0.08)', border: validated ? '1px solid rgba(46,207,118,0.2)' : '1px solid rgba(14,165,233,0.18)', fontSize: '12px', color: validated ? 'var(--grn)' : 'var(--plat)', lineHeight: 1.6 }}>
+            <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', background: showVerifiedState ? 'rgba(46,207,118,0.08)' : 'rgba(14,165,233,0.08)', border: showVerifiedState ? '1px solid rgba(46,207,118,0.2)' : '1px solid rgba(14,165,233,0.18)', fontSize: '12px', color: showVerifiedState ? 'var(--grn)' : 'var(--plat)', lineHeight: 1.6 }}>
               {validating
                 ? 'Validating the exact Amazon product, current price, and images now. Publishing unlocks as soon as the live Amazon price is confirmed.'
-                : validated
+                : showVerifiedState
                   ? 'ASIN verified. This listing will use the validated Amazon title, image, and current cost data.'
                   : 'Amazon validation did not finish cleanly. Review the product again before publishing so the cost and profit stay accurate.'}
             </div>
