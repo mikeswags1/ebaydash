@@ -19,6 +19,7 @@ export async function GET() {
 
   const stripeReady = isStripeBillingConfigured()
   const stripeCustomerId = sub?.stripeCustomerId || null
+  const ownerBillingBypass = Boolean(sub?.ownerBillingBypass)
 
   return NextResponse.json({
     ok: true,
@@ -31,6 +32,7 @@ export async function GET() {
     billing: {
       checkoutAvailable: stripeReady,
       portalAvailable: stripeReady && Boolean(stripeCustomerId),
+      ownerBillingBypass,
     },
   })
 }

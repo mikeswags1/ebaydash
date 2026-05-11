@@ -21,6 +21,7 @@ function BillingSection({
   trialRemaining,
   checkoutAvailable,
   portalAvailable,
+  ownerBillingBypass,
 }: {
   compact?: boolean
   plan: string
@@ -30,6 +31,7 @@ function BillingSection({
   trialRemaining: number
   checkoutAvailable: boolean
   portalAvailable: boolean
+  ownerBillingBypass: boolean
 }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -38,7 +40,7 @@ function BillingSection({
   const showUpgrade = !isPro && checkoutAvailable
   const showPortal = isPro && portalAvailable
   const trialButStripeOff = !isPro && !checkoutAvailable
-  const proButNoPortal = isPro && !portalAvailable
+  const proButNoPortal = isPro && !portalAvailable && !ownerBillingBypass
   const used = Math.min(Math.max(0, listed), Math.max(1, trialLimit))
   const remaining = Math.max(0, trialRemaining)
 
@@ -57,7 +59,9 @@ function BillingSection({
       </div>
       <div style={{ fontSize: '13px', color: 'var(--sil)', lineHeight: 1.65, marginBottom: '18px' }}>
         {isPro
-          ? `This account is on Pro${status && status !== 'active' ? ` (${status})` : ''}. Manage payment method, invoices, and cancellation in the Stripe billing portal.`
+          ? ownerBillingBypass
+            ? `This account has full Pro access (operator plan). Stripe billing portal is not used for this login.`
+            : `This account is on Pro${status && status !== 'active' ? ` (${status})` : ''}. Manage payment method, invoices, and cancellation in the Stripe billing portal.`
           : remaining > 0
             ? `This account has ${remaining} free listing${remaining === 1 ? '' : 's'} left. Trial usage is tied to total published listings on this account.`
             : 'Free trial complete for this account. Upgrade to keep listing with unlimited active listings.'}
@@ -174,6 +178,7 @@ export function SettingsTab({
   trialRemaining,
   billingCheckoutAvailable,
   billingPortalAvailable,
+  billingOwnerBypass,
 }: {
   connected: boolean
   needsReconnect: boolean
@@ -195,6 +200,7 @@ export function SettingsTab({
   trialRemaining: number
   billingCheckoutAvailable: boolean
   billingPortalAvailable: boolean
+  billingOwnerBypass: boolean
 }) {
   const [autoLoading, setAutoLoading] = useState(false)
   const [autoSaving, setAutoSaving] = useState(false)
@@ -308,6 +314,7 @@ export function SettingsTab({
           trialRemaining={trialRemaining}
           checkoutAvailable={billingCheckoutAvailable}
           portalAvailable={billingPortalAvailable}
+          ownerBillingBypass={billingOwnerBypass}
         />
 
         <ProductSourceHealthCard

@@ -73,9 +73,15 @@ export async function ensureSubscriptionRow(userId: string | number) {
   await ensureSubscriptionSchema()
 }
 
-export async function getUserPlan(
-  userId: string | number
-): Promise<{ plan: SubscriptionPlan; status: string; stripeCustomerId: string | null } | null> {
+export type UserPlanRow = {
+  plan: SubscriptionPlan
+  status: string
+  stripeCustomerId: string | null
+  /** Pro via STACKPILOT_OWNER_* — no Stripe subscription required */
+  ownerBillingBypass: boolean
+}
+
+export async function getUserPlan(userId: string | number): Promise<UserPlanRow | null> {
   const uid = Number(userId)
   if (!Number.isFinite(uid)) return null
 
@@ -87,6 +93,7 @@ export async function getUserPlan(
       plan: 'pro',
       status: 'active',
       stripeCustomerId: ownerRows[0]?.stripe_customer_id || null,
+      ownerBillingBypass: true,
     }
   }
 
@@ -100,6 +107,7 @@ export async function getUserPlan(
     plan: normalizeSubscriptionPlan(rawPlan, status),
     status,
     stripeCustomerId: rows[0].stripe_customer_id || null,
+    ownerBillingBypass: false,
   }
 }
 

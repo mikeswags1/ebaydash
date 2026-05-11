@@ -223,7 +223,7 @@ export async function fetchSubscriptionStatus() {
     listed: number
     trialRemaining: number
     isPro: boolean
-    billing: { checkoutAvailable: boolean; portalAvailable: boolean }
+    billing: { checkoutAvailable: boolean; portalAvailable: boolean; ownerBillingBypass?: boolean }
   }>('/api/subscription/status', { cache: 'no-store' })
 }
 

@@ -83,6 +83,7 @@ type SubscriptionState = {
   isPro: boolean
   billingCheckoutAvailable: boolean
   billingPortalAvailable: boolean
+  billingOwnerBypass: boolean
 }
 
 type OrderState = {
@@ -205,6 +206,7 @@ export default function Dashboard() {
     isPro: false,
     billingCheckoutAvailable: false,
     billingPortalAvailable: false,
+    billingOwnerBypass: false,
   })
   const [connectionState, setConnectionState] = useState<ConnectionState>({
     ebayConnected: false,
@@ -493,6 +495,7 @@ export default function Dashboard() {
       isPro: v.isPro ?? v.plan === 'pro',
       billingCheckoutAvailable: v.billing?.checkoutAvailable ?? false,
       billingPortalAvailable: v.billing?.portalAvailable ?? false,
+      billingOwnerBypass: v.billing?.ownerBillingBypass ?? false,
     })
   }, [])
 
@@ -1379,6 +1382,7 @@ export default function Dashboard() {
               trialRemaining={subscriptionState.trialRemaining}
               billingCheckoutAvailable={subscriptionState.billingCheckoutAvailable}
               billingPortalAvailable={subscriptionState.billingPortalAvailable}
+              billingOwnerBypass={subscriptionState.billingOwnerBypass}
             />
           ) : null}
         </div>
