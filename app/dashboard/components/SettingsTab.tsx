@@ -730,7 +730,7 @@ function ProductSourceHealthCard({
               {health.topNiches.slice(0, 6).map((niche) => (
                 <div key={niche.name} style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) auto auto', gap: '12px', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid rgba(125,211,252,0.08)' }}>
                   <div style={{ color: 'var(--txt)', fontWeight: 700, fontSize: '13px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{niche.name}</div>
-                  <div style={{ color: 'var(--sil)', fontSize: '12px' }}>{formatNumber(niche.count)} items</div>
+                  <div style={{ color: 'var(--sil)', fontSize: '12px' }}>{formatNumber(niche.count)} ready</div>
                   <div style={{ color: 'var(--sky)', fontSize: '12px', fontWeight: 800 }}>Score {Math.round(niche.averageScore)}</div>
                 </div>
               ))}

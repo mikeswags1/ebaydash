@@ -774,7 +774,7 @@ export async function GET(req: NextRequest) {
   }
 
   const sourceEngineProducts = await withTimeout(
-    loadProductSourceProducts({ niche: continuousMode ? undefined : niche, limit: continuousMode ? 360 : 180 }),
+    loadProductSourceProducts({ niche: continuousMode ? undefined : niche, limit: 600 }),
     continuousMode ? 700 : 1200,
     []
   )

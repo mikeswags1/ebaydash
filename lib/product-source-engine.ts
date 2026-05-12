@@ -3,6 +3,7 @@ import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice } fro
 import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
 import { getRapidApiKey } from '@/lib/rapidapi'
+import { isWeakListingTitle } from '@/lib/listing-quality'
 
 export type SourceEngineProduct = {
   asin: string
@@ -110,6 +111,7 @@ function normalizeProduct(input: SourceProductInput): (SourceEngineProduct & { s
   const title = String(input.title || '').trim()
   const amazonPrice = parseNumber(input.amazonPrice)
   if (!asin || !title || amazonPrice <= 0) return null
+  if (isWeakListingTitle(title)) return null
 
   const ebayPrice = getRecommendedEbayPrice(amazonPrice, EBAY_DEFAULT_FEE_RATE)
   const metrics = getListingMetrics(amazonPrice, ebayPrice, EBAY_DEFAULT_FEE_RATE)
@@ -486,6 +488,7 @@ export async function loadProductSourceProducts(options: { niche?: string | null
         `
     return rows
       .map(rowToProduct)
+      .filter((product) => !isWeakListingTitle(product.title))
       .sort((a, b) => (b.qualityScore || 0) - (a.qualityScore || 0))
       .slice(0, limit)
   } catch {

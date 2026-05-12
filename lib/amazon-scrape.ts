@@ -1,6 +1,8 @@
 // Direct Amazon page scraper — StackPilot's primary product source.
 // Fetches product data straight from amazon.com with no API key required
 
+import { chooseBestListingTitle, isWeakListingTitle } from '@/lib/listing-quality'
+
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -49,6 +51,33 @@ function decodeHtmlEntities(input: string): string {
     .replace(/&#x2F;/g, '/')
     .replace(/\\u0026/g, '&')
     .replace(/\\\//g, '/')
+}
+
+function decodeHtmlAttribute(input: string): string {
+  return decodeHtmlEntities(input)
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+}
+
+function extractSearchTitle(block: string): string {
+  const candidates: string[] = []
+  const h2Blocks = block.match(/<h2\b[\s\S]*?<\/h2>/gi) || []
+
+  for (const h2 of h2Blocks) {
+    const aria = h2.match(/\baria-label="([^"]{8,700})"/i)?.[1]
+    if (aria) candidates.push(decodeHtmlAttribute(aria))
+    candidates.push(stripTags(decodeHtmlEntities(h2)))
+  }
+
+  const linkTitle = block.match(/<a\b[^>]*class="[^"]*\ba-text-normal\b[^"]*"[\s\S]*?<span\b[^>]*>([\s\S]*?)<\/span>/i)?.[1]
+  if (linkTitle) candidates.push(stripTags(decodeHtmlEntities(linkTitle)))
+
+  const legacyTitle =
+    block.match(/class="a-size-medium[^"]*a-color-base[^"]*a-text-normal"[^>]*>([\s\S]*?)<\/span>/i)?.[1] ||
+    block.match(/class="a-size-base-plus[^"]*\ba-text-normal\b[^"]*"[^>]*>([\s\S]*?)<\/span>/i)?.[1]
+  if (legacyTitle) candidates.push(stripTags(decodeHtmlEntities(legacyTitle)))
+
+  return chooseBestListingTitle(candidates)
 }
 
 function upgradeAmazonImageUrl(url: string): string {
@@ -279,11 +308,8 @@ export async function scrapeAmazonSearch(
       if (!asinMatch) continue
       const foundAsin = asinMatch[1]
 
-      const titleMatch =
-        block.match(/class="a-size-medium[^"]*a-color-base[^"]*a-text-normal"[^>]*>([\s\S]*?)<\/span>/) ||
-        block.match(/class="a-size-base-plus[^"]*"[^>]*>([\s\S]*?)<\/span>/)
-      const title = titleMatch ? stripTags(titleMatch[1]) : ''
-      if (!title || title.length < 5) continue
+      const title = extractSearchTitle(block)
+      if (!title || title.length < 5 || isWeakListingTitle(title)) continue
 
       const priceMatch = block.match(/"a-price-whole"[^>]*>(\d[\d,]*)</)
       const price = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, '')) : 0

@@ -5,6 +5,7 @@ import { apiError, apiOk } from '@/lib/api-response'
 import { queryRows } from '@/lib/db'
 import { ensureProductSourceTables } from '@/lib/product-source-engine'
 import { isRapidApiFallbackEnabled } from '@/lib/rapidapi'
+import { isWeakListingTitle } from '@/lib/listing-quality'
 
 type SourceSummaryRow = {
   total?: number | string
@@ -22,6 +23,15 @@ type NicheRow = {
   avg_score?: number | string | null
   max_score?: number | string | null
   newest_seen?: string | null
+}
+
+type NicheSourceRow = {
+  name?: string | null
+  title?: string | null
+  image_url?: string | null
+  risk?: string | null
+  total_score?: number | string | null
+  last_seen_at?: string | null
 }
 
 type CacheSummaryRow = {
@@ -48,6 +58,39 @@ function toIso(value: unknown) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
+function buildReadyNicheRows(rows: NicheSourceRow[]): NicheRow[] {
+  const groups = new Map<string, { count: number; score: number; maxScore: number; newest: string | null }>()
+
+  for (const row of rows) {
+    const title = row.title || ''
+    if (!title || isWeakListingTitle(title)) continue
+    if (!row.image_url) continue
+    if (row.risk === 'HIGH') continue
+
+    const name = row.name || 'Unassigned'
+    const score = toNumber(row.total_score)
+    const current = groups.get(name) || { count: 0, score: 0, maxScore: 0, newest: null }
+    current.count += 1
+    current.score += score
+    current.maxScore = Math.max(current.maxScore, score)
+    if (!current.newest || Date.parse(String(row.last_seen_at || '')) > Date.parse(current.newest)) {
+      current.newest = row.last_seen_at || current.newest
+    }
+    groups.set(name, current)
+  }
+
+  return Array.from(groups.entries())
+    .map(([name, group]) => ({
+      name,
+      count: group.count,
+      avg_score: group.count > 0 ? Number((group.score / group.count).toFixed(2)) : 0,
+      max_score: Number(group.maxScore.toFixed(2)),
+      newest_seen: group.newest,
+    }))
+    .sort((a, b) => toNumber(b.count) - toNumber(a.count) || toNumber(b.avg_score) - toNumber(a.avg_score))
+    .slice(0, 12)
+}
+
 export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
@@ -67,19 +110,19 @@ export async function GET(_req: NextRequest) {
     WHERE active = TRUE
   `.catch(() => [])
 
-  const nicheRows = await queryRows<NicheRow>`
+  const nicheSourceRows = await queryRows<NicheSourceRow>`
     SELECT
       COALESCE(source_niche, 'Unassigned') AS name,
-      COUNT(*)::int AS count,
-      ROUND(AVG(total_score), 2) AS avg_score,
-      ROUND(MAX(total_score), 2) AS max_score,
-      MAX(last_seen_at) AS newest_seen
+      title,
+      image_url,
+      risk,
+      total_score,
+      last_seen_at
     FROM product_source_items
     WHERE active = TRUE
-    GROUP BY COALESCE(source_niche, 'Unassigned')
-    ORDER BY count DESC, avg_score DESC
-    LIMIT 12
+      AND last_seen_at > NOW() - INTERVAL '21 days'
   `.catch(() => [])
+  const nicheRows = buildReadyNicheRows(nicheSourceRows)
 
   const cacheRows = await queryRows<CacheSummaryRow>`
     SELECT
