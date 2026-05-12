@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { recoverAmazonProductByItemId } from '@/lib/amazon-mapping'
+import { getRapidApiKey } from '@/lib/rapidapi'
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -18,13 +19,7 @@ export async function GET(req: NextRequest) {
     return apiError('Invalid eBay item ID.', { status: 400, code: 'INVALID_ITEM_ID' })
   }
 
-  const rapidKey = process.env.RAPIDAPI_KEY
-  if (!rapidKey) {
-    return apiError('Amazon product lookup is not configured.', {
-      status: 503,
-      code: 'AMAZON_LOOKUP_NOT_CONFIGURED',
-    })
-  }
+  const rapidKey = getRapidApiKey()
 
   const credentials = await getValidEbayAccessToken(session.user.id)
   if (!credentials?.accessToken) {

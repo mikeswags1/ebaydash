@@ -496,8 +496,6 @@ export async function recoverAmazonProductByItemId(args: {
     }
   }
 
-  if (!rapidKey) return null
-
   const ebayDetails = await getEbayItemDetails(itemId, accessToken, appId)
   const ebayTitle = ebayDetails?.title || ''
   if (!ebayTitle) return null
@@ -549,21 +547,23 @@ export async function recoverAmazonProductByItemId(args: {
     }
   }
 
-  const searchRes = await fetch(
-    `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(ebayTitle)}&country=US&category_id=aps&page=1`,
-    {
-      headers: {
-        'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com',
-        'x-rapidapi-key': rapidKey,
-      },
-      signal: AbortSignal.timeout(8000),
-    }
-  )
-
   let products: Record<string, unknown>[] = []
-  if (searchRes.ok) {
-    const searchJson = await searchRes.json()
-    products = searchJson?.data?.products || []
+  if (rapidKey) {
+    const searchRes = await fetch(
+      `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(ebayTitle)}&country=US&category_id=aps&page=1`,
+      {
+        headers: {
+          'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com',
+          'x-rapidapi-key': rapidKey,
+        },
+        signal: AbortSignal.timeout(8000),
+      }
+    ).catch(() => null)
+
+    if (searchRes?.ok) {
+      const searchJson = await searchRes.json()
+      products = searchJson?.data?.products || []
+    }
   }
 
   if (products.length > 0) {

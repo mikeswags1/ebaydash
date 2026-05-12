@@ -2,6 +2,7 @@ import { queryRows, sql } from '@/lib/db'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
+import { getRapidApiKey } from '@/lib/rapidapi'
 
 export type SourceEngineProduct = {
   asin: string
@@ -377,7 +378,7 @@ export async function refreshProductSourcePrices(options: { limit?: number; stal
 
   if (rows.length === 0) return { updated: 0, unchanged: 0, failed: 0 }
 
-  const rapidKey = process.env.RAPIDAPI_KEY || ''
+  const rapidKey = getRapidApiKey()
   let updated = 0, unchanged = 0, failed = 0
   const BATCH = 5
 
@@ -410,7 +411,7 @@ export async function refreshProductSourcePrices(options: { limit?: number; stal
           }
         }
 
-        // Fallback to direct Amazon scraper when RapidAPI is unavailable or quota exhausted
+        // Direct Amazon scraper is the default. External API fallback is opt-in only.
         if (!freshPrice) {
           try {
             const scraped = await scrapeAmazonProduct(row.asin)

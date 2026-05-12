@@ -513,7 +513,7 @@ function buildCatalogQueries(niche: string) {
 }
 
 // ── Refresh one niche in the product_cache table ─────────────────────────────
-async function refreshNiche(niche: string, rapidKey: string, options: RefreshOptions = {}): Promise<number> {
+async function refreshNiche(niche: string, options: RefreshOptions = {}): Promise<number> {
   const target = Math.max(30, Math.min(CATALOG_NICHE_TARGET, options.target || STANDARD_NICHE_TARGET))
   const allQueries = buildCatalogQueries(niche)
   const queryLimit = options.queryLimit || Math.min(allQueries.length, 25)
@@ -872,8 +872,14 @@ export async function GET(req: NextRequest) {
   }
 
   // 2. Refresh product cache for all niches
-  const rapidKey = process.env.RAPIDAPI_KEY
   const allNiches = Object.keys(NICHE_QUERIES)
+  const requestedNicheParam = req.nextUrl.searchParams.get('niche') || ''
+  const explicitNiches = requestedNicheParam
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((requested) => allNiches.find((niche) => niche.toLowerCase() === requested.toLowerCase()) || '')
+    .filter(Boolean)
   const targetProducts = backgroundCatalog
     ? BACKGROUND_CATALOG_TARGET
     : catalogRefresh
@@ -887,12 +893,16 @@ export async function GET(req: NextRequest) {
       : fullRefresh
         ? allNiches.length
         : SCHEDULED_NICHE_BATCH_SIZE
-  const batchSize = Math.max(1, Math.min(allNiches.length, Number.isFinite(requestedBatchSize) && requestedBatchSize > 0 ? Math.floor(requestedBatchSize) : defaultBatchSize))
+  const batchSize = explicitNiches.length > 0
+    ? explicitNiches.length
+    : Math.max(1, Math.min(allNiches.length, Number.isFinite(requestedBatchSize) && requestedBatchSize > 0 ? Math.floor(requestedBatchSize) : defaultBatchSize))
 
   // For catalog refresh: use a persistent cursor stored in DB so every click advances
   // to the next 3 niches regardless of whether the scrape succeeded or got blocked.
   let niches: string[]
-  if (catalogRefresh && !Number.isFinite(requestedStartIndex)) {
+  if (explicitNiches.length > 0) {
+    niches = explicitNiches
+  } else if (catalogRefresh && !Number.isFinite(requestedStartIndex)) {
     try {
       const cursorRow = await queryRows<{ results: string }>`
         SELECT results FROM product_cache WHERE niche = '__cursor__'
@@ -916,12 +926,12 @@ export async function GET(req: NextRequest) {
       : fullRefresh && !catalogRefresh ? 0 : (rotation * batchSize) % allNiches.length
     niches = Array.from({ length: Math.min(batchSize, allNiches.length) }, (_, index) => allNiches[(startIndex + index) % allNiches.length])
   }
-  const rapidOptions = !catalogRefresh
+  const primaryOptions = !catalogRefresh
     ? { target: targetProducts, queryLimit: 4, pages: [1], timeoutMs: 8000 }
     : backgroundCatalog
       ? { target: targetProducts, queryLimit: 5, pages: [1, 2], timeoutMs: 5000 }
       : { target: targetProducts, queryLimit: 6, pages: [1, 2], timeoutMs: 4500 }
-  const scrapeOptions = !catalogRefresh
+  const secondaryOptions = !catalogRefresh
     ? { target: targetProducts, queryLimit: 3, pages: [1], timeoutMs: 6000 }
     : backgroundCatalog
       ? { target: targetProducts, queryLimit: 4, pages: [1, 2], timeoutMs: 4000 }
@@ -930,30 +940,22 @@ export async function GET(req: NextRequest) {
   const fallbackScrapeBudgetMs = backgroundCatalog ? 220_000 : catalogRefresh ? 235_000 : 270_000
   const runProductRefresh = async () => {
     let refreshed = 0
-    let quotaHit = false
 
-    if (rapidKey) {
-      for (const niche of niches) {
-        if (quotaHit || Date.now() - startedAt > primaryScrapeBudgetMs) break
-        const count = await refreshNiche(niche, rapidKey, rapidOptions)
-        if (count === -1) { quotaHit = true; break }
-        if (count > 0) refreshed++
-        await new Promise(r => setTimeout(r, 200))
-      }
-    } else {
-      quotaHit = true // no key = treat same as quota hit
+    for (const niche of niches) {
+      if (Date.now() - startedAt > primaryScrapeBudgetMs) break
+      const count = await refreshNiche(niche, primaryOptions)
+      if (count > 0) refreshed++
+      await new Promise(r => setTimeout(r, 200))
     }
 
-    // If quota hit, fill remaining niches via direct Amazon scrape
-    if (quotaHit) {
-      for (const niche of niches) {
-        if (Date.now() - startedAt > fallbackScrapeBudgetMs) break
-        try {
-          const count = await refreshNicheScrape(niche, scrapeOptions)
-          if (count > 0) refreshed++
-        } catch { /* skip */ }
-        await new Promise(r => setTimeout(r, 500))
-      }
+    // Secondary pass fills any remaining niches if the primary scrape stalls.
+    for (const niche of niches) {
+      if (Date.now() - startedAt > fallbackScrapeBudgetMs) break
+      try {
+        const count = await refreshNicheScrape(niche, secondaryOptions)
+        if (count > 0) refreshed++
+      } catch { /* skip */ }
+      await new Promise(r => setTimeout(r, 500))
     }
 
     return {
@@ -963,7 +965,7 @@ export async function GET(req: NextRequest) {
       backgroundCatalog,
       targetProductsPerNiche: targetProducts,
       batchSize,
-      quotaHit,
+      quotaHit: false,
       sourceProducts: await rebuildProductSourceFromCache(sourceRebuildLimit),
       continuousProducts: await refreshContinuousCache(),
     }

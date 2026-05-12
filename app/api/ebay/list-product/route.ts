@@ -11,6 +11,7 @@ import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getPricingRecommendation, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 import { getListingPolicyBlockReason, getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 import { chooseBestListingTitle, isWeakListingTitle } from '@/lib/listing-quality'
+import { getRapidApiKey } from '@/lib/rapidapi'
 
 // ── VeRO Protection ──────────────────────────────────────────────────────────
 const VERO_BRANDS = [
@@ -871,7 +872,7 @@ async function fetchAmazonDetails(
 ): Promise<AmazonDetails & { _apiError?: string }> {
   const DEFAULT_FEATURES: string[] = []
 
-  // Try RapidAPI first
+  // Optional external API fallback. By default StackPilot uses direct scraping.
   if (rapidKey) {
     try {
       const url = `https://real-time-amazon-data.p.rapidapi.com/product-details?asin=${asin}&country=US`
@@ -1717,7 +1718,7 @@ export async function POST(req: NextRequest) {
     .map(([n, v]) => `\n      <NameValueList><Name>${n}</Name><Value>${v}</Value></NameValueList>`)
     .join('')
 
-  const rapidKey = process.env.RAPIDAPI_KEY || ''
+  const rapidKey = getRapidApiKey()
   // In trusted mode (List All), skip the live Amazon fetch entirely — it can pull
   // images and features from other products in the same brand catalog, contaminating
   // the gallery with wrong product photos.

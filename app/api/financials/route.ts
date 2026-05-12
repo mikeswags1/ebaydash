@@ -6,14 +6,15 @@ import { queryRows, sql } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
 import { recoverAmazonProductByItemId } from '@/lib/amazon-mapping'
+import { getRapidApiKey } from '@/lib/rapidapi'
 
 const DEFAULT_EBAY_FEE_RATE = 0.1325
 
 // Live-fetch Amazon price for a single ASIN and persist it to the DB.
 async function resolveAmazonPrice(asin: string, userId: string): Promise<number | null> {
   try {
-    const rapidKey = process.env.RAPIDAPI_KEY || ''
-    // Try RapidAPI first
+    const rapidKey = getRapidApiKey()
+    // Optional external API fallback. By default StackPilot uses direct scraping.
     if (rapidKey) {
       const res = await fetch(
         `https://real-time-amazon-data.p.rapidapi.com/product-details?asin=${asin}&country=US`,
@@ -384,7 +385,7 @@ export async function GET(req: Request) {
     })
 
     if (itemIdsNeedingRecovery.length > 0) {
-      const rapidKey = process.env.RAPIDAPI_KEY
+      const rapidKey = getRapidApiKey()
       const appId = process.env.EBAY_APP_ID || ''
 
       for (let index = 0; index < itemIdsNeedingRecovery.length; index += 5) {

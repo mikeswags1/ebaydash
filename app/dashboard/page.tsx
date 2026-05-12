@@ -842,7 +842,17 @@ export default function Dashboard() {
 
     try {
       const data = await fetchFinderProducts(nicheState.value, false, { limit: FINDER_ROTATION_POOL_TARGET })
-      setFinderState((prev) => ({ ...prev, results: tagFinderProducts(data.results || [], 'niche') }))
+      let products = tagFinderProducts(data.results || [], 'niche')
+      if (products.length < FINDER_STOCK_TARGET) {
+        const refill = await fetchFinderProducts(nicheState.value, true, {
+          limit: FINDER_ROTATION_POOL_TARGET,
+          excludeAsins: products.map((product) => product.asin),
+        }).catch(() => null)
+        if (refill?.results?.length) {
+          products = mergeRefilledProducts(products, refill.results, [], 'niche')
+        }
+      }
+      setFinderState((prev) => ({ ...prev, results: products }))
     } catch (error) {
       setFinderState((prev) => ({ ...prev, error: getErrorMessage(error, 'Product search failed.') }))
     } finally {

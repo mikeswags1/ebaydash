@@ -1,4 +1,4 @@
-// Direct Amazon page scraper — used as fallback when RapidAPI quota is exhausted
+// Direct Amazon page scraper — StackPilot's primary product source.
 // Fetches product data straight from amazon.com with no API key required
 
 const HEADERS = {

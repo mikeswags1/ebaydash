@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import { queryRows } from '@/lib/db'
 import { ensureProductSourceTables } from '@/lib/product-source-engine'
+import { isRapidApiFallbackEnabled } from '@/lib/rapidapi'
 
 type SourceSummaryRow = {
   total?: number | string
@@ -144,7 +145,7 @@ export async function GET(_req: NextRequest) {
       newestSeenAt: toIso(row.newest_seen),
     })),
     providers: {
-      rapidApiConfigured: Boolean(process.env.RAPIDAPI_KEY),
+      rapidApiConfigured: isRapidApiFallbackEnabled(),
       liveProviderChecks: 'manual-only',
     },
   })

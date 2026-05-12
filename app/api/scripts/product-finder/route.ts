@@ -23,8 +23,6 @@ const CONTINUOUS_QUERY_LIMIT = 28
 const CONTINUOUS_LIVE_FETCH_BUDGET_MS = 4_500
 const NICHE_LIVE_FETCH_BUDGET_MS = 16_000
 const CONTINUOUS_MIN_FAST_RETURN = 24
-const CONTINUOUS_PARALLEL_QUERY_LIMIT = 8
-const CONTINUOUS_FETCH_TIMEOUT_MS = 2_500
 const MIN_STOCK_PROFIT = 8
 const MIN_STOCK_ROI = 30
 const MIN_STOCK_MARGIN = 16
@@ -819,19 +817,20 @@ export async function GET(req: NextRequest) {
     if (cachedAvailable.length >= targetCount) {
       return respondWithProducts(cachedProducts, 'cache')
     }
-    // Cache is fresh but below target — return what we have and refill in background
+    // Cache is fresh but below target. Do not return a tiny niche queue;
+    // keep the request moving through live sourcing and also kick the
+    // background catalog forward so the pool repairs itself for later users.
     if (cachedAvailable.length > 0 && !continuousMode) {
       after(async () => {
         try {
           const cronSecret = process.env.CRON_SECRET || ''
           const host = req.nextUrl.origin
-          await fetch(`${host}/api/cron/refresh-products?catalog=1&wait=1&batch=3`, {
+          await fetch(`${host}/api/cron/refresh-products?catalog=1&wait=1&batch=1&niche=${encodeURIComponent(niche)}`, {
             headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {},
             signal: AbortSignal.timeout(280000),
           })
         } catch { /* background — ignore errors */ }
       })
-      return respondWithProducts(cachedProducts, 'cache-partial-refilling')
     }
   }
 
@@ -840,30 +839,14 @@ export async function GET(req: NextRequest) {
     nicheWeights = await withTimeout(getUserNicheWeights(userId, { includeSoldSignals: false }), 700, new Map<string, number>())
   }
 
-  // ── Fetch fresh data from API ────────────────────────────────────────────────
-  const rapidKey = process.env.RAPIDAPI_KEY
-  if (!rapidKey) {
-    // No API key — fall back to cache if available
-    if (cachedProducts.length > 0) {
-      return respondWithProducts(cachedProducts, 'cache')
-    }
-    return apiError('Product sourcing is not configured right now.', {
-      status: 503,
-      code: 'PRODUCT_SEARCH_NOT_CONFIGURED',
-      details: { niche, results: [], count: 0 },
-    })
-  }
+  // ── Fetch fresh data from StackPilot's own source engine ─────────────────────
 
   const queryEntries = continuousMode
     ? buildContinuousQueryEntries(nicheWeights, distributionSeed)
     : buildNicheQueryEntries(niche)
-  const liveQueryEntries = continuousMode ? queryEntries.slice(0, 10) : queryEntries
   const results: Product[] = []
   const fallbackResults: Product[] = []
   const seenAsins = new Set<string>()
-  let apiQuotaExceeded = false
-  const apiPoolTarget = continuousMode ? Math.min(MAX_POOL_SIZE, targetCount + 18) : Math.min(MAX_POOL_SIZE, Math.max(targetCount * 3, targetCount + 24))
-  const apiPages = continuousMode ? [1] : [1, 2]
 
   const candidateCount = () => results.length + fallbackResults.length
   const isStockableListing = (amazonPrice: number, ebayPrice: number) => {
@@ -889,39 +872,21 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const processProducts = (products: Record<string, unknown>[]) => {
-    for (const p of products) {
-      if (candidateCount() >= MAX_POOL_SIZE) break
-      const asin = String(p.asin || '')
-      const title       = String(p.product_title || '')
-      if (!asin || seenAsins.has(asin) || shouldBlockProduct({ asin, title })) continue
-      seenAsins.add(asin)
-      const price       = parsePrice(p.product_price) || parsePrice(p.product_original_price)
-      const imageUrl    = String(p.product_photo || '')
-      const salesVolume = String(p.sales_volume || '')
-      if (!price || price <= 0 || price > MAX_COST) continue
-      if (!title || isRejected(title)) continue
-      const rating = parseFloat(String(p.product_star_rating || '0')) || 0
-      const reviewCount = parseInt(String(p.product_num_ratings || '0').replace(/[^0-9]/g, ''), 10) || 0
-      if (rating > 0 && rating < MIN_ACCEPTABLE_RATING) continue
-      const { ebayPrice, profit, roi } = calcMetrics(price)
-      const healthy = isHealthyListing(price, ebayPrice, EBAY_DEFAULT_FEE_RATE)
-      if (!healthy && !isStockableListing(price, ebayPrice)) continue
-      const primary = healthy && hasStrongDemandSignal(rating, reviewCount, salesVolume)
-      const risk = getRisk(price, roi, !primary)
-      addCandidate({ asin, title, amazonPrice: price, ebayPrice, profit, roi, imageUrl, risk, salesVolume,
-        sourceNiche: (p as Record<string, unknown>)._sourceNiche ? String((p as Record<string, unknown>)._sourceNiche) : undefined,
-        _rating: rating,
-        _numRatings: reviewCount,
-      }, primary)
-    }
-  }
-
   const addScrapedProducts = async (entries: Array<{ query: string; sourceNiche: string }>, queryLimit: number, timeoutMs = 6000) => {
-    for (const { query, sourceNiche } of entries.slice(0, queryLimit)) {
+    const selectedEntries = entries.slice(0, queryLimit)
+    const parallel = continuousMode ? 2 : 4
+    for (let index = 0; index < selectedEntries.length; index += parallel) {
       if (isOutOfLiveFetchTime() || getAvailableProducts(results).length >= targetCount || candidateCount() >= MAX_POOL_SIZE) break
-      try {
-        const scraped = await scrapeAmazonSearch(query, 1, timeoutMs)
+      const batch = selectedEntries.slice(index, index + parallel)
+      const settled = await Promise.allSettled(
+        batch.map(async ({ query, sourceNiche }) => ({
+          sourceNiche,
+          products: await scrapeAmazonSearch(query, 1, timeoutMs),
+        }))
+      )
+      for (const outcome of settled) {
+        if (outcome.status !== 'fulfilled') continue
+        const { sourceNiche, products: scraped } = outcome.value
         for (const p of scraped) {
           if (isOutOfLiveFetchTime() || getAvailableProducts(results).length >= targetCount || candidateCount() >= MAX_POOL_SIZE) break
           if (!p.asin || seenAsins.has(p.asin) || shouldBlockProduct({ asin: p.asin, title: p.title })) continue
@@ -937,20 +902,20 @@ export async function GET(req: NextRequest) {
           addCandidate({ asin: p.asin, title: p.title, amazonPrice: p.price, ebayPrice, profit, roi,
             imageUrl: p.imageUrl, risk, salesVolume: undefined, sourceNiche, _rating: p.rating, _numRatings: p.reviewCount }, primary)
         }
-      } catch { /* ignore */ }
+      }
     }
   }
 
-  const mergeCachedProducts = () => {
-    if (cachedProducts.length === 0) return
+  const mergeStockedProducts = () => {
+    if (stockedProducts.length === 0) return
     const seen = new Set(results.map((product) => product.asin.toUpperCase()))
-    const cached = cachedProducts.filter((product) => {
+    const stocked = stockedProducts.filter((product) => {
       const asin = product.asin.toUpperCase()
       if (seen.has(asin)) return false
       seen.add(asin)
       return true
     })
-    results.splice(0, results.length, ...rankProducts([...results, ...cached], false))
+    results.splice(0, results.length, ...rankProducts([...results, ...stocked], false))
   }
 
   const mergeFallbackProducts = () => {
@@ -992,57 +957,8 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const fetchRapidProducts = async (
-    entry: QueryEntry,
-    page: number,
-    timeoutMs: number
-  ): Promise<{ quotaExceeded: boolean; products: Record<string, unknown>[] }> => {
-    try {
-      const res = await fetch(
-        `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(entry.query)}&country=US&category_id=aps&page=${page}`,
-        { headers: { 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com', 'x-rapidapi-key': rapidKey }, signal: AbortSignal.timeout(timeoutMs) }
-      )
-      if (res.status === 429 || res.status === 403) return { quotaExceeded: true, products: [] }
-      if (!res.ok) return { quotaExceeded: false, products: [] }
-      const data = await res.json()
-      if (String(data?.message || '').toLowerCase().match(/limit|quota|exceed/)) return { quotaExceeded: true, products: [] }
-      const products: Record<string, unknown>[] = (data?.data?.products || []).map((product: Record<string, unknown>) => ({
-        ...product,
-        _sourceNiche: entry.sourceNiche,
-      }))
-      return { quotaExceeded: false, products }
-    } catch {
-      return { quotaExceeded: false, products: [] }
-    }
-  }
-
-  if (continuousMode) {
-    const liveFetches = liveQueryEntries
-      .slice(0, CONTINUOUS_PARALLEL_QUERY_LIMIT)
-      .map((entry) => fetchRapidProducts(entry, 1, CONTINUOUS_FETCH_TIMEOUT_MS))
-
-    const settled = await Promise.allSettled(liveFetches)
-    for (const result of settled) {
-      if (candidateCount() >= apiPoolTarget) break
-      if (result.status !== 'fulfilled') continue
-      if (result.value.quotaExceeded) {
-        apiQuotaExceeded = true
-        continue
-      }
-      processProducts(result.value.products)
-    }
-  } else {
-    for (const { query, sourceNiche } of liveQueryEntries) {
-      if (isOutOfLiveFetchTime() || candidateCount() >= apiPoolTarget || apiQuotaExceeded) break
-      for (const page of apiPages) {
-        if (isOutOfLiveFetchTime() || candidateCount() >= apiPoolTarget) break
-        const response = await fetchRapidProducts({ query, sourceNiche }, page, 6000)
-        if (response.quotaExceeded) { apiQuotaExceeded = true; break }
-        processProducts(response.products)
-        if (response.products.length === 0) break
-      }
-    }
-  }
+  // StackPilot does not depend on RapidAPI for sourcing. The live pass below
+  // uses direct Amazon search scraping and supplements any partial cache.
 
   // ── Save fresh results to cache ──────────────────────────────────────────────
   if (getAvailableProducts(results).length < targetCount) {
@@ -1106,14 +1022,15 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── API failed — try direct Amazon scrape, then fall back to cache ──────────
-  if (apiQuotaExceeded && results.length === 0) {
-    mergeCachedProducts()
+  // ── Direct Amazon scrape, then fall back to cache ───────────────────────────
+  if (results.length === 0) {
+    mergeStockedProducts()
     if (continuousMode && getAvailableProducts(results).length > 0) {
       return respondWithProducts(results, 'cache')
     }
 
-    // No cache at all — scrape Amazon search directly (free, no quota)
+    // Scrape Amazon search directly (free, no quota). This also supplements
+    // partial caches so niche pages do not get stuck showing only a few items.
     await addScrapedProducts(queryEntries, continuousMode ? 1 : Math.min(queryEntries.length, 10), continuousMode ? 1800 : 6000)
     mergeFallbackProducts()
 
@@ -1135,7 +1052,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (getAvailableProducts(results).length < targetCount) {
-    mergeCachedProducts()
+    mergeStockedProducts()
   }
 
   if (continuousMode && getAvailableProducts(results).length === 0 && !isOutOfLiveFetchTime()) {

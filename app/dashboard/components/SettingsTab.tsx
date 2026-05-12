@@ -736,7 +736,7 @@ function ProductSourceHealthCard({
               ))}
             </div>
             <div style={{ color: 'var(--dim)', fontSize: '11px', lineHeight: 1.5, marginTop: '12px' }}>
-              RapidAPI fallback: {health.providers.rapidApiConfigured ? 'configured' : 'not configured'}.
+              External API fallback: {health.providers.rapidApiConfigured ? 'enabled' : 'off'}.
               Continuous cache: {health.continuous.cachedAt ? formatHealthDate(health.continuous.cachedAt) : 'not warmed'}.
             </div>
           </div>

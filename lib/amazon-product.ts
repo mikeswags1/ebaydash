@@ -1,5 +1,6 @@
 import { queryRows, sql } from '@/lib/db'
 import { scrapeAmazonProduct, scrapeAmazonSearch } from '@/lib/amazon-scrape'
+import { getRapidApiKey } from '@/lib/rapidapi'
 
 type FetchAmazonProductOptions = {
   asin: string
@@ -339,7 +340,7 @@ export async function saveCachedAmazonProduct(product: ValidatedAmazonProduct) {
 }
 
 async function fetchProductDetailsFromApi(asin: string, fallbackImage?: string) {
-  const rapidKey = process.env.RAPIDAPI_KEY
+  const rapidKey = getRapidApiKey()
   if (!rapidKey) return null
 
   try {
@@ -416,7 +417,7 @@ async function fetchProductDetailsFromApi(asin: string, fallbackImage?: string) 
 }
 
 async function fetchProductFromSearch(asin: string, fallbackImage?: string) {
-  const rapidKey = process.env.RAPIDAPI_KEY
+  const rapidKey = getRapidApiKey()
   if (!rapidKey) return null
 
   try {
