@@ -16,7 +16,7 @@ export function OverviewTab({
   grossRevenue: number // kept in type for prop compatibility
   userName?: string | null
   onOpenSettings: () => void
-  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number }
+  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number; trialRemaining?: number }
 }) {
   const recentOrders = orders.slice(0, 5)
   const hour = new Date().getHours()
@@ -49,6 +49,7 @@ export function OverviewTab({
               plan={trial.plan}
               listed={trial.listed}
               trialLimit={trial.trialLimit}
+              trialRemaining={trial.trialRemaining}
             />
           </div>
         ) : null}

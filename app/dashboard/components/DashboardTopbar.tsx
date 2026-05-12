@@ -52,7 +52,7 @@ export function DashboardTopbar({
   onSync: () => void
   onToggleNav: () => void
   compact?: boolean
-  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number }
+  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number; trialRemaining?: number }
 }) {
   const showTrial = trial && !compact
 
@@ -109,6 +109,7 @@ export function DashboardTopbar({
           plan={trial.plan}
           listed={trial.listed}
           trialLimit={trial.trialLimit}
+          trialRemaining={trial.trialRemaining}
         />
       ) : null}
     </header>

@@ -34,7 +34,7 @@ export function CompactHomeTab({
   userName?: string | null
   onOpenSettings: () => void
   onGo: (tab: Tab) => void
-  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number }
+  trial?: { loading: boolean; plan: string; listed: number; trialLimit: number; trialRemaining?: number }
 }) {
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -64,6 +64,7 @@ export function CompactHomeTab({
             plan={trial.plan}
             listed={trial.listed}
             trialLimit={trial.trialLimit}
+            trialRemaining={trial.trialRemaining}
           />
         </div>
       ) : null}

@@ -713,6 +713,12 @@ export default function Dashboard() {
     }
   }, [loadProductSourceHealth, sourceHealthState.data, sourceHealthState.error, sourceHealthState.loading, status, tab])
 
+  useEffect(() => {
+    if (status === 'authenticated' && tab === 'settings') {
+      void refreshSubscriptionStatus().catch(() => {})
+    }
+  }, [refreshSubscriptionStatus, status, tab])
+
   const handleSaveNiche = useCallback(async (value: string) => {
     setNicheState((prev) => ({ ...prev, value, saving: true }))
 
@@ -1283,6 +1289,7 @@ export default function Dashboard() {
               plan: subscriptionState.plan,
               listed: subscriptionState.listed,
               trialLimit: subscriptionState.trialLimit,
+              trialRemaining: subscriptionState.trialRemaining,
             }}
           />
         )}
@@ -1302,6 +1309,7 @@ export default function Dashboard() {
                   plan: subscriptionState.plan,
                   listed: subscriptionState.listed,
                   trialLimit: subscriptionState.trialLimit,
+                  trialRemaining: subscriptionState.trialRemaining,
                 }}
               />
             ) : (
@@ -1317,6 +1325,7 @@ export default function Dashboard() {
                   plan: subscriptionState.plan,
                   listed: subscriptionState.listed,
                   trialLimit: subscriptionState.trialLimit,
+                  trialRemaining: subscriptionState.trialRemaining,
                 }}
               />
             )

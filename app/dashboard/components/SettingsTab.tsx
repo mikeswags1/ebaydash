@@ -83,10 +83,10 @@ function BillingSection({
   const showUpgrade = !isPro
   const showPortal = isPro && portalAvailable
   const proButNoPortal = isPro && !portalAvailable && !ownerBillingBypass
-  const used = Math.min(Math.max(0, listed), Math.max(1, trialLimit))
   const remaining = Math.max(0, trialRemaining)
   const checkoutEnvironmentHint = !isPro && !checkoutAvailable
   const trialTotal = Math.max(1, trialLimit)
+  const used = Math.min(Math.max(0, listed), trialTotal)
   const usedPct = Math.min(100, Math.round((used / trialTotal) * 100))
 
   return (
@@ -97,7 +97,7 @@ function BillingSection({
             Billing
           </div>
           <div style={{ fontFamily: 'var(--serif)', fontSize: compact ? '20px' : '22px', fontWeight: 700, color: 'var(--txt)' }}>
-            {isPro ? 'StackPilot Pro' : `Free trial - ${used} / ${trialTotal} used`}
+            {isPro ? 'StackPilot Pro' : `Free trial - ${used} / ${trialTotal} used · ${remaining} left`}
           </div>
         </div>
         <span style={{ padding: '5px 9px', borderRadius: '999px', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', color: isPro ? '#062014' : 'var(--sky)', background: isPro ? 'linear-gradient(135deg,#34d399,#f8d776)' : 'rgba(56,189,248,0.10)', border: isPro ? '1px solid rgba(248,215,118,0.45)' : '1px solid rgba(56,189,248,0.22)' }}>

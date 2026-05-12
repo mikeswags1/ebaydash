@@ -58,6 +58,7 @@ export function ContinuousListingTab({
               plan={trial.plan}
               listed={trial.listed}
               trialLimit={trial.trialLimit}
+              trialRemaining={trial.trialRemaining}
             />
           </div>
         ) : null}

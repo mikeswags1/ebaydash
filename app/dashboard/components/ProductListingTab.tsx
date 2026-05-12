@@ -93,6 +93,7 @@ export function ProductListingTab({
               plan={trial.plan}
               listed={trial.listed}
               trialLimit={trial.trialLimit}
+              trialRemaining={trial.trialRemaining}
             />
           </div>
         ) : null}

@@ -8,20 +8,22 @@ export function TrialMeter({
   plan,
   listed,
   trialLimit,
+  trialRemaining,
   variant = 'full',
 }: {
   loading: boolean
   plan: string
   listed: number
   trialLimit: number
+  trialRemaining?: number
   variant?: 'full' | 'compact' | 'topbar'
 }) {
   const limit = Math.max(1, trialLimit)
-  const used = Math.max(0, listed)
+  const used = Math.min(Math.max(0, listed), limit)
   if (loading || plan !== 'trial') return null
 
   const pct = Math.min(100, (used / limit) * 100)
-  const remaining = Math.max(0, limit - used)
+  const remaining = Math.max(0, trialRemaining ?? (limit - used))
   const complete = remaining === 0
 
   const pad =
@@ -58,7 +60,7 @@ export function TrialMeter({
           Free trial
         </div>
         <div style={{ fontSize: variant === 'topbar' ? 10 : 11, color: 'var(--sil)', fontWeight: 600 }}>
-          {remaining} left - {Math.min(used, limit)} / {limit} used
+          {used} / {limit} used · {remaining} left
         </div>
       </div>
       <div
