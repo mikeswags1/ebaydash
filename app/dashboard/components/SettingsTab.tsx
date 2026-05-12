@@ -12,8 +12,6 @@ import {
   getErrorMessage,
 } from '../api'
 
-const ALL_NICHES_VALUE = '__all__'
-
 const AUTO_BULK_NICHE_OPTIONS = [
   'Phone Accessories',
   'Computer Parts',
@@ -256,9 +254,22 @@ export function SettingsTab({
   const [accounts, setAccounts] = useState<Array<{ id: number; label: string }>>([])
   const [autoSettings, setAutoSettings] = useState<AutoListingSettingsDto | null>(null)
   const [autoStatus, setAutoStatus] = useState<Awaited<ReturnType<typeof fetchAutoListingStatus>> | null>(null)
+  const [autoNicheMenuOpen, setAutoNicheMenuOpen] = useState(false)
 
-  const selectedAutoNiche = autoSettings?.allowed_niches?.[0] || ALL_NICHES_VALUE
-  const customAutoNiche = selectedAutoNiche !== ALL_NICHES_VALUE && !AUTO_BULK_NICHE_OPTIONS.includes(selectedAutoNiche)
+  const selectedAutoNiches = autoSettings?.allowed_niches?.filter(Boolean) ?? []
+  const customAutoNiches = selectedAutoNiches.filter((nicheName) => !AUTO_BULK_NICHE_OPTIONS.includes(nicheName))
+  const autoNicheOptions = [...customAutoNiches, ...AUTO_BULK_NICHE_OPTIONS]
+  const selectedAutoNicheSet = new Set(selectedAutoNiches)
+  const autoNicheLabel = selectedAutoNiches.length === 0
+    ? 'All Niches'
+    : selectedAutoNiches.length === 1
+      ? selectedAutoNiches[0]
+      : `${selectedAutoNiches.length} niches selected`
+  const autoNicheSummary = selectedAutoNiches.length === 0
+    ? 'Using all niches'
+    : selectedAutoNiches.length <= 2
+      ? `Focused on ${selectedAutoNiches.join(', ')}`
+      : `Focused on ${selectedAutoNiches.length} niches`
   const queueCount = (autoStatus?.queue?.queued ?? 0) + (autoStatus?.queue?.retry ?? 0)
   const autoState = autoStatus?.enabled
     ? autoStatus?.emergency_stopped
@@ -300,6 +311,12 @@ export function SettingsTab({
     } finally {
       setAutoSaving(false)
     }
+  }
+
+  const saveAutoNiches = (allowed_niches: string[]) => {
+    const nextNiches = Array.from(new Set(allowed_niches.filter(Boolean)))
+    setAutoSettings((s) => (s ? ({ ...s, allowed_niches: nextNiches }) : s))
+    void saveAuto({ allowed_niches: nextNiches })
   }
 
   return (
@@ -385,7 +402,7 @@ export function SettingsTab({
           ownerBillingBypass={billingOwnerBypass}
         />
 
-        <div className="card" style={{ padding: compact ? '20px 18px' : '28px' }}>
+        <div className="card" style={{ padding: compact ? '20px 18px' : '28px', overflow: 'visible' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: '18px' }}>
             <div>
               <div style={{ color: 'var(--sky)', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 900, marginBottom: '8px' }}>
@@ -429,23 +446,51 @@ export function SettingsTab({
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '14px' }}>
             <Field label="Product pool">
-              <select
-                value={selectedAutoNiche}
-                onChange={(e) => {
-                  const value = e.target.value
-                  const allowed_niches = value === ALL_NICHES_VALUE ? [] : [value]
-                  setAutoSettings((s) => (s ? ({ ...s, allowed_niches }) : s))
-                  void saveAuto({ allowed_niches })
-                }}
-                className="settings-select"
-                disabled={autoLoading || autoSaving}
-              >
-                <option value={ALL_NICHES_VALUE}>All Niches</option>
-                {customAutoNiche ? <option value={selectedAutoNiche}>{selectedAutoNiche}</option> : null}
-                {AUTO_BULK_NICHE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
+              <div className="settings-multi-select">
+                <button
+                  type="button"
+                  className="settings-select settings-multi-select__button"
+                  disabled={autoLoading || autoSaving}
+                  aria-haspopup="listbox"
+                  aria-expanded={autoNicheMenuOpen}
+                  onClick={() => setAutoNicheMenuOpen((open) => !open)}
+                >
+                  <span>{autoNicheLabel}</span>
+                  <span aria-hidden="true">v</span>
+                </button>
+                {autoNicheMenuOpen ? (
+                  <div className="settings-multi-select__menu" role="listbox" aria-multiselectable="true">
+                    <label className={`settings-multi-select__option ${selectedAutoNiches.length === 0 ? 'is-selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={selectedAutoNiches.length === 0}
+                        disabled={autoLoading || autoSaving}
+                        onChange={() => saveAutoNiches([])}
+                      />
+                      <span>All Niches</span>
+                    </label>
+                    {autoNicheOptions.map((option) => {
+                      const checked = selectedAutoNicheSet.has(option)
+                      return (
+                        <label key={option} className={`settings-multi-select__option ${checked ? 'is-selected' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={autoLoading || autoSaving}
+                            onChange={() => {
+                              const nextNiches = checked
+                                ? selectedAutoNiches.filter((nicheName) => nicheName !== option)
+                                : [...selectedAutoNiches, option]
+                              saveAutoNiches(nextNiches)
+                            }}
+                          />
+                          <span>{option}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                ) : null}
+              </div>
             </Field>
             <Field label="Mode">
               <select
@@ -536,7 +581,7 @@ export function SettingsTab({
               Emergency stop
             </button>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', color: 'var(--dim)', fontSize: '12px' }}>
-              <span>{autoSettings?.allowed_niches?.length ? `Focused on ${autoSettings.allowed_niches[0]}` : 'Using all niches'}</span>
+              <span>{autoNicheSummary}</span>
             </div>
           </div>
         </div>
