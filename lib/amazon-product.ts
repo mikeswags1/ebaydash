@@ -188,6 +188,13 @@ function mergeProducts(asin: string, products: Array<ValidatedAmazonProduct | nu
   const richestProduct =
     trustedProducts.find((product) => hasRichContent(product)) ||
     preferred
+  const scrapedProduct = trustedProducts.find((product) => product.source === 'scrape')
+  const liveProducts = trustedProducts.filter((product) => ['scrape', 'api', 'search'].includes(product.source))
+  const available = scrapedProduct
+    ? scrapedProduct.available
+    : liveProducts.length > 0
+      ? liveProducts.some((product) => product.available)
+      : trustedProducts.some((product) => product.available)
 
   return toProduct({
     asin,
@@ -198,7 +205,7 @@ function mergeProducts(asin: string, products: Array<ValidatedAmazonProduct | nu
     description: richestProduct.description || preferred.description,
     specs: richestProduct.specs,
     brand: richestProduct.brand || preferred.brand,
-    available: trustedProducts.some((product) => product.available),
+    available,
     source: preferred.source,
     fallbackTitle: options.fallbackTitle,
     fallbackPrice: options.fallbackPrice,

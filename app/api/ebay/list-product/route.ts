@@ -8,6 +8,7 @@ import { queryRows, sql } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { fetchAmazonProductByAsin, loadCachedAmazonProduct, saveCachedAmazonProduct } from '@/lib/amazon-product'
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
+import { checkAmazonLiveAvailability } from '@/lib/amazon-availability'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getPricingRecommendation, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 import { getListingPolicyBlockReason, getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 import { chooseBestListingTitle, isWeakListingTitle } from '@/lib/listing-quality'
@@ -1505,6 +1506,66 @@ export async function POST(req: NextRequest) {
     } catch { /* cache lookup is best-effort — never block on failure */ }
   }
 
+  const liveAvailability = await checkAmazonLiveAvailability(asin, {
+    fallbackTitle: validatedAmazon.title || title,
+    fallbackImage: validatedAmazon.imageUrl || imageUrl,
+  })
+
+  if (!liveAvailability.ok) {
+    const confirmedUnavailable = liveAvailability.reason !== 'CHECK_FAILED'
+    if (confirmedUnavailable) {
+      await sql`
+        UPDATE product_source_items
+        SET active = FALSE, last_seen_at = NOW()
+        WHERE asin = ${String(asin).toUpperCase()}
+      `.catch(() => {})
+    }
+
+    return apiError(
+      liveAvailability.reason === 'CHECK_FAILED'
+        ? 'Could not verify this product is currently buyable on Amazon. Remove it from your queue and reload to get a fresh product.'
+        : 'This product is currently unavailable on Amazon and cannot be listed. Remove it from your queue and reload to get fresh products.',
+      {
+        status: 400,
+        code: liveAvailability.reason === 'CHECK_FAILED' ? 'AMAZON_LIVE_CHECK_FAILED' : 'PRODUCT_UNAVAILABLE',
+        details: { asin, reason: liveAvailability.reason },
+      }
+    )
+  }
+
+  if (title) {
+    const toWords = (value: string) => new Set(
+      value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter((word) => word.length > 2)
+    )
+    const queuedWords = toWords(String(title))
+    const liveWords = toWords(liveAvailability.title)
+    let overlap = 0
+    for (const word of queuedWords) { if (liveWords.has(word)) overlap++ }
+    const similarity = queuedWords.size > 0 ? overlap / queuedWords.size : 1
+    if (similarity < 0.45) {
+      return apiError(
+        `ASIN ${asin} now maps to a different product on Amazon ("${liveAvailability.title.slice(0, 60)}"). Remove it from your queue and reload for fresh products.`,
+        { status: 400, code: 'ASIN_MISMATCH' }
+      )
+    }
+  }
+
+  const liveImages = Array.from(new Set([
+    ...liveAvailability.images,
+    ...validatedAmazon.images,
+    validatedAmazon.imageUrl || '',
+  ].filter((url) => url.startsWith('http'))))
+
+  validatedAmazon = {
+    ...validatedAmazon,
+    title: liveAvailability.title || validatedAmazon.title,
+    amazonPrice: liveAvailability.amazonPrice,
+    imageUrl: liveAvailability.imageUrl || liveImages[0] || validatedAmazon.imageUrl,
+    images: liveImages.length > 0 ? liveImages : validatedAmazon.images,
+    available: true,
+    source: 'scrape',
+  }
+
   // Block listings where Amazon shows the product as unavailable (out of stock, no price).
   // Applies to both live-validated (non-trusted) and cache-supplemented (trusted) paths.
   if (!validatedAmazon.available) {
@@ -2330,7 +2391,7 @@ export async function POST(req: NextRequest) {
 
   await ensureListedAsinsFinancialColumns()
   await sql`
-    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate, amazon_image_url, amazon_images, amazon_snapshot, niche, category_id)
+    INSERT INTO listed_asins (user_id, asin, title, ebay_listing_id, amazon_price, ebay_price, ebay_fee_rate, amazon_image_url, amazon_images, amazon_snapshot, niche, category_id, amazon_available, amazon_status_reason, amazon_status_checked_at)
     VALUES (${effectiveUserId}, ${asin}, ${listingTitle.slice(0, 200)}, ${listingId}, ${listingAmazonPrice.toFixed(2)}, ${price}, ${EBAY_DEFAULT_FEE_RATE}, ${primarySourceImage}, ${JSON.stringify(filteredImages)}, ${JSON.stringify({
       asin,
       title: listingTitle,
@@ -2345,7 +2406,7 @@ export async function POST(req: NextRequest) {
       available: validatedAmazon.available,
       source: validatedAmazon.source,
       amazonUrl: `https://www.amazon.com/dp/${asin}`,
-    })}, ${niche}, ${finalCategoryId})
+    })}, ${niche}, ${finalCategoryId}, TRUE, 'available', NOW())
     ON CONFLICT (user_id, asin) DO UPDATE SET
       ebay_listing_id = ${listingId},
       title = ${listingTitle.slice(0, 200)},
@@ -2371,6 +2432,9 @@ export async function POST(req: NextRequest) {
       })},
       niche = ${niche},
       category_id = ${finalCategoryId},
+      amazon_available = TRUE,
+      amazon_status_reason = 'available',
+      amazon_status_checked_at = NOW(),
       listed_at = NOW(),
       ended_at = NULL
   `.catch(() => {})

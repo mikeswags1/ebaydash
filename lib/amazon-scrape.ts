@@ -266,7 +266,16 @@ export async function scrapeAmazonProduct(asin: string): Promise<AmazonProduct |
         .map((source) => stripTags(decodeHtmlEntities(source)))
         .find((source) => source.length > 60 && !/(data-csa|aplus|module|desktop|wrapper|padding|margin|background-image|function)/i.test(source)) || ''
 
-    const available = !html.includes('Currently unavailable') && !html.includes('unavailable.')
+    const availabilityText = html.toLowerCase()
+    const hasUnavailableSignal =
+      availabilityText.includes('currently unavailable') ||
+      availabilityText.includes('no featured offers available') ||
+      availabilityText.includes("we don't know when or if this item will be back in stock") ||
+      availabilityText.includes('temporarily out of stock') ||
+      availabilityText.includes('not currently available')
+    const hasBuyBox =
+      /id="add-to-cart-button"|name="submit\.add-to-cart"|id="buy-now-button"|name="submit\.buy-now"/i.test(html)
+    const available = !hasUnavailableSignal && hasBuyBox && price > 0
 
     return {
       asin,

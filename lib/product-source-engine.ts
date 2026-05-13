@@ -417,13 +417,13 @@ export async function refreshProductSourcePrices(options: { limit?: number; stal
         if (!freshPrice) {
           try {
             const scraped = await scrapeAmazonProduct(row.asin)
-            if (scraped?.price && scraped.price > 0) {
-              freshPrice = scraped.price
-              if (!scraped.available) {
+            if (scraped) {
+              if (!scraped.available || scraped.price <= 0) {
                 await sql`UPDATE product_source_items SET active = FALSE, last_seen_at = NOW() WHERE asin = ${row.asin}`.catch(() => {})
                 failed += 1
                 return
               }
+              freshPrice = scraped.price
             }
           } catch { /* scraper also failed — skip */ }
         }

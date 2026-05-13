@@ -5,6 +5,7 @@ import { queryRows, sql } from '@/lib/db'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
 import { ensureProductSourceTables, rebuildProductSourceFromCache, repriceProductSourceItems, refreshProductSourcePrices } from '@/lib/product-source-engine'
 import { warmAmazonProductCache } from '@/lib/amazon-product'
+import { checkAmazonLiveAvailability } from '@/lib/amazon-availability'
 import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 
@@ -727,10 +728,64 @@ async function syncUserListings(userId: number) {
   }
 }
 
+async function ensureListingAvailabilityAuditColumns() {
+  await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS amazon_available BOOLEAN`.catch(() => {})
+  await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS amazon_status_reason TEXT`.catch(() => {})
+  await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS amazon_status_checked_at TIMESTAMPTZ`.catch(() => {})
+  await sql`CREATE INDEX IF NOT EXISTS listed_asins_amazon_status_idx ON listed_asins (ended_at, amazon_status_checked_at)`.catch(() => {})
+}
+
+function escapeXml(value: string) {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+async function endEbayListingAsUnavailable(
+  userId: number,
+  listingId: string,
+  accessToken: string,
+  appId: string
+) {
+  const token = escapeXml(accessToken)
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<EndItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
+  <ItemID>${listingId}</ItemID>
+  <EndingReason>NotAvailable</EndingReason>
+</EndItemRequest>`
+
+  const res = await fetch('https://api.ebay.com/ws/api.dll', {
+    method: 'POST',
+    headers: {
+      'X-EBAY-API-CALL-NAME': 'EndItem',
+      'X-EBAY-API-SITEID': '0',
+      'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
+      'X-EBAY-API-APP-NAME': appId,
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'text/xml',
+    },
+    body: xml,
+    signal: AbortSignal.timeout(10000),
+  })
+  const text = await res.text()
+  if (!/<Ack>(Success|Warning)<\/Ack>/i.test(text)) return false
+
+  await sql`
+    UPDATE listed_asins
+    SET ended_at = NOW(),
+        amazon_available = FALSE,
+        amazon_status_reason = 'unavailable_ended',
+        amazon_status_checked_at = NOW()
+    WHERE user_id = ${userId}
+      AND ebay_listing_id = ${listingId}
+  `.catch(() => {})
+
+  return true
+}
+
 // ── End eBay listings where Amazon confirms product unavailable ───────────────
-// Runs daily alongside syncUserListings. Checks amazon_product_cache for listings
-// where available = FALSE and price = 0 (confirmed out-of-stock), then calls EndItem.
+// Runs alongside syncUserListings. Uses cache-confirmed unavailable rows, then calls EndItem.
 async function syncUnavailableListings(): Promise<{ ended: number; failed: number; skipped: number }> {
+  await ensureListingAvailabilityAuditColumns()
   const unavailableRows = await queryRows<{
     user_id: number
     ebay_listing_id: string
@@ -742,7 +797,6 @@ async function syncUnavailableListings(): Promise<{ ended: number; failed: numbe
     WHERE la.ended_at IS NULL
       AND la.ebay_listing_id IS NOT NULL
       AND apc.available = FALSE
-      AND CAST(apc.amazon_price AS NUMERIC) = 0
       AND apc.updated_at > NOW() - INTERVAL '2 days'
     LIMIT 200
   `.catch(() => [])
@@ -768,30 +822,13 @@ async function syncUnavailableListings(): Promise<{ ended: number; failed: numbe
 
     for (const listing of listings) {
       try {
-        const token = credentials.accessToken.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        const xml = `<?xml version="1.0" encoding="utf-8"?>
-<EndItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
-  <RequesterCredentials><eBayAuthToken>${token}</eBayAuthToken></RequesterCredentials>
-  <ItemID>${listing.ebay_listing_id}</ItemID>
-  <EndingReason>NotAvailable</EndingReason>
-</EndItemRequest>`
-
-        const res = await fetch('https://api.ebay.com/ws/api.dll', {
-          method: 'POST',
-          headers: {
-            'X-EBAY-API-CALL-NAME': 'EndItem',
-            'X-EBAY-API-SITEID': '0',
-            'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
-            'X-EBAY-API-APP-NAME': appId,
-            Authorization: `Bearer ${credentials.accessToken}`,
-            'Content-Type': 'text/xml',
-          },
-          body: xml,
-          signal: AbortSignal.timeout(10000),
-        })
-        const text = await res.text()
-        if (/<Ack>(Success|Warning)<\/Ack>/i.test(text)) {
-          await sql`UPDATE listed_asins SET ended_at = NOW() WHERE user_id = ${userId} AND ebay_listing_id = ${listing.ebay_listing_id}`.catch(() => {})
+        const endedListing = await endEbayListingAsUnavailable(
+          userId,
+          listing.ebay_listing_id,
+          credentials.accessToken,
+          appId
+        )
+        if (endedListing) {
           ended++
         } else {
           failed++
@@ -803,6 +840,117 @@ async function syncUnavailableListings(): Promise<{ ended: number; failed: numbe
   }
 
   return { ended, failed, skipped }
+}
+
+async function auditActiveAmazonListings(limit = 24): Promise<{
+  checked: number
+  available: number
+  ended: number
+  failed: number
+  skipped: number
+}> {
+  await ensureListingAvailabilityAuditColumns()
+  const auditLimit = Math.max(1, Math.min(limit, 60))
+  const rows = await queryRows<{
+    user_id: number
+    ebay_listing_id: string
+    asin: string
+    title: string | null
+    amazon_image_url: string | null
+  }>`
+    SELECT user_id, ebay_listing_id, asin, title, amazon_image_url
+    FROM listed_asins
+    WHERE ended_at IS NULL
+      AND ebay_listing_id IS NOT NULL
+      AND asin IS NOT NULL
+    ORDER BY amazon_status_checked_at ASC NULLS FIRST, listed_at ASC
+    LIMIT ${auditLimit}
+  `.catch(() => [])
+
+  if (rows.length === 0) {
+    return { checked: 0, available: 0, ended: 0, failed: 0, skipped: 0 }
+  }
+
+  const appId = process.env.EBAY_APP_ID || ''
+  const credentialCache = new Map<number, string | null>()
+  let available = 0, ended = 0, failed = 0, skipped = 0
+  const BATCH = 4
+
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH)
+    const checks = await Promise.allSettled(
+      batch.map((row) =>
+        checkAmazonLiveAvailability(row.asin, {
+          fallbackTitle: row.title || undefined,
+          fallbackImage: row.amazon_image_url || undefined,
+        })
+      )
+    )
+
+    for (let index = 0; index < batch.length; index++) {
+      const row = batch[index]
+      const result = checks[index]
+      if (!row || !result || result.status === 'rejected') {
+        failed++
+        continue
+      }
+
+      const check = result.value
+      if (check.ok) {
+        await sql`
+          UPDATE listed_asins
+          SET amazon_available = TRUE,
+              amazon_status_reason = 'available',
+              amazon_status_checked_at = NOW(),
+              amazon_price = ${check.amazonPrice}
+          WHERE user_id = ${row.user_id}
+            AND ebay_listing_id = ${row.ebay_listing_id}
+        `.catch(() => {})
+        available++
+        continue
+      }
+
+      await sql`
+        UPDATE listed_asins
+        SET amazon_available = FALSE,
+            amazon_status_reason = ${check.reason.toLowerCase()},
+            amazon_status_checked_at = NOW()
+        WHERE user_id = ${row.user_id}
+          AND ebay_listing_id = ${row.ebay_listing_id}
+      `.catch(() => {})
+
+      if (check.reason === 'CHECK_FAILED') {
+        skipped++
+        continue
+      }
+
+      await sql`
+        UPDATE product_source_items
+        SET active = FALSE, last_seen_at = NOW()
+        WHERE asin = ${row.asin.toUpperCase()}
+      `.catch(() => {})
+
+      if (!credentialCache.has(row.user_id)) {
+        const credentials = await getValidEbayAccessToken(String(row.user_id)).catch(() => null)
+        credentialCache.set(row.user_id, credentials?.accessToken || null)
+      }
+      const token = credentialCache.get(row.user_id)
+      if (!token) {
+        skipped++
+        continue
+      }
+
+      try {
+        const endedListing = await endEbayListingAsUnavailable(row.user_id, row.ebay_listing_id, token, appId)
+        if (endedListing) ended++
+        else failed++
+      } catch {
+        failed++
+      }
+    }
+  }
+
+  return { checked: rows.length, available, ended, failed, skipped }
 }
 
 // ── Cron handler ─────────────────────────────────────────────────────────────
@@ -817,6 +965,7 @@ export async function GET(req: NextRequest) {
 
   // Ensure ended_at column exists
   await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ`.catch(() => {})
+  await ensureListingAvailabilityAuditColumns()
   await sql`CREATE TABLE IF NOT EXISTS product_cache (niche TEXT PRIMARY KEY, results JSONB NOT NULL, cached_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), version INTEGER NOT NULL DEFAULT 1)`.catch(() => {})
   await sql`ALTER TABLE product_cache ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1`.catch(() => {})
   await ensureProductSourceTables().catch(() => {})
@@ -846,6 +995,8 @@ export async function GET(req: NextRequest) {
     // This ensures continuous-listing products have full images/features/description
     // before users try to bulk-list them. Top-scored 40 unenriched products per run.
     report.warmCache = await warmAmazonProductCache(40).catch(() => ({ warmed: 0, failed: 0 }))
+    report.unavailableSync = await syncUnavailableListings().catch(() => 'error')
+    report.amazonListingAudit = await auditActiveAmazonListings(16).catch(() => 'error')
     report.durationMs = Date.now() - startedAt
     return apiOk({ success: true, ...report })
   }
@@ -867,6 +1018,9 @@ export async function GET(req: NextRequest) {
     try {
       report.unavailableSync = await syncUnavailableListings()
     } catch { report.unavailableSync = 'error' }
+    try {
+      report.amazonListingAudit = await auditActiveAmazonListings(16)
+    } catch { report.amazonListingAudit = 'error' }
   } else {
     report.usersSynced = 'skipped'
   }
@@ -993,6 +1147,7 @@ export async function GET(req: NextRequest) {
     report.repriced = await repriceProductSourceItems().catch(() => 0)
     report.warmCache = await warmAmazonProductCache(20).catch(() => ({ warmed: 0, failed: 0 }))
     try { report.unavailableSync = await syncUnavailableListings() } catch { report.unavailableSync = 'error' }
+    try { report.amazonListingAudit = await auditActiveAmazonListings(16) } catch { report.amazonListingAudit = 'error' }
     report.durationMs = Date.now() - startedAt
     return apiOk({ success: true, ...report })
   }
@@ -1005,6 +1160,7 @@ export async function GET(req: NextRequest) {
     }
     await warmAmazonProductCache(20).catch(() => {})
     await syncUnavailableListings().catch(() => {})
+    await auditActiveAmazonListings(16).catch(() => {})
   })
   report.durationMs = Date.now() - startedAt
   return apiOk({ success: true, ...report })
