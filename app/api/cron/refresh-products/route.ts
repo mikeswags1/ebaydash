@@ -863,7 +863,7 @@ async function auditActiveAmazonListings(limit = 24): Promise<{
     WHERE ended_at IS NULL
       AND ebay_listing_id IS NOT NULL
       AND asin IS NOT NULL
-    ORDER BY amazon_status_checked_at ASC NULLS FIRST, listed_at ASC
+    ORDER BY amazon_status_checked_at ASC NULLS FIRST, listed_at DESC
     LIMIT ${auditLimit}
   `.catch(() => [])
 
@@ -981,6 +981,7 @@ export async function GET(req: NextRequest) {
     backgroundCatalog
   const fullRefresh = req.nextUrl.searchParams.get('full') === '1' || (!rollingRefresh && !catalogRefresh)
   const requestedBatchSize = Number(req.nextUrl.searchParams.get('batch') || '')
+  const requestedAuditLimit = Math.max(1, Math.min(Number(req.nextUrl.searchParams.get('auditLimit') || '16') || 16, 60))
   const hasExplicitStart = req.nextUrl.searchParams.has('start')
   const requestedStartIndex = hasExplicitStart ? Number(req.nextUrl.searchParams.get('start')) : NaN
   const now = new Date()
@@ -996,7 +997,7 @@ export async function GET(req: NextRequest) {
     // before users try to bulk-list them. Top-scored 40 unenriched products per run.
     report.warmCache = await warmAmazonProductCache(40).catch(() => ({ warmed: 0, failed: 0 }))
     report.unavailableSync = await syncUnavailableListings().catch(() => 'error')
-    report.amazonListingAudit = await auditActiveAmazonListings(16).catch(() => 'error')
+    report.amazonListingAudit = await auditActiveAmazonListings(requestedAuditLimit).catch(() => 'error')
     report.durationMs = Date.now() - startedAt
     return apiOk({ success: true, ...report })
   }
@@ -1019,7 +1020,7 @@ export async function GET(req: NextRequest) {
       report.unavailableSync = await syncUnavailableListings()
     } catch { report.unavailableSync = 'error' }
     try {
-      report.amazonListingAudit = await auditActiveAmazonListings(16)
+      report.amazonListingAudit = await auditActiveAmazonListings(requestedAuditLimit)
     } catch { report.amazonListingAudit = 'error' }
   } else {
     report.usersSynced = 'skipped'
@@ -1147,7 +1148,7 @@ export async function GET(req: NextRequest) {
     report.repriced = await repriceProductSourceItems().catch(() => 0)
     report.warmCache = await warmAmazonProductCache(20).catch(() => ({ warmed: 0, failed: 0 }))
     try { report.unavailableSync = await syncUnavailableListings() } catch { report.unavailableSync = 'error' }
-    try { report.amazonListingAudit = await auditActiveAmazonListings(16) } catch { report.amazonListingAudit = 'error' }
+    try { report.amazonListingAudit = await auditActiveAmazonListings(requestedAuditLimit) } catch { report.amazonListingAudit = 'error' }
     report.durationMs = Date.now() - startedAt
     return apiOk({ success: true, ...report })
   }
