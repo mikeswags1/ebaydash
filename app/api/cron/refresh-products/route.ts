@@ -803,6 +803,13 @@ async function syncUnavailableListings(): Promise<{ ended: number; failed: numbe
 
   if (unavailableRows.length === 0) return { ended: 0, failed: 0, skipped: 0 }
 
+  const unavailableAsins = Array.from(new Set(unavailableRows.map((row) => row.asin.toUpperCase())))
+  await sql`
+    UPDATE product_source_items
+    SET active = FALSE, last_seen_at = NOW()
+    WHERE asin = ANY(${unavailableAsins})
+  `.catch(() => {})
+
   const byUser = new Map<number, Array<{ ebay_listing_id: string }>>()
   for (const row of unavailableRows) {
     const entries = byUser.get(row.user_id) || []
