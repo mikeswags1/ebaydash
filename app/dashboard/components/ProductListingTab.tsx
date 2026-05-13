@@ -4,6 +4,7 @@ import { dashboardDisplayImageUrl } from '@/lib/dashboard-display-image'
 import { TrialMeter } from './TrialMeter'
 
 const NICHE_GROUPS = [
+  { group: 'Trending', emoji: '\u2728', items: ['Golf Accessories', 'Pool Products', 'Beach & Sunny Day', 'Summer Outdoor Gear', 'Backyard & Patio', 'Travel Accessories', 'Fitness Recovery', 'Home Organization', 'Pet Products', 'Viral Gadgets', 'Giftable Under $50'] },
   { group: 'Electronics', emoji: '⚡', items: ['Phone Accessories', 'Computer Parts', 'Audio & Headphones', 'Smart Home Devices', 'Gaming Gear'] },
   { group: 'Home', emoji: '🏠', items: ['Kitchen Gadgets', 'Home Decor', 'Furniture & Lighting', 'Cleaning Supplies', 'Storage & Organization'] },
   { group: 'Outdoors', emoji: '🌿', items: ['Camping & Hiking', 'Garden & Tools', 'Sporting Goods', 'Fishing & Hunting', 'Cycling'] },

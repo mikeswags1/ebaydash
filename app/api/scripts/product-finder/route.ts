@@ -10,6 +10,7 @@ import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { loadProductSourceProducts, upsertProductSourceItems } from '@/lib/product-source-engine'
 import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 import { isWeakListingTitle } from '@/lib/listing-quality'
+import { getSeasonalQueryExpansions, getSourcingTrendMultiplier, loadActiveCustomSourceNicheQueries, mergeTrendingNicheQueries } from '@/lib/source-niches'
 
 export const maxDuration = 60
 
@@ -53,6 +54,7 @@ type Product = {
 }
 
 type QueryEntry = { sourceNiche: string; query: string }
+type NicheQueryMap = Record<string, string[]>
 
 type NichePreferenceRow = {
   ebay_listing_id?: string | null
@@ -231,7 +233,14 @@ function getProductScore(product: Product) {
   const reviewTrust = reviews >= 80 ? 1.06 : reviews >= 35 ? 1.03 : reviews < 8 ? 0.93 : 1
   const priceSweetSpot = product.amazonPrice >= 12 && product.amazonPrice <= 120 ? 1.08 : product.amazonPrice > 180 ? 0.78 : 0.95
   const riskPenalty = product.risk === 'HIGH' ? 0.68 : product.risk === 'MEDIUM' ? 0.88 : 1
-  const imageWeight = product.imageUrl ? 1 : 0.72
+  const imageCount = Math.max(product.images?.length || 0, product.imageUrl ? 1 : 0)
+  const imageWeight = imageCount >= 4 ? 1.1 : imageCount >= 2 ? 1.04 : product.imageUrl ? 0.95 : 0.72
+  const trendMultiplier = getSourcingTrendMultiplier({
+    title: product.title,
+    sourceNiche: product.sourceNiche,
+    price: product.amazonPrice,
+    imageCount,
+  })
   const score =
     product.profit *
     demandWeight *
@@ -242,7 +251,8 @@ function getProductScore(product: Product) {
     priceSweetSpot *
     riskPenalty *
     imageWeight *
-    reviewTrust
+    reviewTrust *
+    trendMultiplier
   return Number.isFinite(score) ? parseFloat(score.toFixed(2)) : 0
 }
 
@@ -294,7 +304,7 @@ function rankProducts(
   return spreadNiches ? spreadProductsAcrossNiches(ranked) : ranked
 }
 
-const NICHE_QUERIES: Record<string, string[]> = {
+const BASE_NICHE_QUERIES: Record<string, string[]> = {
   'Phone Accessories':      ['phone case wireless charger', 'screen protector tempered glass', 'phone stand holder desk', 'portable battery pack charger'],
   'Computer Parts':         ['usb c hub multiport adapter', 'laptop stand ergonomic adjustable', 'mechanical keyboard compact', 'wireless mouse ergonomic'],
   'Audio & Headphones':     ['wireless earbuds bluetooth noise cancelling', 'portable bluetooth speaker waterproof', 'headphone stand holder', 'aux cable audio'],
@@ -336,6 +346,8 @@ const NICHE_QUERIES: Record<string, string[]> = {
   'Comics & Manga':         ['manga book storage box', 'comic book bags boards supplies', 'action figure display case', 'anime poster print framed'],
   'Sports Memorabilia':     ['sports card display case frame', 'autograph frame display signed', 'jersey display case shadow box', 'trading card storage box'],
 }
+
+const NICHE_QUERIES = mergeTrendingNicheQueries(BASE_NICHE_QUERIES)
 
 function findKnownSourceNiche(value?: string | null) {
   const normalized = nicheKey(value)
@@ -380,8 +392,8 @@ function dedupeQueryEntries(entries: QueryEntry[]) {
   return deduped
 }
 
-function buildNicheQueryEntries(sourceNiche: string): QueryEntry[] {
-  const baseQueries = NICHE_QUERIES[sourceNiche] || [`${sourceNiche} bestseller`]
+function buildNicheQueryEntries(sourceNiche: string, queryMap: NicheQueryMap = NICHE_QUERIES): QueryEntry[] {
+  const baseQueries = queryMap[sourceNiche] || [`${sourceNiche} bestseller`]
   const accessoriesQuery = sourceNiche.toLowerCase().includes('accessories')
     ? `${sourceNiche} kit`
     : `${sourceNiche} accessories`
@@ -398,6 +410,7 @@ function buildNicheQueryEntries(sourceNiche: string): QueryEntry[] {
     `${sourceNiche} pack`,
     `${sourceNiche} replacement`,
     `${sourceNiche} set`,
+    ...getSeasonalQueryExpansions(sourceNiche),
   ]
 
   return dedupeQueryEntries([...baseQueries, ...expansionQueries].map((query) => ({ sourceNiche, query })))
@@ -511,8 +524,8 @@ async function getUserNicheWeights(userId: string, options: { includeSoldSignals
   return weights
 }
 
-function buildContinuousQueryEntries(weights: Map<string, number>, seed: string): QueryEntry[] {
-  const allEntries = Object.keys(NICHE_QUERIES).flatMap((sourceNiche) => buildNicheQueryEntries(sourceNiche))
+function buildContinuousQueryEntries(weights: Map<string, number>, seed: string, queryMap: NicheQueryMap = NICHE_QUERIES): QueryEntry[] {
+  const allEntries = Object.keys(queryMap).flatMap((sourceNiche) => buildNicheQueryEntries(sourceNiche, queryMap))
   const weightedLimit = Math.ceil(CONTINUOUS_QUERY_LIMIT * (weights.size > 0 ? 0.72 : 0.5))
   const weightedEntries = allEntries
     .map((entry) => ({
@@ -603,6 +616,10 @@ export async function GET(req: NextRequest) {
   const isOutOfLiveFetchTime = () => Date.now() - startedAt > liveFetchBudgetMs
 
   const userId = String(session.user.id)
+  const sourceNicheQueries: NicheQueryMap = {
+    ...NICHE_QUERIES,
+    ...await withTimeout(loadActiveCustomSourceNicheQueries(), 700, {}),
+  }
   const requestSeed = forceRefresh ? `${Date.now()}:${Math.random()}` : String(getRotationBucket())
   const distributionSeed = `${userId}:${continuousMode ? 'continuous' : niche}:${requestSeed}`
   // Defer niche weights until after cache check — avoids eBay API call when cache is warm
@@ -842,8 +859,8 @@ export async function GET(req: NextRequest) {
   // ── Fetch fresh data from StackPilot's own source engine ─────────────────────
 
   const queryEntries = continuousMode
-    ? buildContinuousQueryEntries(nicheWeights, distributionSeed)
-    : buildNicheQueryEntries(niche)
+    ? buildContinuousQueryEntries(nicheWeights, distributionSeed, sourceNicheQueries)
+    : buildNicheQueryEntries(niche, sourceNicheQueries)
   const results: Product[] = []
   const fallbackResults: Product[] = []
   const seenAsins = new Set<string>()

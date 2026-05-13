@@ -8,6 +8,7 @@ import { warmAmazonProductCache } from '@/lib/amazon-product'
 import { checkAmazonLiveAvailability } from '@/lib/amazon-availability'
 import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice } from '@/lib/listing-pricing'
+import { getSeasonalQueryExpansions, loadActiveCustomSourceNicheQueries, mergeTrendingNicheQueries } from '@/lib/source-niches'
 
 export const maxDuration = 300
 
@@ -69,7 +70,7 @@ function isRejected(title: string) {
   return hasBlockedListingPolicyFlag(getListingPolicyFlags({ title }))
 }
 
-const NICHE_QUERIES: Record<string, string[]> = {
+const BASE_NICHE_QUERIES: Record<string, string[]> = {
   'Phone Accessories': [
     'phone case wireless charger', 'screen protector tempered glass', 'phone stand holder desk',
     'portable battery pack charger', 'phone grip ring holder', 'car phone mount vent',
@@ -455,11 +456,15 @@ const NICHE_QUERIES: Record<string, string[]> = {
   ],
 }
 
+type NicheQueryMap = Record<string, string[]>
+const NICHE_QUERIES = mergeTrendingNicheQueries(BASE_NICHE_QUERIES)
+
 type RefreshOptions = {
   target?: number
   queryLimit?: number
   pages?: number[]
   timeoutMs?: number
+  queryMap?: NicheQueryMap
 }
 
 function uniqueQueries(values: string[]) {
@@ -477,8 +482,8 @@ function uniqueQueries(values: string[]) {
   return queries
 }
 
-function buildCatalogQueries(niche: string) {
-  const baseQueries = NICHE_QUERIES[niche] || [`${niche} bestseller`]
+function buildCatalogQueries(niche: string, queryMap: NicheQueryMap = NICHE_QUERIES) {
+  const baseQueries = queryMap[niche] || [`${niche} bestseller`]
   const nicheLower = niche.toLowerCase()
   const accessoriesQuery = nicheLower.includes('accessories') ? `${niche} kit` : `${niche} accessories`
   const categoryQueries = [
@@ -501,6 +506,7 @@ function buildCatalogQueries(niche: string) {
     `${niche} tools`,
     `${niche} small business`,
     accessoriesQuery,
+    ...getSeasonalQueryExpansions(niche),
   ]
   const modifierQueries = baseQueries.flatMap((query) => [
     query,
@@ -516,7 +522,7 @@ function buildCatalogQueries(niche: string) {
 // ── Refresh one niche in the product_cache table ─────────────────────────────
 async function refreshNiche(niche: string, options: RefreshOptions = {}): Promise<number> {
   const target = Math.max(30, Math.min(CATALOG_NICHE_TARGET, options.target || STANDARD_NICHE_TARGET))
-  const allQueries = buildCatalogQueries(niche)
+  const allQueries = buildCatalogQueries(niche, options.queryMap)
   const queryLimit = options.queryLimit || Math.min(allQueries.length, 25)
   const queries = allQueries.slice(0, queryLimit)
   const pages = options.pages?.length ? options.pages : [1, 2]
@@ -577,7 +583,7 @@ async function refreshNiche(niche: string, options: RefreshOptions = {}): Promis
 // ── Refresh one niche using direct Amazon scraping (no API key needed) ───────
 async function refreshNicheScrape(niche: string, options: RefreshOptions = {}): Promise<number> {
   const target = Math.max(30, Math.min(CATALOG_NICHE_TARGET, options.target || STANDARD_NICHE_TARGET))
-  const allQueries = buildCatalogQueries(niche)
+  const allQueries = buildCatalogQueries(niche, options.queryMap)
   const queries = allQueries.slice(0, options.queryLimit || Math.min(allQueries.length, 20))
   const pages = options.pages?.length ? options.pages : [1, 2]
   const timeoutMs = options.timeoutMs || 6000
@@ -1035,7 +1041,9 @@ export async function GET(req: NextRequest) {
   }
 
   // 2. Refresh product cache for all niches
-  const allNiches = Object.keys(NICHE_QUERIES)
+  const customNicheQueries = await loadActiveCustomSourceNicheQueries().catch(() => ({}))
+  const sourceNicheQueries: NicheQueryMap = { ...NICHE_QUERIES, ...customNicheQueries }
+  const allNiches = Object.keys(sourceNicheQueries)
   const requestedNicheParam = req.nextUrl.searchParams.get('niche') || ''
   const explicitNiches = requestedNicheParam
     .split(',')
@@ -1090,15 +1098,15 @@ export async function GET(req: NextRequest) {
     niches = Array.from({ length: Math.min(batchSize, allNiches.length) }, (_, index) => allNiches[(startIndex + index) % allNiches.length])
   }
   const primaryOptions = !catalogRefresh
-    ? { target: targetProducts, queryLimit: 4, pages: [1], timeoutMs: 8000 }
+    ? { target: targetProducts, queryLimit: 4, pages: [1], timeoutMs: 8000, queryMap: sourceNicheQueries }
     : backgroundCatalog
-      ? { target: targetProducts, queryLimit: 5, pages: [1, 2], timeoutMs: 5000 }
-      : { target: targetProducts, queryLimit: 6, pages: [1, 2], timeoutMs: 4500 }
+      ? { target: targetProducts, queryLimit: 5, pages: [1, 2], timeoutMs: 5000, queryMap: sourceNicheQueries }
+      : { target: targetProducts, queryLimit: 6, pages: [1, 2], timeoutMs: 4500, queryMap: sourceNicheQueries }
   const secondaryOptions = !catalogRefresh
-    ? { target: targetProducts, queryLimit: 3, pages: [1], timeoutMs: 6000 }
+    ? { target: targetProducts, queryLimit: 3, pages: [1], timeoutMs: 6000, queryMap: sourceNicheQueries }
     : backgroundCatalog
-      ? { target: targetProducts, queryLimit: 4, pages: [1, 2], timeoutMs: 4000 }
-      : { target: targetProducts, queryLimit: 4, pages: [1, 2], timeoutMs: 3500 }
+      ? { target: targetProducts, queryLimit: 4, pages: [1, 2], timeoutMs: 4000, queryMap: sourceNicheQueries }
+      : { target: targetProducts, queryLimit: 4, pages: [1, 2], timeoutMs: 3500, queryMap: sourceNicheQueries }
   const primaryScrapeBudgetMs = backgroundCatalog ? 150_000 : catalogRefresh ? 165_000 : 200_000
   const fallbackScrapeBudgetMs = backgroundCatalog ? 220_000 : catalogRefresh ? 235_000 : 270_000
   const runProductRefresh = async () => {

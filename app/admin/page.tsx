@@ -53,6 +53,28 @@ type SourceNiche = {
   newestSeenAt: string | null
 }
 
+type TrendingNiche = {
+  name: string
+  activeProducts: number
+  cacheProducts: number
+  averageProfit: number
+  averageRoi: number
+  averageScore: number
+  latestSeenAt: string | null
+  cacheRefreshedAt: string | null
+  missingImages: number
+  highRiskProducts: number
+  status: 'ready' | 'watch' | 'low'
+}
+
+type ManagedSourceNiche = {
+  name: string
+  queries: string[]
+  active: boolean
+  notes: string
+  updatedAt: string | null
+}
+
 type NichePerformance = {
   niche: string
   listings: number
@@ -104,6 +126,7 @@ type Stats = {
       cachedAt: string | null
     }
     topNiches: SourceNiche[]
+    trendingNiches: TrendingNiche[]
   }
   recentListings: RecentListing[]
   problemListings: ProblemListing[]
@@ -195,14 +218,19 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [toolState, setToolState] = useState<ToolState>({ active: null, tone: 'info', message: '' })
+  const [sourceNiches, setSourceNiches] = useState<ManagedSourceNiche[]>([])
+  const [nicheForm, setNicheForm] = useState({ name: '', queries: '', notes: '' })
+  const [nicheAction, setNicheAction] = useState<string | null>(null)
 
   const loadAdmin = useCallback(async () => {
     setError(null)
-    const [statsRes, collabRes] = await Promise.all([
+    const [statsRes, collabRes, sourceNicheRes] = await Promise.all([
       fetch('/api/admin/stats').then(readJson),
       fetch(`/api/admin/collab?t=${Date.now()}`, { cache: 'no-store' }).then(readJson),
+      fetch('/api/admin/source-niches').then(readJson),
     ])
     setStats(statsRes as Stats)
+    setSourceNiches(Array.isArray(sourceNicheRes?.customNiches) ? sourceNicheRes.customNiches : [])
     setCollab(String(collabRes?.content || ''))
     setCollabFileMtime(
       typeof collabRes?.fileMtime === 'string' && collabRes.fileMtime ? collabRes.fileMtime : null
@@ -253,6 +281,76 @@ export default function AdminPage() {
         tone: 'error',
         message: err instanceof Error ? err.message : `${label} failed.`,
       })
+    }
+  }
+
+  const refreshNiche = async (name: string) => {
+    setNicheAction(`refresh:${name}`)
+    setToolState({ active: null, tone: 'info', message: `Refreshing ${name} source products...` })
+    try {
+      const data = await readJson(await fetch('/api/admin/refresh-pool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'catalog', niche: name }),
+      }))
+      const attempted = Array.isArray(data?.result?.nichesAttempted) ? data.result.nichesAttempted.join(', ') : name
+      setToolState({
+        active: null,
+        tone: 'success',
+        message: `Refresh started for ${attempted}. Source pool now has ${formatNumber(data?.result?.sourceProducts ?? 0)} products.`,
+      })
+      await loadAdmin()
+    } catch (err) {
+      setToolState({
+        active: null,
+        tone: 'error',
+        message: err instanceof Error ? err.message : `Could not refresh ${name}.`,
+      })
+    } finally {
+      setNicheAction(null)
+    }
+  }
+
+  const saveSourceNiche = async () => {
+    setNicheAction('save')
+    try {
+      await readJson(await fetch('/api/admin/source-niches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nicheForm),
+      }))
+      setNicheForm({ name: '', queries: '', notes: '' })
+      setToolState({ active: null, tone: 'success', message: 'Source niche saved. Run a niche refresh to stock it now.' })
+      await loadAdmin()
+    } catch (err) {
+      setToolState({ active: null, tone: 'error', message: err instanceof Error ? err.message : 'Could not save source niche.' })
+    } finally {
+      setNicheAction(null)
+    }
+  }
+
+  const editSourceNiche = (niche: ManagedSourceNiche) => {
+    setNicheForm({
+      name: niche.name,
+      queries: niche.queries.join('\n'),
+      notes: niche.notes,
+    })
+  }
+
+  const setSourceNicheActive = async (name: string, active: boolean) => {
+    setNicheAction(`toggle:${name}`)
+    try {
+      await readJson(await fetch('/api/admin/source-niches', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, active }),
+      }))
+      setToolState({ active: null, tone: 'success', message: `${name} ${active ? 'enabled' : 'disabled'} for future source crawls.` })
+      await loadAdmin()
+    } catch (err) {
+      setToolState({ active: null, tone: 'error', message: err instanceof Error ? err.message : 'Could not update source niche.' })
+    } finally {
+      setNicheAction(null)
     }
   }
 
@@ -420,6 +518,162 @@ export default function AdminPage() {
             </div>
             <div className="admin-subtle-line">
               Active revenue {formatMoney(listingSummary.activeRevenue)} against {formatMoney(listingSummary.activeCost)} stored cost basis.
+            </div>
+          </div>
+        </section>
+
+        <section className="admin-panel">
+          <div className="admin-panel-head">
+            <div>
+              <span>Source flow</span>
+              <h2>How products become ready to list</h2>
+            </div>
+          </div>
+          <div className="admin-flow-grid">
+            <div>
+              <strong>1. Source niche</strong>
+              <span>StackPilot rotates through active niches and trend-focused Amazon searches.</span>
+            </div>
+            <div>
+              <strong>2. Validate Amazon</strong>
+              <span>ASIN, title, price, images, rating, reviews, and availability are checked before use.</span>
+            </div>
+            <div>
+              <strong>3. Score quality</strong>
+              <span>Profit, ROI, demand signals, low-risk shipping, reviews, and seasonal trend fit are ranked.</span>
+            </div>
+            <div>
+              <strong>4. Stock queues</strong>
+              <span>The best products refill niche pools, Product Listing, and Continuous Listing caches.</span>
+            </div>
+            <div>
+              <strong>5. Guard publish</strong>
+              <span>Listing time blocks unavailable Amazon items, duplicates, weak titles, bad pricing, and sparse images.</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="admin-panel">
+          <div className="admin-panel-head">
+            <div>
+              <span>Trending niches</span>
+              <h2>What the source engine is stocking</h2>
+            </div>
+          </div>
+          <div className="admin-table-wrap">
+            <table className="admin-table admin-trending-table">
+              <thead>
+                <tr>
+                  <th>Niche</th>
+                  <th>Status</th>
+                  <th>Products</th>
+                  <th>Avg profit</th>
+                  <th>Avg ROI</th>
+                  <th>Score</th>
+                  <th>Last refresh</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.sourceHealth.trendingNiches.length === 0 ? (
+                  <tr><td colSpan={8}>No trending niche data yet. Run Deep Catalog Crawl to stock the first pools.</td></tr>
+                ) : stats.sourceHealth.trendingNiches.map((niche) => (
+                  <tr key={niche.name}>
+                    <td>
+                      <strong>{niche.name}</strong>
+                      <span>{niche.missingImages} missing images · {niche.highRiskProducts} high risk</span>
+                    </td>
+                    <td>
+                      <span className={`admin-pill admin-pill-${niche.status === 'ready' ? 'good' : niche.status === 'watch' ? 'watch' : 'bad'}`}>
+                        {niche.status === 'ready' ? 'Ready' : niche.status === 'watch' ? 'Needs stock' : 'Low'}
+                      </span>
+                    </td>
+                    <td>
+                      <strong>{formatNumber(niche.activeProducts)} source</strong>
+                      <span>{formatNumber(niche.cacheProducts)} cache</span>
+                    </td>
+                    <td>{formatMoney(niche.averageProfit)}</td>
+                    <td>{Math.round(niche.averageRoi || 0)}%</td>
+                    <td>{Math.round(niche.averageScore || 0)}</td>
+                    <td>{formatDateTime(niche.cacheRefreshedAt || niche.latestSeenAt)}</td>
+                    <td>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        disabled={nicheAction !== null}
+                        onClick={() => refreshNiche(niche.name)}
+                      >
+                        {nicheAction === `refresh:${niche.name}` ? 'Refreshing...' : 'Refresh niche'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="admin-subtle-line">
+            Ready means a niche has at least 30 active source products and 30 cached queue products with a recent refresh.
+          </div>
+        </section>
+
+        <section className="admin-panel">
+          <div className="admin-panel-head">
+            <div>
+              <span>Manage source niches</span>
+              <h2>Add or tune product search lanes</h2>
+            </div>
+          </div>
+          <div className="admin-niche-manager">
+            <div className="admin-niche-form">
+              <label>
+                <span>Niche name</span>
+                <input
+                  value={nicheForm.name}
+                  onChange={(event) => setNicheForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Example: Pickleball Accessories"
+                />
+              </label>
+              <label>
+                <span>Search queries</span>
+                <textarea
+                  value={nicheForm.queries}
+                  onChange={(event) => setNicheForm((current) => ({ ...current, queries: event.target.value }))}
+                  placeholder={'pickleball paddle cover\npickleball ball holder\nportable pickleball net accessories'}
+                  rows={7}
+                />
+              </label>
+              <label>
+                <span>Notes</span>
+                <input
+                  value={nicheForm.notes}
+                  onChange={(event) => setNicheForm((current) => ({ ...current, notes: event.target.value }))}
+                  placeholder="Why this niche matters right now"
+                />
+              </label>
+              <button className="btn btn-solid btn-sm" disabled={nicheAction !== null} onClick={saveSourceNiche}>
+                {nicheAction === 'save' ? 'Saving...' : 'Save source niche'}
+              </button>
+            </div>
+            <div className="admin-managed-niches">
+              {sourceNiches.length === 0 ? (
+                <div className="admin-empty">No custom niches yet. Built-in trending niches are already active.</div>
+              ) : sourceNiches.map((niche) => (
+                <div key={niche.name} className="admin-managed-niche">
+                  <div>
+                    <strong>{niche.name}</strong>
+                    <span>
+                      {niche.queries.length} queries · {niche.active ? 'active' : 'paused'} · updated {formatDateTime(niche.updatedAt)}
+                    </span>
+                    {niche.notes ? <em>{niche.notes}</em> : null}
+                  </div>
+                  <div>
+                    <button className="btn btn-ghost btn-sm" disabled={nicheAction !== null} onClick={() => editSourceNiche(niche)}>Edit</button>
+                    <button className="btn btn-ghost btn-sm" disabled={nicheAction !== null} onClick={() => setSourceNicheActive(niche.name, !niche.active)}>
+                      {niche.active ? 'Pause' : 'Enable'}
+                    </button>
+                    <button className="btn btn-ghost btn-sm" disabled={nicheAction !== null} onClick={() => refreshNiche(niche.name)}>Refresh</button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </section>

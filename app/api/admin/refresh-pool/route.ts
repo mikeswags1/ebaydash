@@ -12,12 +12,14 @@ export async function POST(req: Request) {
     return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
   }
 
-  const { mode = 'catalog' } = await req.json().catch(() => ({}))
+  const { mode = 'catalog', niche = '' } = await req.json().catch(() => ({}))
 
   // Call our own cron with the internal CRON_SECRET
   const cronSecret = process.env.CRON_SECRET || ''
   const host = new URL(req.url).origin
-  const param = mode === 'catalog' ? '?catalog=1&wait=1' : '?sourceOnly=1'
+  const nicheValue = typeof niche === 'string' ? niche.trim() : ''
+  const nicheParam = nicheValue ? `&niche=${encodeURIComponent(nicheValue)}&batch=1` : ''
+  const param = mode === 'catalog' ? `?catalog=1&wait=1${nicheParam}` : '?sourceOnly=1'
 
   const res = await fetch(`${host}/api/cron/refresh-products${param}`, {
     headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {},
@@ -25,5 +27,5 @@ export async function POST(req: Request) {
   })
 
   const data = await res.json().catch(() => ({}))
-  return apiOk({ triggered: true, mode, result: data })
+  return apiOk({ triggered: true, mode, niche: nicheValue || null, result: data })
 }

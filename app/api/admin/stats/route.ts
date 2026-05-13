@@ -92,6 +92,19 @@ type SourceNicheRow = {
   newest_seen?: string | null
 }
 
+type TrendingNicheRow = {
+  name?: string | null
+  active_products?: number | string
+  avg_profit?: number | string | null
+  avg_roi?: number | string | null
+  avg_score?: number | string | null
+  latest_seen?: string | null
+  cache_products?: number | string | null
+  cache_refreshed_at?: string | null
+  missing_images?: number | string | null
+  high_risk?: number | string | null
+}
+
 type CacheSummaryRow = {
   total_niches?: number | string
   ready_niches?: number | string
@@ -137,6 +150,7 @@ export async function GET() {
     nichePerformanceRows,
     sourceRows,
     sourceNicheRows,
+    trendingNicheRows,
     cacheRows,
     continuousRows,
   ] = await Promise.all([
@@ -315,6 +329,46 @@ export async function GET() {
       ORDER BY count DESC, avg_score DESC
       LIMIT 12
     `.catch(() => []),
+    queryRows<TrendingNicheRow>`
+      WITH source AS (
+        SELECT
+          COALESCE(NULLIF(source_niche, ''), 'Unassigned') AS name,
+          COUNT(*) FILTER (WHERE active = TRUE)::int AS active_products,
+          ROUND(AVG(profit) FILTER (WHERE active = TRUE), 2) AS avg_profit,
+          ROUND(AVG(roi) FILTER (WHERE active = TRUE), 2) AS avg_roi,
+          ROUND(AVG(total_score) FILTER (WHERE active = TRUE), 2) AS avg_score,
+          MAX(last_seen_at) FILTER (WHERE active = TRUE) AS latest_seen,
+          COUNT(*) FILTER (WHERE active = TRUE AND (image_url IS NULL OR image_url = ''))::int AS missing_images,
+          COUNT(*) FILTER (WHERE active = TRUE AND risk = 'HIGH')::int AS high_risk
+        FROM product_source_items
+        GROUP BY COALESCE(NULLIF(source_niche, ''), 'Unassigned')
+      ),
+      cache AS (
+        SELECT
+          niche AS name,
+          CASE WHEN jsonb_typeof(results) = 'array' THEN jsonb_array_length(results) ELSE 0 END AS cache_products,
+          cached_at AS cache_refreshed_at
+        FROM product_cache
+        WHERE niche NOT IN ('__continuous_listing__', '__cursor__')
+      )
+      SELECT
+        COALESCE(source.name, cache.name) AS name,
+        COALESCE(source.active_products, 0)::int AS active_products,
+        source.avg_profit,
+        source.avg_roi,
+        source.avg_score,
+        source.latest_seen,
+        COALESCE(cache.cache_products, 0)::int AS cache_products,
+        cache.cache_refreshed_at,
+        COALESCE(source.missing_images, 0)::int AS missing_images,
+        COALESCE(source.high_risk, 0)::int AS high_risk
+      FROM source
+      FULL JOIN cache ON cache.name = source.name
+      WHERE COALESCE(source.name, cache.name) IS NOT NULL
+        AND COALESCE(source.name, cache.name) <> 'Unassigned'
+      ORDER BY COALESCE(source.active_products, 0) DESC, COALESCE(source.avg_score, 0) DESC
+      LIMIT 80
+    `.catch(() => []),
     queryRows<CacheSummaryRow>`
       SELECT
         COUNT(*) FILTER (
@@ -444,6 +498,32 @@ export async function GET() {
         maxScore: toNumber(row.max_score),
         newestSeenAt: toIso(row.newest_seen),
       })),
+      trendingNiches: trendingNicheRows.map((row) => {
+        const activeProducts = toNumber(row.active_products)
+        const cacheProducts = toNumber(row.cache_products)
+        const refreshedAt = toIso(row.cache_refreshed_at) || toIso(row.latest_seen)
+        const refreshedDate = refreshedAt ? new Date(refreshedAt) : null
+        const stale = !refreshedDate || Date.now() - refreshedDate.getTime() > 48 * 60 * 60 * 1000
+        const status =
+          activeProducts >= 30 && cacheProducts >= 30 && !stale
+            ? 'ready'
+            : activeProducts >= 10 || cacheProducts >= 10
+              ? 'watch'
+              : 'low'
+        return {
+          name: row.name || 'Unassigned',
+          activeProducts,
+          cacheProducts,
+          averageProfit: toNumber(row.avg_profit),
+          averageRoi: toNumber(row.avg_roi),
+          averageScore: toNumber(row.avg_score),
+          latestSeenAt: toIso(row.latest_seen),
+          cacheRefreshedAt: toIso(row.cache_refreshed_at),
+          missingImages: toNumber(row.missing_images),
+          highRiskProducts: toNumber(row.high_risk),
+          status,
+        }
+      }),
     },
     recentListings: recentListingRows.map((row) => ({
       id: row.id,

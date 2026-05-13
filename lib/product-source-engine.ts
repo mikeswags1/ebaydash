@@ -4,6 +4,7 @@ import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listin
 import { scrapeAmazonProduct } from '@/lib/amazon-scrape'
 import { getRapidApiKey } from '@/lib/rapidapi'
 import { isWeakListingTitle } from '@/lib/listing-quality'
+import { getSourcingTrendMultiplier, getSourcingTrendSignals } from '@/lib/source-niches'
 
 export type SourceEngineProduct = {
   asin: string
@@ -90,6 +91,13 @@ function scoreProduct(product: SourceEngineProduct) {
   const reviews = product._numRatings || 0
   const sales = parseSales(product.salesVolume)
   const margin = product.ebayPrice > 0 ? (product.profit / product.ebayPrice) * 100 : 0
+  const imageCount = Math.max(product.images?.length || 0, product.imageUrl ? 1 : 0)
+  const trendSignals = getSourcingTrendSignals({
+    title: product.title,
+    sourceNiche: product.sourceNiche,
+    price: product.amazonPrice,
+    imageCount,
+  })
   const demandScore =
     Math.log10(sales + 10) * 16 +
     Math.log10(reviews + 25) * 15 +
@@ -100,9 +108,19 @@ function scoreProduct(product: SourceEngineProduct) {
   const reviewTrust = reviews >= 80 ? 1.08 : reviews >= 35 ? 1.04 : reviews < 8 ? 0.92 : 1
   const priceSweetSpot = product.amazonPrice >= 12 && product.amazonPrice <= 120 ? 18 : product.amazonPrice > 180 ? 7 : 12
   const riskPenalty = product.risk === 'HIGH' ? 0.72 : product.risk === 'MEDIUM' ? 0.9 : 1
-  const imageBoost = product.imageUrl ? 6 : -8
+  const imageBoost = imageCount >= 4 ? 12 : imageCount >= 2 ? 8 : product.imageUrl ? 3 : -10
+  const logisticsBoost = trendSignals.lightweight ? 8 : trendSignals.highReturnRisk ? -18 : 0
+  const trendMultiplier = getSourcingTrendMultiplier({
+    title: product.title,
+    sourceNiche: product.sourceNiche,
+    price: product.amazonPrice,
+    imageCount,
+  })
   const total =
-    (profitScore + roiScore + marginScore + demandScore + priceSweetSpot + imageBoost) * riskPenalty * reviewTrust
+    (profitScore + roiScore + marginScore + demandScore + priceSweetSpot + imageBoost + logisticsBoost) *
+    riskPenalty *
+    reviewTrust *
+    trendMultiplier
   return Number.isFinite(total) ? Number(total.toFixed(2)) : 0
 }
 
