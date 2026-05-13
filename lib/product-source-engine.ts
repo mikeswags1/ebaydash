@@ -331,6 +331,21 @@ export async function rebuildProductSourceFromCache(limit = 250) {
   return upsertProductSourceItems(products)
 }
 
+export async function deactivateUnavailableProductSourcesFromCache() {
+  await ensureProductSourceTables()
+  const rows = await queryRows<{ asin: string }>`
+    UPDATE product_source_items psi
+    SET active = FALSE,
+        last_seen_at = NOW()
+    FROM amazon_product_cache apc
+    WHERE UPPER(apc.asin) = UPPER(psi.asin)
+      AND apc.available = FALSE
+      AND psi.active = TRUE
+    RETURNING psi.asin
+  `.catch(() => [])
+  return rows.length
+}
+
 export async function repriceProductSourceItems(limit = 2500) {
   await ensureProductSourceTables()
   const rows = await queryRows<ProductSourceRow>`

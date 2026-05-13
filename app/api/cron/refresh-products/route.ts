@@ -3,7 +3,7 @@ import { apiError, apiOk } from '@/lib/api-response'
 import { getValidEbayAccessToken } from '@/lib/ebay-auth'
 import { queryRows, sql } from '@/lib/db'
 import { scrapeAmazonSearch } from '@/lib/amazon-scrape'
-import { ensureProductSourceTables, rebuildProductSourceFromCache, repriceProductSourceItems, refreshProductSourcePrices } from '@/lib/product-source-engine'
+import { deactivateUnavailableProductSourcesFromCache, ensureProductSourceTables, rebuildProductSourceFromCache, repriceProductSourceItems, refreshProductSourcePrices } from '@/lib/product-source-engine'
 import { warmAmazonProductCache } from '@/lib/amazon-product'
 import { checkAmazonLiveAvailability } from '@/lib/amazon-availability'
 import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
@@ -998,6 +998,7 @@ export async function GET(req: NextRequest) {
     report.priceRefresh = await refreshProductSourcePrices({ limit: 300, staleDays: 5 })
     report.repriced = await repriceProductSourceItems()
     report.sourceProducts = await rebuildProductSourceFromCache()
+    report.deactivatedUnavailableSources = await deactivateUnavailableProductSourcesFromCache().catch(() => 0)
     report.continuousProducts = await refreshContinuousCache()
     // Pre-enrich catalog-crawl products that lack amazon_product_cache entries.
     // This ensures continuous-listing products have full images/features/description
@@ -1120,6 +1121,9 @@ export async function GET(req: NextRequest) {
       await new Promise(r => setTimeout(r, 500))
     }
 
+    const sourceProducts = await rebuildProductSourceFromCache(sourceRebuildLimit)
+    const deactivatedUnavailableSources = await deactivateUnavailableProductSourcesFromCache().catch(() => 0)
+
     return {
       nichesRefreshed: refreshed,
       nichesAttempted: niches,
@@ -1128,7 +1132,8 @@ export async function GET(req: NextRequest) {
       targetProductsPerNiche: targetProducts,
       batchSize,
       quotaHit: false,
-      sourceProducts: await rebuildProductSourceFromCache(sourceRebuildLimit),
+      sourceProducts,
+      deactivatedUnavailableSources,
       continuousProducts: await refreshContinuousCache(),
     }
   }
@@ -1150,6 +1155,7 @@ export async function GET(req: NextRequest) {
     report.targetProductsPerNiche = targetProducts
     report.batchSize = batchSize
     report.sourceProducts = await rebuildProductSourceFromCache(250)
+    report.deactivatedUnavailableSources = await deactivateUnavailableProductSourcesFromCache().catch(() => 0)
     report.continuousProducts = await refreshContinuousCache()
     report.priceRefresh = await refreshProductSourcePrices({ limit: 60, staleDays: 7 }).catch(() => ({}))
     report.repriced = await repriceProductSourceItems().catch(() => 0)
