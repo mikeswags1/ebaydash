@@ -750,6 +750,28 @@ async function syncUserListings(userId: number) {
   }
 }
 
+async function syncAllUserListings(startedAt: number, budgetMs = 90_000) {
+  const users = await queryRows<{ user_id: number }>`SELECT user_id FROM ebay_credentials`
+  let synced = 0
+  let failed = 0
+  let skipped = 0
+
+  for (const u of users) {
+    if (Date.now() - startedAt > budgetMs) {
+      skipped += 1
+      continue
+    }
+    try {
+      await syncUserListings(Number(u.user_id))
+      synced++
+    } catch {
+      failed++
+    }
+  }
+
+  return { synced, failed, skipped }
+}
+
 async function ensureListingAvailabilityAuditColumns() {
   await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS amazon_available BOOLEAN`.catch(() => {})
   await sql`ALTER TABLE listed_asins ADD COLUMN IF NOT EXISTS amazon_status_reason TEXT`.catch(() => {})
@@ -1052,6 +1074,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (sourceOnly) {
+    report.usersSynced = await syncAllUserListings(startedAt, 75_000).catch(() => 'error')
     // Re-fetch live Amazon prices for stale pool products, then reprice with updated costs
     report.priceRefresh = await refreshProductSourcePrices({ limit: 300, staleDays: 5 })
     report.repriced = await repriceProductSourceItems()
@@ -1071,13 +1094,7 @@ export async function GET(req: NextRequest) {
   const shouldSyncUsers = !catalogRefresh && (fullRefresh || (now.getUTCMinutes() === 0 && now.getUTCHours() % 4 === 0))
   if (shouldSyncUsers) {
     try {
-      const users = await queryRows<{ user_id: number }>`SELECT user_id FROM ebay_credentials`
-      let synced = 0
-      for (const u of users) {
-        try { await syncUserListings(Number(u.user_id)); synced++ } catch { /* skip */ }
-        if (Date.now() - startedAt > 120_000) break // stay within budget
-      }
-      report.usersSynced = synced
+      report.usersSynced = await syncAllUserListings(startedAt, 120_000)
     } catch (e) { report.syncError = String(e) }
 
     // End eBay listings where Amazon has confirmed the product is out-of-stock
