@@ -423,15 +423,15 @@ export async function repriceProductSourceItems(limit = 2500) {
 
 export async function refreshProductSourcePrices(options: { limit?: number; staleDays?: number } = {}) {
   await ensureProductSourceTables()
-  const limit = Math.min(options.limit || 300, 500)
-  const staleDays = options.staleDays || 5
+  const limit = Math.max(1, Math.min(Math.floor(options.limit || 300), 500))
+  const staleDays = Math.max(1, Math.min(Math.floor(options.staleDays || 5), 90))
 
   const rows = await queryRows<ProductSourceRow & { asin: string }>`
     SELECT asin, title, source_niche, amazon_price, ebay_price, profit, roi, image_url, risk,
            sales_volume, rating, review_count, total_score, intelligence_score, source_quality, raw
     FROM product_source_items
     WHERE active = TRUE
-      AND last_seen_at < NOW() - INTERVAL '${staleDays} days'
+      AND last_seen_at < NOW() - (${staleDays} * INTERVAL '1 day')
     ORDER BY last_seen_at ASC
     LIMIT ${limit}
   `

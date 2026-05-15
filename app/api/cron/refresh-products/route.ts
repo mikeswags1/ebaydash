@@ -746,7 +746,7 @@ async function syncUserListings(userId: number) {
   const toEnd = dbRows.filter(r => !activeIds.has(String(r.ebay_listing_id)))
   if (toEnd.length > 0) {
     const ids = toEnd.map(r => r.id)
-    await sql`UPDATE listed_asins SET ended_at = NOW() WHERE id = ANY(${ids})`
+    await sql`UPDATE listed_asins SET ended_at = NOW() WHERE id = ANY(${ids}::int[])`
   }
 }
 
@@ -829,7 +829,7 @@ async function syncUnavailableListings(): Promise<{ ended: number; failed: numbe
   await sql`
     UPDATE product_source_items
     SET active = FALSE, last_seen_at = NOW()
-    WHERE asin = ANY(${unavailableAsins})
+    WHERE asin = ANY(${unavailableAsins}::text[])
   `.catch(() => {})
 
   const byUser = new Map<number, Array<{ ebay_listing_id: string }>>()

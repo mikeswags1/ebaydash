@@ -696,7 +696,7 @@ export async function GET(req: NextRequest) {
         }>`
           SELECT asin, primary_image, images, features, description, specs, available
           FROM amazon_product_cache
-          WHERE asin = ANY(${cacheLookupAsins})
+          WHERE asin = ANY(${cacheLookupAsins}::text[])
         `
         if (cachedRows.length > 0) {
           const cacheMap = new Map(cachedRows.map(r => [r.asin.toUpperCase(), r]))
@@ -711,7 +711,7 @@ export async function GET(req: NextRequest) {
               await sql`
                 UPDATE product_source_items
                 SET active = FALSE, last_seen_at = NOW()
-                WHERE asin = ANY(${Array.from(unavailableAsins)})
+                WHERE asin = ANY(${Array.from(unavailableAsins)}::text[])
               `.catch(() => {})
             })
           }

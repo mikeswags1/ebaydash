@@ -208,7 +208,7 @@ export async function getFulfillmentStates(args: { userId: string; orderIds: str
       order_id, legacy_item_id, state, last_error, updated_at
     FROM fulfillment_jobs
     WHERE user_id = ${args.userId}
-      AND order_id = ANY(${ids})
+      AND order_id = ANY(${ids}::text[])
     ORDER BY order_id, COALESCE(legacy_item_id, ''), updated_at DESC
   `.catch(() => [])
 
