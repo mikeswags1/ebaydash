@@ -10,7 +10,7 @@
   },
   "crons": [
     {
-      "path": "/api/cron/refresh-products?backgroundCatalog=1&wait=1",
+      "path": "/api/cron/refresh-products?backgroundCatalog=1&wait=1&auditLimit=60",
       "schedule": "0 3 * * *"
     },
     {

@@ -1011,7 +1011,7 @@ export async function GET(req: NextRequest) {
     backgroundCatalog
   const fullRefresh = req.nextUrl.searchParams.get('full') === '1' || (!rollingRefresh && !catalogRefresh)
   const requestedBatchSize = Number(req.nextUrl.searchParams.get('batch') || '')
-  const requestedAuditLimit = Math.max(1, Math.min(Number(req.nextUrl.searchParams.get('auditLimit') || '16') || 16, 60))
+  const requestedAuditLimit = Math.max(1, Math.min(Number(req.nextUrl.searchParams.get('auditLimit') || '60') || 60, 60))
   const hasExplicitStart = req.nextUrl.searchParams.has('start')
   const requestedStartIndex = hasExplicitStart ? Number(req.nextUrl.searchParams.get('start')) : NaN
   const now = new Date()
@@ -1240,7 +1240,7 @@ export async function GET(req: NextRequest) {
     }
     await warmAmazonProductCache(20).catch(() => {})
     await syncUnavailableListings().catch(() => {})
-    await auditActiveAmazonListings(16).catch(() => {})
+    await auditActiveAmazonListings(60).catch(() => {})
   })
   return finalizeReport(niches)
 }
