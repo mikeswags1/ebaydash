@@ -423,7 +423,7 @@ export function SettingsTab({
                 Listing autopilot
               </div>
               <div style={{ color: 'var(--sil)', fontSize: '13px', lineHeight: 1.55, maxWidth: '580px' }}>
-                Controls how many approved products StackPilot can list, how fast it runs, and which product pool it can pull from.
+                Controls how many approved products StackPilot can list, how fast it runs, and which product pool it can pull from. When enabled, Pro cron checks this account every 15 minutes.
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -594,6 +594,9 @@ export function SettingsTab({
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', color: 'var(--dim)', fontSize: '12px' }}>
               <span>{autoNicheSummary}</span>
             </div>
+          </div>
+          <div style={{ marginTop: '12px', color: 'var(--dim)', fontSize: '12px', lineHeight: 1.55 }}>
+            Automation only posts from the vetted queue. Pause stops new posts; Emergency stop turns Auto Bulk off immediately for this account.
           </div>
         </div>
 

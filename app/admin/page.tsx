@@ -140,6 +140,40 @@ type NichePerformance = {
   profit: number
 }
 
+type AutomationSummary = {
+  proCron: {
+    sourceMaintenance: string
+    deepCatalog: string
+    autoBulk: string
+    listingAuditBatch: number
+  }
+  autoListing: {
+    totalSettings: number
+    enabledUsers: number
+    runningUsers: number
+    pausedUsers: number
+    emergencyStoppedUsers: number
+    queued: number
+    retry: number
+    processing: number
+    failed: number
+    dueNow: number
+    readyQueue: number
+    listed24h: number
+    averageScore: number
+    oldestDueAt: string | null
+    nextDueAt: string | null
+    latestListedAt: string | null
+  }
+  listingAudit: {
+    activeListings: number
+    markedUnavailable: number
+    dueForAudit: number
+    checked24h: number
+    lastCheckedAt: string | null
+  }
+}
+
 type Stats = {
   ok?: boolean
   generatedAt: string
@@ -186,6 +220,7 @@ type Stats = {
     topNiches: SourceNiche[]
     trendingNiches: TrendingNiche[]
   }
+  automation?: AutomationSummary
   recentListings: RecentListing[]
   problemListings: ProblemListing[]
   nichePerformance: NichePerformance[]
@@ -230,6 +265,40 @@ function formatDuration(value: number) {
   const minutes = Math.floor(seconds / 60)
   const remainder = seconds % 60
   return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`
+}
+
+const EMPTY_AUTOMATION: AutomationSummary = {
+  proCron: {
+    sourceMaintenance: 'Every 30 minutes',
+    deepCatalog: 'Every 6 hours',
+    autoBulk: 'Every 15 minutes',
+    listingAuditBatch: 60,
+  },
+  autoListing: {
+    totalSettings: 0,
+    enabledUsers: 0,
+    runningUsers: 0,
+    pausedUsers: 0,
+    emergencyStoppedUsers: 0,
+    queued: 0,
+    retry: 0,
+    processing: 0,
+    failed: 0,
+    dueNow: 0,
+    readyQueue: 0,
+    listed24h: 0,
+    averageScore: 0,
+    oldestDueAt: null,
+    nextDueAt: null,
+    latestListedAt: null,
+  },
+  listingAudit: {
+    activeListings: 0,
+    markedUnavailable: 0,
+    dueForAudit: 0,
+    checked24h: 0,
+    lastCheckedAt: null,
+  },
 }
 
 function truncate(value: string, length = 58) {
@@ -443,6 +512,7 @@ export default function AdminPage() {
   const continuous = stats.sourceHealth.continuous
   const intelligence = stats.sourceHealth.intelligence
   const autopilot = intelligence?.autopilot
+  const automation = stats.automation ?? EMPTY_AUTOMATION
 
   return (
     <main className="admin-page">
@@ -482,6 +552,67 @@ export default function AdminPage() {
           <MetricCard label="Continuous Queue" value={formatNumber(continuous.products)} detail={`Version ${continuous.version || 0}`} />
           <MetricCard label="Niche Caches" value={`${cache.readyNiches}/${cache.totalNiches}`} detail={`${cache.staleNiches} stale caches`} />
         </div>
+
+        <section className="admin-panel admin-automation-panel">
+          <div className="admin-panel-head">
+            <div>
+              <span>Automation command center</span>
+              <h2>What is running automatically</h2>
+            </div>
+            <span className={`admin-pill admin-pill-${automation.autoListing.runningUsers > 0 ? 'good' : automation.autoListing.enabledUsers > 0 ? 'watch' : 'neutral'}`}>
+              {automation.autoListing.runningUsers > 0 ? 'Live' : automation.autoListing.enabledUsers > 0 ? 'Paused' : 'Manual'}
+            </span>
+          </div>
+          <div className="admin-automation-grid">
+            <div>
+              <span>Source maintenance</span>
+              <strong>{automation.proCron.sourceMaintenance}</strong>
+              <p>Reprices products, refreshes availability signals, cleans bad source rows, and audits active Amazon status.</p>
+            </div>
+            <div>
+              <span>Deep catalog crawl</span>
+              <strong>{automation.proCron.deepCatalog}</strong>
+              <p>Restocks weak niches, keeps the source pool deep, and refreshes Continuous Listing inventory.</p>
+            </div>
+            <div>
+              <span>Auto Bulk Listing</span>
+              <strong>{automation.proCron.autoBulk}</strong>
+              <p>Rotates through enabled users and respects pause, emergency stop, max/hour, cooldown, and queue readiness.</p>
+            </div>
+            <div>
+              <span>Active listing audit</span>
+              <strong>{automation.proCron.listingAuditBatch}/run</strong>
+              <p>Checks live listings against Amazon availability and marks unavailable products for removal.</p>
+            </div>
+          </div>
+          <div className="admin-health-grid">
+            <SmallStat label="Auto Bulk users" value={`${automation.autoListing.runningUsers}/${automation.autoListing.enabledUsers}`} />
+            <SmallStat label="Ready queue" value={formatNumber(automation.autoListing.readyQueue)} />
+            <SmallStat label="Due now" value={formatNumber(automation.autoListing.dueNow)} />
+            <SmallStat label="Listed 24h" value={formatNumber(automation.autoListing.listed24h)} />
+            <SmallStat label="Queue score" value={automation.autoListing.averageScore ? automation.autoListing.averageScore.toFixed(1) : '0'} />
+            <SmallStat label="Failed queue" value={formatNumber(automation.autoListing.failed)} />
+            <SmallStat label="Audit due" value={formatNumber(automation.listingAudit.dueForAudit)} />
+            <SmallStat label="Unavailable" value={formatNumber(automation.listingAudit.markedUnavailable)} />
+          </div>
+          <div className="admin-automation-notes">
+            <div>
+              <strong>Next Auto Bulk job</strong>
+              <span>{formatDateTime(automation.autoListing.nextDueAt || automation.autoListing.oldestDueAt)}</span>
+            </div>
+            <div>
+              <strong>Last Auto Bulk listing</strong>
+              <span>{formatDateTime(automation.autoListing.latestListedAt)}</span>
+            </div>
+            <div>
+              <strong>Last Amazon audit</strong>
+              <span>{formatDateTime(automation.listingAudit.lastCheckedAt)}</span>
+            </div>
+          </div>
+          <div className="admin-subtle-line">
+            This is the launch safety view: clients can use the dashboard normally while these background jobs keep product pools stocked, queues rotating, and stale Amazon listings under review.
+          </div>
+        </section>
 
         <section className="admin-grid admin-grid-2">
           <div className="admin-panel">
@@ -723,7 +854,7 @@ export default function AdminPage() {
             </table>
           </div>
           <div className="admin-subtle-line">
-            The daily Vercel cron refreshes the catalog safely; admin refreshes can repair a weak niche immediately without adding extra scheduled jobs.
+            Pro cron runs source maintenance every 30 minutes and deeper catalog crawls every 6 hours; admin refreshes are manual force repairs for weak niches.
           </div>
         </section>
 

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
 import { queryRows } from '@/lib/db'
+import { ensureAutoListingTables } from '@/lib/auto-listing/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { EBAY_DEFAULT_FEE_RATE } from '@/lib/listing-pricing'
 import { ensureProductSourceTables } from '@/lib/product-source-engine'
@@ -120,6 +121,35 @@ type ContinuousRow = {
   cached_at?: string | null
 }
 
+type AutoListingSettingsSummaryRow = {
+  total_settings?: number | string
+  enabled_users?: number | string
+  running_users?: number | string
+  paused_users?: number | string
+  emergency_stopped_users?: number | string
+}
+
+type AutoListingQueueSummaryRow = {
+  queued?: number | string
+  retry?: number | string
+  processing?: number | string
+  failed?: number | string
+  due_now?: number | string
+  listed_24h?: number | string
+  avg_score?: number | string | null
+  oldest_due_at?: string | null
+  next_due_at?: string | null
+  latest_listed_at?: string | null
+}
+
+type ListingAvailabilitySummaryRow = {
+  active_listings?: number | string
+  marked_unavailable?: number | string
+  due_for_audit?: number | string
+  checked_24h?: number | string
+  last_checked_at?: string | null
+}
+
 function toNumber(value: unknown) {
   const parsed = typeof value === 'number' ? value : Number(value || 0)
   return Number.isFinite(parsed) ? parsed : 0
@@ -139,6 +169,7 @@ export async function GET(req: NextRequest) {
 
   await Promise.all([
     ensureListedAsinsFinancialColumns().catch(() => {}),
+    ensureAutoListingTables().catch(() => {}),
     ensureProductSourceTables().catch(() => {}),
     refreshSourceIntelligenceState({ applyScores: false }).catch(() => null),
   ])
@@ -156,6 +187,9 @@ export async function GET(req: NextRequest) {
     trendingNicheRows,
     cacheRows,
     continuousRows,
+    autoListingSettingsSummaryRows,
+    autoListingQueueSummaryRows,
+    listingAvailabilitySummaryRows,
     sourceIntelligenceSummary,
   ] = await Promise.all([
     queryRows<UserRow>`
@@ -404,6 +438,53 @@ export async function GET(req: NextRequest) {
       FROM product_cache
       WHERE niche = '__continuous_listing__'
     `.catch(() => []),
+    queryRows<AutoListingSettingsSummaryRow>`
+      SELECT
+        COUNT(*)::int AS total_settings,
+        COUNT(*) FILTER (WHERE enabled = TRUE)::int AS enabled_users,
+        COUNT(*) FILTER (WHERE enabled = TRUE AND paused = FALSE AND emergency_stopped = FALSE)::int AS running_users,
+        COUNT(*) FILTER (WHERE paused = TRUE)::int AS paused_users,
+        COUNT(*) FILTER (WHERE emergency_stopped = TRUE)::int AS emergency_stopped_users
+      FROM auto_listing_settings
+    `.catch(() => []),
+    queryRows<AutoListingQueueSummaryRow>`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'queued')::int AS queued,
+        COUNT(*) FILTER (WHERE status = 'retry')::int AS retry,
+        COUNT(*) FILTER (WHERE status = 'processing')::int AS processing,
+        COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
+        COUNT(*) FILTER (
+          WHERE status IN ('queued', 'retry')
+            AND (scheduled_at IS NULL OR scheduled_at <= NOW())
+        )::int AS due_now,
+        COUNT(*) FILTER (
+          WHERE status = 'completed'
+            AND listed_at >= NOW() - INTERVAL '24 hours'
+        )::int AS listed_24h,
+        ROUND(AVG(score) FILTER (WHERE status IN ('queued', 'retry')), 2) AS avg_score,
+        MIN(scheduled_at) FILTER (WHERE status IN ('queued', 'retry')) AS oldest_due_at,
+        MIN(scheduled_at) FILTER (
+          WHERE status IN ('queued', 'retry')
+            AND scheduled_at > NOW()
+        ) AS next_due_at,
+        MAX(listed_at) FILTER (WHERE status = 'completed') AS latest_listed_at
+      FROM auto_listing_queue
+    `.catch(() => []),
+    queryRows<ListingAvailabilitySummaryRow>`
+      SELECT
+        COUNT(*)::int AS active_listings,
+        COUNT(*) FILTER (WHERE amazon_available = FALSE)::int AS marked_unavailable,
+        COUNT(*) FILTER (
+          WHERE amazon_status_checked_at IS NULL
+            OR amazon_status_checked_at < NOW() - INTERVAL '24 hours'
+        )::int AS due_for_audit,
+        COUNT(*) FILTER (
+          WHERE amazon_status_checked_at >= NOW() - INTERVAL '24 hours'
+        )::int AS checked_24h,
+        MAX(amazon_status_checked_at) AS last_checked_at
+      FROM listed_asins
+      WHERE ended_at IS NULL
+    `.catch(() => []),
     getSourceEngineIntelligenceSummary().catch(() => null),
   ])
 
@@ -419,10 +500,17 @@ export async function GET(req: NextRequest) {
   const source = sourceRows[0] || {}
   const cache = cacheRows[0] || {}
   const continuous = continuousRows[0] || {}
+  const autoListingSettingsSummary = autoListingSettingsSummaryRows[0] || {}
+  const autoListingQueueSummary = autoListingQueueSummaryRows[0] || {}
+  const listingAvailabilitySummary = listingAvailabilitySummaryRows[0] || {}
   const sourceTotal = toNumber(source.total)
   const continuousCount = toNumber(continuous.count)
   const readyNiches = toNumber(cache.ready_niches)
   const totalNiches = toNumber(cache.total_niches)
+  const runningAutoUsers = toNumber(autoListingSettingsSummary.running_users)
+  const readyAutoQueue = toNumber(autoListingQueueSummary.queued) + toNumber(autoListingQueueSummary.retry)
+  const dueListingAudits = toNumber(listingAvailabilitySummary.due_for_audit)
+  const activeAuditListings = toNumber(listingAvailabilitySummary.active_listings)
   let autopilotUpdate: Awaited<ReturnType<typeof reserveSourceAutopilotRun>> | null = null
   const weakAutopilotNiches = (sourceIntelligenceSummary?.recommendations || [])
     .filter((item) => item.readyProducts < 30 || item.cacheProducts < 30 || item.healthScore < 65)
@@ -486,6 +574,8 @@ export async function GET(req: NextRequest) {
   if (sourceIntelligenceWithAutopilot?.failedJobs24h) warnings.push(`${sourceIntelligenceWithAutopilot.failedJobs24h} source engine job(s) failed in the last 24 hours.`)
   if (sourceIntelligenceWithAutopilot?.weakNiches) warnings.push(`${sourceIntelligenceWithAutopilot.weakNiches} niche(s) need source-engine self-healing.`)
   if (sourceIntelligenceWithAutopilot?.autopilot?.scheduledNow) warnings.push('Source autopilot started a background repair job.')
+  if (runningAutoUsers > 0 && readyAutoQueue === 0) warnings.push('Auto Bulk is enabled but has no ready queue items yet.')
+  if (dueListingAudits > Math.max(60, activeAuditListings * 0.5)) warnings.push('A large share of active listings are due for Amazon availability audit.')
   if (toNumber(summary.low_image_active) > 0) warnings.push(`${toNumber(summary.low_image_active)} active listing(s) have fewer than 2 stored images.`)
   if (toNumber(summary.missing_category_active) > 0) warnings.push(`${toNumber(summary.missing_category_active)} active listing(s) are missing a stored category id.`)
 
@@ -585,6 +675,39 @@ export async function GET(req: NextRequest) {
           status,
         }
       }),
+    },
+    automation: {
+      proCron: {
+        sourceMaintenance: 'Every 30 minutes',
+        deepCatalog: 'Every 6 hours',
+        autoBulk: 'Every 15 minutes',
+        listingAuditBatch: 60,
+      },
+      autoListing: {
+        totalSettings: toNumber(autoListingSettingsSummary.total_settings),
+        enabledUsers: toNumber(autoListingSettingsSummary.enabled_users),
+        runningUsers: runningAutoUsers,
+        pausedUsers: toNumber(autoListingSettingsSummary.paused_users),
+        emergencyStoppedUsers: toNumber(autoListingSettingsSummary.emergency_stopped_users),
+        queued: toNumber(autoListingQueueSummary.queued),
+        retry: toNumber(autoListingQueueSummary.retry),
+        processing: toNumber(autoListingQueueSummary.processing),
+        failed: toNumber(autoListingQueueSummary.failed),
+        dueNow: toNumber(autoListingQueueSummary.due_now),
+        readyQueue: readyAutoQueue,
+        listed24h: toNumber(autoListingQueueSummary.listed_24h),
+        averageScore: toNumber(autoListingQueueSummary.avg_score),
+        oldestDueAt: toIso(autoListingQueueSummary.oldest_due_at),
+        nextDueAt: toIso(autoListingQueueSummary.next_due_at),
+        latestListedAt: toIso(autoListingQueueSummary.latest_listed_at),
+      },
+      listingAudit: {
+        activeListings: activeAuditListings,
+        markedUnavailable: toNumber(listingAvailabilitySummary.marked_unavailable),
+        dueForAudit: dueListingAudits,
+        checked24h: toNumber(listingAvailabilitySummary.checked_24h),
+        lastCheckedAt: toIso(listingAvailabilitySummary.last_checked_at),
+      },
     },
     recentListings: recentListingRows.map((row) => ({
       id: row.id,
