@@ -1,3 +1,4 @@
+import { after, NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { apiError, apiOk } from '@/lib/api-response'
@@ -5,7 +6,7 @@ import { queryRows } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { EBAY_DEFAULT_FEE_RATE } from '@/lib/listing-pricing'
 import { ensureProductSourceTables } from '@/lib/product-source-engine'
-import { getSourceEngineIntelligenceSummary, refreshSourceIntelligenceState } from '@/lib/source-intelligence'
+import { getSourceEngineIntelligenceSummary, refreshSourceIntelligenceState, reserveSourceAutopilotRun } from '@/lib/source-intelligence'
 
 const ADMIN_EMAILS = ['msawaged12@gmail.com', 'mikeswags1@gmail.com']
 
@@ -130,7 +131,7 @@ function toIso(value: unknown) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.email || !ADMIN_EMAILS.includes(session.user.email)) {
     return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
@@ -422,6 +423,58 @@ export async function GET() {
   const continuousCount = toNumber(continuous.count)
   const readyNiches = toNumber(cache.ready_niches)
   const totalNiches = toNumber(cache.total_niches)
+  let autopilotUpdate: Awaited<ReturnType<typeof reserveSourceAutopilotRun>> | null = null
+  const weakAutopilotNiches = (sourceIntelligenceSummary?.recommendations || [])
+    .filter((item) => item.readyProducts < 30 || item.cacheProducts < 30 || item.healthScore < 65)
+    .map((item) => item.niche)
+    .filter(Boolean)
+    .slice(0, 2)
+  const shouldAutopilotRepair =
+    weakAutopilotNiches.length > 0 ||
+    continuousCount < 90 ||
+    (sourceTotal > 0 && toNumber(source.stale) > sourceTotal * 0.45)
+
+  if (shouldAutopilotRepair) {
+    const reason = weakAutopilotNiches.length > 0
+      ? `Repair weak niche cache: ${weakAutopilotNiches.join(', ')}`
+      : continuousCount < 90
+        ? 'Rebuild Continuous Listing queue below 90 ready products.'
+        : 'Refresh stale source pool products.'
+    autopilotUpdate = await reserveSourceAutopilotRun({
+      reason,
+      niches: weakAutopilotNiches,
+      cooldownMinutes: 75,
+    }).catch(() => null)
+
+    if (autopilotUpdate?.reserved) {
+      const origin = req.nextUrl.origin
+      const cronSecret = process.env.CRON_SECRET || ''
+      const headers: Record<string, string> = cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {}
+      const repairUrl = weakAutopilotNiches.length > 0
+        ? `${origin}/api/cron/refresh-products?catalog=1&wait=1&autopilot=1&batch=${weakAutopilotNiches.length}&niche=${encodeURIComponent(weakAutopilotNiches.join(','))}`
+        : `${origin}/api/cron/refresh-products?sourceOnly=1&autopilot=1`
+
+      after(async () => {
+        await fetch(repairUrl, {
+          headers,
+          signal: AbortSignal.timeout(285000),
+        }).catch(() => null)
+      })
+    }
+  }
+
+  const sourceIntelligenceWithAutopilot = sourceIntelligenceSummary
+    ? {
+        ...sourceIntelligenceSummary,
+        autopilot: {
+          ...sourceIntelligenceSummary.autopilot,
+          scheduledNow: Boolean(autopilotUpdate?.reserved),
+          lastReason: autopilotUpdate?.reason || sourceIntelligenceSummary.autopilot?.lastReason || null,
+          lastNiches: autopilotUpdate?.niches?.length ? autopilotUpdate.niches : sourceIntelligenceSummary.autopilot?.lastNiches || [],
+          nextRunAfter: autopilotUpdate?.nextRunAfter || sourceIntelligenceSummary.autopilot?.nextRunAfter || null,
+        },
+      }
+    : null
 
   const warnings: string[] = []
   if (users.length === 0) warnings.push('No user accounts exist yet.')
@@ -430,8 +483,9 @@ export async function GET() {
   if (continuousCount < 90) warnings.push('Continuous Listing pool has fewer than 90 ready products.')
   if (totalNiches > 0 && readyNiches < Math.max(1, Math.floor(totalNiches * 0.7))) warnings.push('Several niche caches are below the 30-product ready target.')
   if (toNumber(source.stale) > sourceTotal * 0.45) warnings.push('A large share of source products are older than 7 days.')
-  if (sourceIntelligenceSummary?.failedJobs24h) warnings.push(`${sourceIntelligenceSummary.failedJobs24h} source engine job(s) failed in the last 24 hours.`)
-  if (sourceIntelligenceSummary?.weakNiches) warnings.push(`${sourceIntelligenceSummary.weakNiches} niche(s) need source-engine self-healing.`)
+  if (sourceIntelligenceWithAutopilot?.failedJobs24h) warnings.push(`${sourceIntelligenceWithAutopilot.failedJobs24h} source engine job(s) failed in the last 24 hours.`)
+  if (sourceIntelligenceWithAutopilot?.weakNiches) warnings.push(`${sourceIntelligenceWithAutopilot.weakNiches} niche(s) need source-engine self-healing.`)
+  if (sourceIntelligenceWithAutopilot?.autopilot?.scheduledNow) warnings.push('Source autopilot started a background repair job.')
   if (toNumber(summary.low_image_active) > 0) warnings.push(`${toNumber(summary.low_image_active)} active listing(s) have fewer than 2 stored images.`)
   if (toNumber(summary.missing_category_active) > 0) warnings.push(`${toNumber(summary.missing_category_active)} active listing(s) are missing a stored category id.`)
 
@@ -497,7 +551,7 @@ export async function GET() {
         version: toNumber(continuous.version),
         cachedAt: toIso(continuous.cached_at),
       },
-      intelligence: sourceIntelligenceSummary,
+      intelligence: sourceIntelligenceWithAutopilot,
       topNiches: sourceNicheRows.map((row) => ({
         name: row.name || 'Unassigned',
         count: toNumber(row.count),

@@ -98,6 +98,17 @@ type SourceRun = {
   error: string | null
 }
 
+type SourceAutopilot = {
+  enabled: boolean
+  available: boolean
+  scheduledNow?: boolean
+  nextRunAfter: string | null
+  lastStartedAt: string | null
+  lastReason: string | null
+  lastNiches: string[]
+  updatedAt: string | null
+}
+
 type SourceIntelligenceSummary = {
   status: 'healthy' | 'self-healing' | 'watch' | string
   lastRun: SourceRun | null
@@ -108,6 +119,7 @@ type SourceIntelligenceSummary = {
   weakNiches: number
   averageNicheHealth: number
   failedJobs24h: number
+  autopilot: SourceAutopilot | null
   recentRuns: SourceRun[]
   recommendations: SourceRecommendation[]
 }
@@ -430,6 +442,7 @@ export default function AdminPage() {
   const cache = stats.sourceHealth.cache
   const continuous = stats.sourceHealth.continuous
   const intelligence = stats.sourceHealth.intelligence
+  const autopilot = intelligence?.autopilot
 
   return (
     <main className="admin-page">
@@ -508,6 +521,26 @@ export default function AdminPage() {
             <div className="admin-subtle-line">
               Scores combine product quality, profit, ROI, freshness, images, listing outcomes, and niche health. Weak niches are prioritized on the next deep refresh.
             </div>
+            <div className={`admin-autopilot-card ${autopilot?.scheduledNow ? 'is-running' : autopilot?.available ? 'is-ready' : 'is-cooling'}`}>
+              <div>
+                <span>Autopilot</span>
+                <strong>
+                  {autopilot?.scheduledNow
+                    ? 'Repair running in background'
+                    : autopilot?.available
+                      ? 'Standing by'
+                      : 'Cooling down safely'}
+                </strong>
+                <p>
+                  {autopilot?.lastReason || 'Watches weak niches, stale queues, and source freshness automatically.'}
+                </p>
+              </div>
+              <div>
+                <small>Last started {formatDateTime(autopilot?.lastStartedAt || null)}</small>
+                <small>Next allowed {autopilot?.available ? 'Now' : formatDateTime(autopilot?.nextRunAfter || null)}</small>
+                {autopilot?.lastNiches?.length ? <small>Target: {autopilot.lastNiches.join(', ')}</small> : null}
+              </div>
+            </div>
           </div>
 
           <div className="admin-panel">
@@ -578,7 +611,7 @@ export default function AdminPage() {
               </button>
               <button className="admin-tool" disabled={pool.state === 'running'} onClick={() => pool.trigger('catalog')}>
                 <strong>Deep Catalog Crawl</strong>
-                <span>Heavy on-demand crawl (3 niches). Production runs hourly background catalog via cron (2-job limit keeps auto-listing).</span>
+                <span>Heavy on-demand crawl. Autopilot now repairs weak niches automatically; this is only for manual force-refresh.</span>
               </button>
               <button className="admin-tool" disabled={toolState.active !== null} onClick={() => runTool('setup', 'Database setup', '/api/setup-db')}>
                 <strong>Repair Database</strong>

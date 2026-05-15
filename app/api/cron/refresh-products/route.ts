@@ -1003,6 +1003,7 @@ export async function GET(req: NextRequest) {
   const report: Record<string, unknown> = {}
   const rollingRefresh = req.nextUrl.searchParams.get('rolling') === '1'
   const sourceOnly = req.nextUrl.searchParams.get('sourceOnly') === '1'
+  const autopilotRepair = req.nextUrl.searchParams.get('autopilot') === '1'
   const backgroundCatalog = req.nextUrl.searchParams.get('backgroundCatalog') === '1'
   const catalogRefresh =
     req.nextUrl.searchParams.get('catalog') === '1' ||
@@ -1014,8 +1015,11 @@ export async function GET(req: NextRequest) {
   const hasExplicitStart = req.nextUrl.searchParams.has('start')
   const requestedStartIndex = hasExplicitStart ? Number(req.nextUrl.searchParams.get('start')) : NaN
   const now = new Date()
-  const runMode = sourceOnly ? 'sourceOnly' : backgroundCatalog ? 'backgroundCatalog' : catalogRefresh ? 'catalog' : fullRefresh ? 'full' : 'rolling'
-  const runTrigger = isVercelCron ? 'vercel-cron' : authHeader ? 'cron-secret' : 'manual'
+  const runMode = autopilotRepair
+    ? sourceOnly ? 'autopilot-sourceOnly' : 'autopilot-catalog'
+    : sourceOnly ? 'sourceOnly' : backgroundCatalog ? 'backgroundCatalog' : catalogRefresh ? 'catalog' : fullRefresh ? 'full' : 'rolling'
+  const runTrigger = autopilotRepair ? 'source-autopilot' : isVercelCron ? 'vercel-cron' : authHeader ? 'cron-secret' : 'manual'
+  if (autopilotRepair) report.autopilot = true
 
   const finalizeReport = async (nichesAttempted: string[] = []) => {
     const selfHealing = await runSourceSelfHealing({ applyScores: true, deactivateWeak: true }).catch(() => null)

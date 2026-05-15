@@ -3535,6 +3535,54 @@ textarea{resize:vertical;min-height:100px}
   font-size:14px;
   font-weight:850;
 }
+.admin-autopilot-card{
+  display:flex;
+  justify-content:space-between;
+  gap:18px;
+  margin-top:14px;
+  border:1px solid rgba(125,211,252,0.14);
+  border-radius:8px;
+  background:rgba(255,255,255,0.035);
+  padding:14px;
+}
+.admin-autopilot-card span{
+  display:block;
+  color:#6dd3ff;
+  font-size:10px;
+  font-weight:850;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+}
+.admin-autopilot-card strong{
+  display:block;
+  color:#f8fcff;
+  font-size:15px;
+  margin-top:5px;
+}
+.admin-autopilot-card p{
+  color:#91b6cc;
+  font-size:12px;
+  line-height:1.45;
+  margin-top:6px;
+}
+.admin-autopilot-card small{
+  display:block;
+  color:#86a9bf;
+  font-size:11px;
+  line-height:1.45;
+  text-align:right;
+}
+.admin-autopilot-card.is-running{
+  border-color:rgba(52,211,153,0.30);
+  background:rgba(52,211,153,0.07);
+}
+.admin-autopilot-card.is-ready{
+  border-color:rgba(56,189,248,0.24);
+}
+.admin-autopilot-card.is-cooling{
+  border-color:rgba(251,191,36,0.22);
+  background:rgba(251,191,36,0.05);
+}
 .admin-flow-grid{
   display:grid;
   grid-template-columns:repeat(5,minmax(0,1fr));
@@ -3844,6 +3892,8 @@ textarea{resize:vertical;min-height:100px}
   .admin-metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .admin-tool-grid{grid-template-columns:1fr}
   .admin-flow-grid,.admin-niche-manager{grid-template-columns:1fr}
+  .admin-autopilot-card{flex-direction:column}
+  .admin-autopilot-card small{text-align:left}
   .admin-managed-niche{flex-direction:column}
   .admin-managed-niche > div:last-child{justify-content:flex-start}
 }

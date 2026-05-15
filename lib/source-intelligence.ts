@@ -64,6 +64,15 @@ type SourceRecommendationRow = {
   updated_at: string | null
 }
 
+type SourceAutopilotLockRow = {
+  name: string
+  locked_until: string | null
+  last_started_at: string | null
+  last_reason: string | null
+  last_niches: unknown
+  updated_at: string | null
+}
+
 function toNumber(value: unknown) {
   const parsed = typeof value === 'number' ? value : Number(value || 0)
   return Number.isFinite(parsed) ? parsed : 0
@@ -77,6 +86,19 @@ function toIso(value: unknown) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
+}
+
+function parseStringArray(value: unknown) {
+  if (Array.isArray(value)) return value.map((item) => String(item || '')).filter(Boolean)
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed.map((item) => String(item || '')).filter(Boolean) : []
+    } catch {
+      return []
+    }
+  }
+  return []
 }
 
 function staleHours(value: string | null) {
@@ -211,6 +233,17 @@ export async function ensureSourceIntelligenceTables() {
     )
   `.catch(() => {})
   await sql`CREATE INDEX IF NOT EXISTS source_niche_intelligence_health_idx ON source_niche_intelligence (health_score ASC, ready_products ASC)`.catch(() => {})
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS source_autopilot_locks (
+      name TEXT PRIMARY KEY,
+      locked_until TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_started_at TIMESTAMPTZ,
+      last_reason TEXT,
+      last_niches JSONB NOT NULL DEFAULT '[]'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `.catch(() => {})
 }
 
 export async function refreshSourceIntelligenceState(options: { applyScores?: boolean } = {}) {
@@ -544,7 +577,7 @@ export async function getSourceRecommendations(limit = 8) {
 
 export async function getSourceEngineIntelligenceSummary() {
   await ensureSourceIntelligenceTables()
-  const [runRows, todayRows, readyRows, failedRows, recommendations] = await Promise.all([
+  const [runRows, todayRows, readyRows, failedRows, recommendations, autopilot] = await Promise.all([
     queryRows<SourceRunRow>`
       SELECT id, mode, trigger, status, products_found, products_rejected, ready_to_list, duration_ms, created_at, error
       FROM source_engine_runs
@@ -573,6 +606,7 @@ export async function getSourceEngineIntelligenceSummary() {
         AND created_at > NOW() - INTERVAL '24 hours'
     `.catch(() => []),
     getSourceRecommendations(8),
+    getSourceAutopilotStatus(),
   ])
 
   const latestRun = runRows[0] || null
@@ -597,6 +631,7 @@ export async function getSourceEngineIntelligenceSummary() {
     weakNiches: toNumber(readyRows[0]?.weak_niches),
     averageNicheHealth: toNumber(readyRows[0]?.avg_health),
     failedJobs24h: toNumber(failedRows[0]?.failed_jobs),
+    autopilot,
     recentRuns: runRows.map((row) => ({
       id: String(row.id),
       mode: row.mode,
@@ -610,6 +645,80 @@ export async function getSourceEngineIntelligenceSummary() {
       error: row.error,
     })),
     recommendations,
+  }
+}
+
+export async function getSourceAutopilotStatus() {
+  await ensureSourceIntelligenceTables()
+  const rows = await queryRows<SourceAutopilotLockRow>`
+    SELECT name, locked_until, last_started_at, last_reason, last_niches, updated_at
+    FROM source_autopilot_locks
+    WHERE name = 'source-repair'
+    LIMIT 1
+  `.catch(() => [])
+
+  const row = rows[0]
+  const lockedUntil = toIso(row?.locked_until)
+  const lockedUntilDate = lockedUntil ? new Date(lockedUntil) : null
+  const available = !lockedUntilDate || Number.isNaN(lockedUntilDate.getTime()) || lockedUntilDate.getTime() <= Date.now()
+
+  return {
+    enabled: true,
+    available,
+    nextRunAfter: lockedUntil,
+    lastStartedAt: toIso(row?.last_started_at),
+    lastReason: row?.last_reason || null,
+    lastNiches: parseStringArray(row?.last_niches),
+    updatedAt: toIso(row?.updated_at),
+  }
+}
+
+export async function reserveSourceAutopilotRun(input: {
+  reason: string
+  niches?: string[]
+  cooldownMinutes?: number
+}) {
+  await ensureSourceIntelligenceTables()
+  const cooldownMinutes = Math.max(20, Math.min(240, Math.round(input.cooldownMinutes || 75)))
+  const niches = Array.from(new Set((input.niches || []).map((niche) => niche.trim()).filter(Boolean))).slice(0, 3)
+  const reason = input.reason.slice(0, 240)
+  const rows = await queryRows<SourceAutopilotLockRow>`
+    INSERT INTO source_autopilot_locks (
+      name, locked_until, last_started_at, last_reason, last_niches, updated_at
+    )
+    VALUES (
+      'source-repair',
+      NOW() + (${cooldownMinutes} * INTERVAL '1 minute'),
+      NOW(),
+      ${reason},
+      ${JSON.stringify(niches)}::jsonb,
+      NOW()
+    )
+    ON CONFLICT (name) DO UPDATE SET
+      locked_until = EXCLUDED.locked_until,
+      last_started_at = EXCLUDED.last_started_at,
+      last_reason = EXCLUDED.last_reason,
+      last_niches = EXCLUDED.last_niches,
+      updated_at = NOW()
+    WHERE source_autopilot_locks.locked_until <= NOW()
+    RETURNING name, locked_until, last_started_at, last_reason, last_niches, updated_at
+  `.catch(() => [])
+
+  const reserved = Boolean(rows[0])
+  const status = reserved ? rows[0] : (await queryRows<SourceAutopilotLockRow>`
+    SELECT name, locked_until, last_started_at, last_reason, last_niches, updated_at
+    FROM source_autopilot_locks
+    WHERE name = 'source-repair'
+    LIMIT 1
+  `.catch(() => []))[0]
+
+  return {
+    reserved,
+    reason: status?.last_reason || reason,
+    niches: parseStringArray(status?.last_niches),
+    nextRunAfter: toIso(status?.locked_until),
+    lastStartedAt: toIso(status?.last_started_at),
+    updatedAt: toIso(status?.updated_at),
   }
 }
 
