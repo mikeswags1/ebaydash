@@ -1,5 +1,6 @@
 import type { AutoListingSettings, ScoredCandidate } from '@/lib/auto-listing/types'
 import { queryRows } from '@/lib/db'
+import { ensureProductSourceTables } from '@/lib/product-source-engine'
 
 function parseNumber(value: unknown): number {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0
@@ -18,6 +19,7 @@ function modeRiskMultiplier(mode: AutoListingSettings['mode']) {
 }
 
 export async function getTopAutoListingCandidates(userId: string | number, settings: AutoListingSettings, limit = 120) {
+  await ensureProductSourceTables()
   const allowedNiches = settings.allowed_niches || []
   const nicheFilter = allowedNiches.length > 0
 
@@ -35,22 +37,32 @@ export async function getTopAutoListingCandidates(userId: string | number, setti
     rating: string | number | null
     review_count: number | null
     total_score: string | number | null
+    intelligence_score: string | number | null
+    source_quality: string | null
     raw: Record<string, unknown> | null
     last_seen_at: string
   }>`
     SELECT
       psi.asin, psi.title, psi.source_niche, psi.amazon_price, psi.ebay_price, psi.profit, psi.roi,
-      psi.image_url, psi.risk, psi.sales_volume, psi.rating, psi.review_count, psi.total_score, psi.raw,
+      psi.image_url, psi.risk, psi.sales_volume, psi.rating, psi.review_count, psi.total_score,
+      psi.intelligence_score, psi.source_quality, psi.raw,
       psi.last_seen_at
     FROM product_source_items psi
+    LEFT JOIN amazon_product_cache apc ON UPPER(apc.asin) = UPPER(psi.asin)
     WHERE psi.active = TRUE
       AND psi.roi >= ${settings.min_roi}
+      AND psi.profit >= 3
+      AND psi.risk <> 'HIGH'
+      AND psi.image_url IS NOT NULL
+      AND psi.image_url <> ''
+      AND COALESCE(psi.source_quality, 'candidate') <> 'reject'
+      AND COALESCE(apc.available, TRUE) <> FALSE
       AND (${nicheFilter} = FALSE OR psi.source_niche = ANY(${allowedNiches}::text[]))
       AND NOT EXISTS (
         SELECT 1 FROM listed_asins la
         WHERE la.user_id = ${userId} AND la.asin = psi.asin AND la.ended_at IS NULL
       )
-    ORDER BY psi.total_score DESC NULLS LAST
+    ORDER BY psi.intelligence_score DESC NULLS LAST, psi.total_score DESC NULLS LAST
     LIMIT ${Math.max(10, Math.min(800, limit))}
   `.catch(() => [])
 
@@ -59,7 +71,7 @@ export async function getTopAutoListingCandidates(userId: string | number, setti
 
   const scored: ScoredCandidate[] = rows
     .map((r) => {
-      const baseScore = parseNumber(r.total_score)
+      const baseScore = parseNumber(r.intelligence_score) || parseNumber(r.total_score)
       const roi = parseNumber(r.roi)
       const profit = parseNumber(r.profit)
       const amazonPrice = parseNumber(r.amazon_price)
@@ -67,6 +79,7 @@ export async function getTopAutoListingCandidates(userId: string | number, setti
       const rating = parseNumber(r.rating || 0)
       const reviews = parseNumber(r.review_count || 0)
       const ageHours = clamp((now - new Date(r.last_seen_at).getTime()) / 36e5, 0, 720)
+      const qualityMultiplier = r.source_quality === 'ready' ? 1.08 : r.source_quality === 'stale' ? 0.82 : r.source_quality === 'needs_images' ? 0.72 : 1
 
       // These are *approximations* with current data we have. As we accumulate logs,
       // we can replace placeholders with true historical conversion, validation history, etc.
@@ -94,7 +107,7 @@ export async function getTopAutoListingCandidates(userId: string | number, setti
         staleness: (stalenessPenalty - 1) * 30, // negative or 0
       }
 
-      const scoreRaw = Object.values(scoreBreakdown).reduce((a, b) => a + b, 0) * riskMult
+      const scoreRaw = Object.values(scoreBreakdown).reduce((a, b) => a + b, 0) * riskMult * qualityMultiplier
 
       const selectedReason =
         roi >= settings.min_roi + 25

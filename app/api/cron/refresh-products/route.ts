@@ -9,6 +9,7 @@ import { checkAmazonLiveAvailability } from '@/lib/amazon-availability'
 import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 import { getSeasonalQueryExpansions, loadActiveCustomSourceNicheQueries, mergeTrendingNicheQueries } from '@/lib/source-niches'
+import { getSourceEngineIntelligenceSummary, getWeakSourceNiches, recordSourceEngineRun, runSourceSelfHealing } from '@/lib/source-intelligence'
 
 export const maxDuration = 300
 
@@ -641,6 +642,19 @@ async function refreshNicheScrape(niche: string, options: RefreshOptions = {}): 
 
 async function refreshContinuousCache(): Promise<number> {
   try {
+    const blockedRows = await queryRows<{ asin: string }>`
+      SELECT UPPER(asin) AS asin
+      FROM amazon_product_cache
+      WHERE available = FALSE
+        AND updated_at > NOW() - INTERVAL '14 days'
+      UNION
+      SELECT UPPER(asin) AS asin
+      FROM listed_asins
+      WHERE ended_at IS NULL
+        AND asin IS NOT NULL
+      LIMIT 5000
+    `.catch(() => [])
+    const blockedAsins = new Set(blockedRows.map((row) => String(row.asin || '').toUpperCase()))
     const rows = await queryRows<{ niche: string; results: Array<Record<string, unknown>> }>`
       SELECT niche, results
       FROM product_cache
@@ -657,10 +671,12 @@ async function refreshContinuousCache(): Promise<number> {
         const asin = String(product.asin || '').toUpperCase()
         const title = String(product.title || '')
         if (!asin || seen.has(asin)) continue
+        if (blockedAsins.has(asin)) continue
         if (!title || isRejected(title)) continue
         seen.add(asin)
         const repriced = repriceCachedProduct({ ...product, asin }, row.niche)
         if (!repriced) continue
+        if (repriced.risk === 'HIGH' || Number(repriced.profit || 0) < MIN_PROFIT || Number(repriced.roi || 0) < 30) continue
         products.push(repriced)
         if (products.length >= MAX_CONTINUOUS_POOL_SIZE) break
       }
@@ -998,6 +1014,38 @@ export async function GET(req: NextRequest) {
   const hasExplicitStart = req.nextUrl.searchParams.has('start')
   const requestedStartIndex = hasExplicitStart ? Number(req.nextUrl.searchParams.get('start')) : NaN
   const now = new Date()
+  const runMode = sourceOnly ? 'sourceOnly' : backgroundCatalog ? 'backgroundCatalog' : catalogRefresh ? 'catalog' : fullRefresh ? 'full' : 'rolling'
+  const runTrigger = isVercelCron ? 'vercel-cron' : authHeader ? 'cron-secret' : 'manual'
+
+  const finalizeReport = async (nichesAttempted: string[] = []) => {
+    const selfHealing = await runSourceSelfHealing({ applyScores: true, deactivateWeak: true }).catch(() => null)
+    if (selfHealing) {
+      report.selfHealing = {
+        nichesAnalyzed: selfHealing.nichesAnalyzed,
+        scoredProducts: selfHealing.scoredProducts,
+        deactivatedWeakProducts: selfHealing.deactivatedWeakProducts,
+        weakNiches: selfHealing.weakNiches.slice(0, 5),
+      }
+      report.deactivatedWeakProducts = selfHealing.deactivatedWeakProducts
+    }
+    const intelligenceSummary = await getSourceEngineIntelligenceSummary().catch(() => null)
+    if (intelligenceSummary) report.sourceIntelligence = intelligenceSummary
+    report.durationMs = Date.now() - startedAt
+    await recordSourceEngineRun({
+      mode: runMode,
+      trigger: runTrigger,
+      status: 'success',
+      niches: nichesAttempted,
+      startedAt,
+      metrics: report,
+      recommendations: intelligenceSummary?.recommendations?.map((item) => ({
+        type: item.healthScore < 50 ? 'critical' : item.healthScore < 65 ? 'watch' : 'info',
+        niche: item.niche,
+        message: item.recommendedAction,
+      })),
+    }).catch(() => {})
+    return apiOk({ success: true, ...report })
+  }
 
   if (sourceOnly) {
     // Re-fetch live Amazon prices for stale pool products, then reprice with updated costs
@@ -1012,8 +1060,7 @@ export async function GET(req: NextRequest) {
     report.warmCache = await warmAmazonProductCache(40).catch(() => ({ warmed: 0, failed: 0 }))
     report.unavailableSync = await syncUnavailableListings().catch(() => 'error')
     report.amazonListingAudit = await auditActiveAmazonListings(requestedAuditLimit).catch(() => 'error')
-    report.durationMs = Date.now() - startedAt
-    return apiOk({ success: true, ...report })
+    return finalizeReport([])
   }
 
   // 1. Sync eBay listing statuses for all users
@@ -1067,12 +1114,20 @@ export async function GET(req: NextRequest) {
   const batchSize = explicitNiches.length > 0
     ? explicitNiches.length
     : Math.max(1, Math.min(allNiches.length, Number.isFinite(requestedBatchSize) && requestedBatchSize > 0 ? Math.floor(requestedBatchSize) : defaultBatchSize))
+  const weakNichePriority = explicitNiches.length === 0 && catalogRefresh
+    ? (await getWeakSourceNiches(batchSize + 3).catch(() => [])).filter((niche) => allNiches.includes(niche))
+    : []
 
   // For catalog refresh: use a persistent cursor stored in DB so every click advances
   // to the next 3 niches regardless of whether the scrape succeeded or got blocked.
   let niches: string[]
   if (explicitNiches.length > 0) {
     niches = explicitNiches
+  } else if (catalogRefresh && weakNichePriority.length > 0) {
+    const priority = weakNichePriority.slice(0, batchSize)
+    const fill = allNiches.filter((niche) => !priority.includes(niche)).slice(0, Math.max(0, batchSize - priority.length))
+    niches = [...priority, ...fill].slice(0, batchSize)
+    report.selfHealingPriorityNiches = priority
   } else if (catalogRefresh && !Number.isFinite(requestedStartIndex)) {
     try {
       const cursorRow = await queryRows<{ results: string }>`
@@ -1170,8 +1225,7 @@ export async function GET(req: NextRequest) {
     report.warmCache = await warmAmazonProductCache(20).catch(() => ({ warmed: 0, failed: 0 }))
     try { report.unavailableSync = await syncUnavailableListings() } catch { report.unavailableSync = 'error' }
     try { report.amazonListingAudit = await auditActiveAmazonListings(requestedAuditLimit) } catch { report.amazonListingAudit = 'error' }
-    report.durationMs = Date.now() - startedAt
-    return apiOk({ success: true, ...report })
+    return finalizeReport(niches)
   }
 
   Object.assign(report, await runProductRefresh())
@@ -1184,6 +1238,5 @@ export async function GET(req: NextRequest) {
     await syncUnavailableListings().catch(() => {})
     await auditActiveAmazonListings(16).catch(() => {})
   })
-  report.durationMs = Date.now() - startedAt
-  return apiOk({ success: true, ...report })
+  return finalizeReport(niches)
 }

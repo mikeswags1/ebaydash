@@ -21,6 +21,7 @@ export type SourceEngineProduct = {
   description?: string
   specs?: Array<[string, string]>
   sourceNiche?: string
+  sourceQuality?: string
   qualityScore?: number
   _rating?: number
   _numRatings?: number
@@ -48,6 +49,8 @@ type ProductSourceRow = {
   rating: string | number | null
   review_count: string | number | null
   total_score: string | number | null
+  intelligence_score: string | number | null
+  source_quality: string | null
   raw: Record<string, unknown> | null
 }
 
@@ -188,14 +191,31 @@ function rowToProduct(row: ProductSourceRow): SourceEngineProduct {
     description: typeof raw.description === 'string' ? raw.description : undefined,
     specs: Array.isArray(raw.specs) ? raw.specs as Array<[string, string]> : undefined,
     sourceNiche: row.source_niche || undefined,
+    sourceQuality: row.source_quality || undefined,
     _rating: parseNumber(row.rating),
     _numRatings: Math.round(parseNumber(row.review_count)),
   }
-  product.qualityScore = scoreProduct(product)
+  product.qualityScore = parseNumber(row.intelligence_score) || scoreProduct(product)
   return product
 }
 
 export async function ensureProductSourceTables() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS amazon_product_cache (
+      asin TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      amazon_price NUMERIC(10,2) NOT NULL,
+      primary_image TEXT,
+      images JSONB NOT NULL DEFAULT '[]'::jsonb,
+      features JSONB NOT NULL DEFAULT '[]'::jsonb,
+      description TEXT,
+      specs JSONB NOT NULL DEFAULT '[]'::jsonb,
+      brand TEXT,
+      available BOOLEAN NOT NULL DEFAULT TRUE,
+      source TEXT NOT NULL DEFAULT 'api',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `.catch(() => {})
   await sql`
     CREATE TABLE IF NOT EXISTS product_source_items (
       asin TEXT PRIMARY KEY,
@@ -223,6 +243,11 @@ export async function ensureProductSourceTables() {
   await sql`CREATE INDEX IF NOT EXISTS product_source_items_niche_score_idx ON product_source_items (source_niche, total_score DESC)`.catch(() => {})
   await sql`CREATE INDEX IF NOT EXISTS product_source_items_score_idx ON product_source_items (total_score DESC)`.catch(() => {})
   await sql`CREATE INDEX IF NOT EXISTS product_source_items_seen_idx ON product_source_items (last_seen_at DESC)`.catch(() => {})
+  await sql`ALTER TABLE product_source_items ADD COLUMN IF NOT EXISTS intelligence_score NUMERIC(12,2)`.catch(() => {})
+  await sql`ALTER TABLE product_source_items ADD COLUMN IF NOT EXISTS source_quality TEXT NOT NULL DEFAULT 'candidate'`.catch(() => {})
+  await sql`ALTER TABLE product_source_items ADD COLUMN IF NOT EXISTS last_intelligence_at TIMESTAMPTZ`.catch(() => {})
+  await sql`CREATE INDEX IF NOT EXISTS product_source_items_intelligence_idx ON product_source_items (intelligence_score DESC NULLS LAST)`.catch(() => {})
+  await sql`CREATE INDEX IF NOT EXISTS product_source_items_quality_idx ON product_source_items (active, source_quality, intelligence_score DESC NULLS LAST)`.catch(() => {})
 }
 
 export async function upsertProductSourceItems(inputs: SourceProductInput[]) {
@@ -368,7 +393,7 @@ export async function repriceProductSourceItems(limit = 2500) {
   await ensureProductSourceTables()
   const rows = await queryRows<ProductSourceRow>`
     SELECT asin, title, source_niche, amazon_price, ebay_price, profit, roi, image_url, risk,
-           sales_volume, rating, review_count, total_score, raw
+           sales_volume, rating, review_count, total_score, intelligence_score, source_quality, raw
     FROM product_source_items
     WHERE active = TRUE
     ORDER BY last_seen_at DESC
@@ -403,7 +428,7 @@ export async function refreshProductSourcePrices(options: { limit?: number; stal
 
   const rows = await queryRows<ProductSourceRow & { asin: string }>`
     SELECT asin, title, source_niche, amazon_price, ebay_price, profit, roi, image_url, risk,
-           sales_volume, rating, review_count, total_score, raw
+           sales_volume, rating, review_count, total_score, intelligence_score, source_quality, raw
     FROM product_source_items
     WHERE active = TRUE
       AND last_seen_at < NOW() - INTERVAL '${staleDays} days'
@@ -495,28 +520,45 @@ export async function refreshProductSourcePrices(options: { limit?: number; stal
 }
 
 export async function loadProductSourceProducts(options: { niche?: string | null; limit?: number } = {}) {
+  await ensureProductSourceTables()
   const limit = Math.max(1, Math.min(900, options.limit || 120))
   const rowLimit = Math.min(2500, Math.max(limit, limit * 3))
   try {
     const niche = options.niche?.trim()
     const rows = niche
       ? await queryRows<ProductSourceRow>`
-          SELECT asin, title, source_niche, amazon_price, ebay_price, profit, roi, image_url, risk,
-                 sales_volume, rating, review_count, total_score, raw
-          FROM product_source_items
-          WHERE active = TRUE
-            AND source_niche = ${niche}
-            AND last_seen_at > NOW() - INTERVAL '21 days'
-          ORDER BY total_score DESC, last_seen_at DESC
+          SELECT psi.asin, psi.title, psi.source_niche, psi.amazon_price, psi.ebay_price, psi.profit, psi.roi, psi.image_url, psi.risk,
+                 psi.sales_volume, psi.rating, psi.review_count, psi.total_score, psi.intelligence_score, psi.source_quality, psi.raw
+          FROM product_source_items psi
+          LEFT JOIN amazon_product_cache apc ON UPPER(apc.asin) = UPPER(psi.asin)
+          WHERE psi.active = TRUE
+            AND psi.source_niche = ${niche}
+            AND psi.last_seen_at > NOW() - INTERVAL '21 days'
+            AND psi.profit >= 3
+            AND psi.roi >= 25
+            AND psi.risk <> 'HIGH'
+            AND psi.image_url IS NOT NULL
+            AND psi.image_url <> ''
+            AND COALESCE(psi.source_quality, 'candidate') <> 'reject'
+            AND COALESCE(apc.available, TRUE) <> FALSE
+          ORDER BY psi.intelligence_score DESC NULLS LAST, psi.total_score DESC, psi.last_seen_at DESC
           LIMIT ${rowLimit}
         `
       : await queryRows<ProductSourceRow>`
-          SELECT asin, title, source_niche, amazon_price, ebay_price, profit, roi, image_url, risk,
-                 sales_volume, rating, review_count, total_score, raw
-          FROM product_source_items
-          WHERE active = TRUE
-            AND last_seen_at > NOW() - INTERVAL '21 days'
-          ORDER BY total_score DESC, last_seen_at DESC
+          SELECT psi.asin, psi.title, psi.source_niche, psi.amazon_price, psi.ebay_price, psi.profit, psi.roi, psi.image_url, psi.risk,
+                 psi.sales_volume, psi.rating, psi.review_count, psi.total_score, psi.intelligence_score, psi.source_quality, psi.raw
+          FROM product_source_items psi
+          LEFT JOIN amazon_product_cache apc ON UPPER(apc.asin) = UPPER(psi.asin)
+          WHERE psi.active = TRUE
+            AND psi.last_seen_at > NOW() - INTERVAL '21 days'
+            AND psi.profit >= 3
+            AND psi.roi >= 25
+            AND psi.risk <> 'HIGH'
+            AND psi.image_url IS NOT NULL
+            AND psi.image_url <> ''
+            AND COALESCE(psi.source_quality, 'candidate') <> 'reject'
+            AND COALESCE(apc.available, TRUE) <> FALSE
+          ORDER BY psi.intelligence_score DESC NULLS LAST, psi.total_score DESC, psi.last_seen_at DESC
           LIMIT ${rowLimit}
         `
     return rows

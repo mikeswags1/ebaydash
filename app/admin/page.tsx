@@ -67,6 +67,51 @@ type TrendingNiche = {
   status: 'ready' | 'watch' | 'low'
 }
 
+type SourceRecommendation = {
+  niche: string
+  healthScore: number
+  readyProducts: number
+  cacheProducts: number
+  activeProducts: number
+  staleProducts: number
+  unavailableProducts: number
+  failedQueue30d: number
+  completedQueue30d: number
+  averageProfit: number
+  averageRoi: number
+  learningMultiplier: number
+  recommendedAction: string
+  lastCacheAt: string | null
+  updatedAt: string | null
+}
+
+type SourceRun = {
+  id: string
+  mode: string
+  trigger: string
+  status: string
+  productsFound: number
+  productsRejected: number
+  readyToList: number
+  durationMs: number
+  createdAt: string | null
+  error: string | null
+}
+
+type SourceIntelligenceSummary = {
+  status: 'healthy' | 'self-healing' | 'watch' | string
+  lastRun: SourceRun | null
+  runsToday: number
+  productsFoundToday: number
+  productsRejectedToday: number
+  readyToListProducts: number
+  weakNiches: number
+  averageNicheHealth: number
+  failedJobs24h: number
+  recentRuns: SourceRun[]
+  recommendations: SourceRecommendation[]
+}
+
 type ManagedSourceNiche = {
   name: string
   queries: string[]
@@ -125,6 +170,7 @@ type Stats = {
       version: number
       cachedAt: string | null
     }
+    intelligence: SourceIntelligenceSummary | null
     topNiches: SourceNiche[]
     trendingNiches: TrendingNiche[]
   }
@@ -163,6 +209,15 @@ function formatDateTime(value: string | null) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'Unknown'
   return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
+function formatDuration(value: number) {
+  if (!value) return '0s'
+  const seconds = Math.max(1, Math.round(value / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`
 }
 
 function truncate(value: string, length = 58) {
@@ -374,6 +429,7 @@ export default function AdminPage() {
   const source = stats.sourceHealth.sourceEngine
   const cache = stats.sourceHealth.cache
   const continuous = stats.sourceHealth.continuous
+  const intelligence = stats.sourceHealth.intelligence
 
   return (
     <main className="admin-page">
@@ -413,6 +469,71 @@ export default function AdminPage() {
           <MetricCard label="Continuous Queue" value={formatNumber(continuous.products)} detail={`Version ${continuous.version || 0}`} />
           <MetricCard label="Niche Caches" value={`${cache.readyNiches}/${cache.totalNiches}`} detail={`${cache.staleNiches} stale caches`} />
         </div>
+
+        <section className="admin-grid admin-grid-2">
+          <div className="admin-panel">
+            <div className="admin-panel-head">
+              <div>
+                <span>Source intelligence</span>
+                <h2>Always-on product engine</h2>
+              </div>
+              <span className={`admin-pill admin-pill-${intelligence?.status === 'healthy' ? 'good' : intelligence?.status === 'self-healing' ? 'watch' : 'bad'}`}>
+                {intelligence?.status ? intelligence.status.replace('-', ' ') : 'No data'}
+              </span>
+            </div>
+            <div className="admin-health-grid">
+              <SmallStat label="Found today" value={formatNumber(intelligence?.productsFoundToday || 0)} />
+              <SmallStat label="Rejected today" value={formatNumber(intelligence?.productsRejectedToday || 0)} />
+              <SmallStat label="Ready products" value={formatNumber(intelligence?.readyToListProducts || 0)} />
+              <SmallStat label="Avg niche health" value={`${Math.round(intelligence?.averageNicheHealth || 0)}%`} />
+            </div>
+            <div className="admin-source-intel-row">
+              <div>
+                <strong>Last crawl</strong>
+                <span>{formatDateTime(intelligence?.lastRun?.createdAt || null)}</span>
+              </div>
+              <div>
+                <strong>Runs today</strong>
+                <span>{formatNumber(intelligence?.runsToday || 0)}</span>
+              </div>
+              <div>
+                <strong>Weak niches</strong>
+                <span>{formatNumber(intelligence?.weakNiches || 0)}</span>
+              </div>
+              <div>
+                <strong>Failed jobs</strong>
+                <span>{formatNumber(intelligence?.failedJobs24h || 0)}</span>
+              </div>
+            </div>
+            <div className="admin-subtle-line">
+              Scores combine product quality, profit, ROI, freshness, images, listing outcomes, and niche health. Weak niches are prioritized on the next deep refresh.
+            </div>
+          </div>
+
+          <div className="admin-panel">
+            <div className="admin-panel-head">
+              <div>
+                <span>Recommended actions</span>
+                <h2>What to fix next</h2>
+              </div>
+            </div>
+            {!intelligence?.recommendations?.length ? (
+              <div className="admin-empty">No source-engine recommendations yet.</div>
+            ) : (
+              <div className="admin-action-list">
+                {intelligence.recommendations.slice(0, 5).map((item) => (
+                  <div key={item.niche}>
+                    <div>
+                      <strong>{item.niche}</strong>
+                      <span>{item.recommendedAction}</span>
+                    </div>
+                    <em>{Math.round(item.healthScore)}%</em>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
 
         <section className="admin-grid admin-grid-2">
           <div className="admin-panel">
@@ -519,6 +640,57 @@ export default function AdminPage() {
             <div className="admin-subtle-line">
               Active revenue {formatMoney(listingSummary.activeRevenue)} against {formatMoney(listingSummary.activeCost)} stored cost basis.
             </div>
+          </div>
+        </section>
+
+        <section className="admin-panel">
+          <div className="admin-panel-head">
+            <div>
+              <span>Recent source jobs</span>
+              <h2>Crawls, scoring, and self-healing history</h2>
+            </div>
+          </div>
+          <div className="admin-table-wrap">
+            <table className="admin-table admin-source-runs-table">
+              <thead>
+                <tr>
+                  <th>Run</th>
+                  <th>Status</th>
+                  <th>Products</th>
+                  <th>Ready</th>
+                  <th>Duration</th>
+                  <th>When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!intelligence?.recentRuns?.length ? (
+                  <tr><td colSpan={6}>No source job history yet. Run Quick Refresh or wait for the production cron.</td></tr>
+                ) : intelligence.recentRuns.map((run) => (
+                  <tr key={run.id}>
+                    <td>
+                      <strong>{run.mode}</strong>
+                      <span>{run.trigger}</span>
+                    </td>
+                    <td>
+                      <span className={`admin-pill admin-pill-${run.status === 'success' ? 'good' : run.status === 'partial' ? 'watch' : 'bad'}`}>
+                        {run.status}
+                      </span>
+                      {run.error ? <span>{truncate(run.error, 80)}</span> : null}
+                    </td>
+                    <td>
+                      <strong>{formatNumber(run.productsFound)} found</strong>
+                      <span>{formatNumber(run.productsRejected)} rejected</span>
+                    </td>
+                    <td>{formatNumber(run.readyToList)}</td>
+                    <td>{formatDuration(run.durationMs)}</td>
+                    <td>{formatDateTime(run.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="admin-subtle-line">
+            The daily Vercel cron refreshes the catalog safely; admin refreshes can repair a weak niche immediately without adding extra scheduled jobs.
           </div>
         </section>
 

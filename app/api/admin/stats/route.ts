@@ -5,6 +5,7 @@ import { queryRows } from '@/lib/db'
 import { ensureListedAsinsFinancialColumns } from '@/lib/listed-asins'
 import { EBAY_DEFAULT_FEE_RATE } from '@/lib/listing-pricing'
 import { ensureProductSourceTables } from '@/lib/product-source-engine'
+import { getSourceEngineIntelligenceSummary, refreshSourceIntelligenceState } from '@/lib/source-intelligence'
 
 const ADMIN_EMAILS = ['msawaged12@gmail.com', 'mikeswags1@gmail.com']
 
@@ -138,6 +139,7 @@ export async function GET() {
   await Promise.all([
     ensureListedAsinsFinancialColumns().catch(() => {}),
     ensureProductSourceTables().catch(() => {}),
+    refreshSourceIntelligenceState({ applyScores: false }).catch(() => null),
   ])
 
   const [
@@ -153,6 +155,7 @@ export async function GET() {
     trendingNicheRows,
     cacheRows,
     continuousRows,
+    sourceIntelligenceSummary,
   ] = await Promise.all([
     queryRows<UserRow>`
       SELECT id, email, name, created_at FROM users ORDER BY created_at DESC
@@ -400,6 +403,7 @@ export async function GET() {
       FROM product_cache
       WHERE niche = '__continuous_listing__'
     `.catch(() => []),
+    getSourceEngineIntelligenceSummary().catch(() => null),
   ])
 
   const ebayMap = new Map(ebayRows.map((row) => [row.user_id, row]))
@@ -426,6 +430,8 @@ export async function GET() {
   if (continuousCount < 90) warnings.push('Continuous Listing pool has fewer than 90 ready products.')
   if (totalNiches > 0 && readyNiches < Math.max(1, Math.floor(totalNiches * 0.7))) warnings.push('Several niche caches are below the 30-product ready target.')
   if (toNumber(source.stale) > sourceTotal * 0.45) warnings.push('A large share of source products are older than 7 days.')
+  if (sourceIntelligenceSummary?.failedJobs24h) warnings.push(`${sourceIntelligenceSummary.failedJobs24h} source engine job(s) failed in the last 24 hours.`)
+  if (sourceIntelligenceSummary?.weakNiches) warnings.push(`${sourceIntelligenceSummary.weakNiches} niche(s) need source-engine self-healing.`)
   if (toNumber(summary.low_image_active) > 0) warnings.push(`${toNumber(summary.low_image_active)} active listing(s) have fewer than 2 stored images.`)
   if (toNumber(summary.missing_category_active) > 0) warnings.push(`${toNumber(summary.missing_category_active)} active listing(s) are missing a stored category id.`)
 
@@ -491,6 +497,7 @@ export async function GET() {
         version: toNumber(continuous.version),
         cachedAt: toIso(continuous.cached_at),
       },
+      intelligence: sourceIntelligenceSummary,
       topNiches: sourceNicheRows.map((row) => ({
         name: row.name || 'Unassigned',
         count: toNumber(row.count),

@@ -6,6 +6,7 @@ import { queryRows } from '@/lib/db'
 import { ensureProductSourceTables } from '@/lib/product-source-engine'
 import { isRapidApiFallbackEnabled } from '@/lib/rapidapi'
 import { isWeakListingTitle } from '@/lib/listing-quality'
+import { getSourceEngineIntelligenceSummary, refreshSourceIntelligenceState } from '@/lib/source-intelligence'
 
 type SourceSummaryRow = {
   total?: number | string
@@ -95,9 +96,13 @@ export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
 
-  await ensureProductSourceTables().catch(() => {})
+  await Promise.all([
+    ensureProductSourceTables().catch(() => {}),
+    refreshSourceIntelligenceState({ applyScores: false }).catch(() => null),
+  ])
 
-  const sourceRows = await queryRows<SourceSummaryRow>`
+  const [sourceRows, sourceIntelligence] = await Promise.all([
+    queryRows<SourceSummaryRow>`
     SELECT
       COUNT(*)::int AS total,
       COUNT(DISTINCT source_niche)::int AS niches,
@@ -108,7 +113,9 @@ export async function GET(_req: NextRequest) {
       MAX(last_seen_at) AS newest_seen
     FROM product_source_items
     WHERE active = TRUE
-  `.catch(() => [])
+    `.catch(() => []),
+    getSourceEngineIntelligenceSummary().catch(() => null),
+  ])
 
   const nicheSourceRows = await queryRows<NicheSourceRow>`
     SELECT
@@ -180,6 +187,7 @@ export async function GET(_req: NextRequest) {
       version: toNumber(continuous.version),
       cachedAt: toIso(continuous.cached_at),
     },
+    intelligence: sourceIntelligence,
     topNiches: nicheRows.map((row) => ({
       name: row.name || 'Unassigned',
       count: toNumber(row.count),
