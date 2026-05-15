@@ -584,9 +584,19 @@ export async function getSourceEngineIntelligenceSummary() {
       ORDER BY created_at DESC
       LIMIT 8
     `.catch(() => []),
-    queryRows<{ products_found: string | number; products_rejected: string | number; runs: string | number }>`
+    queryRows<{
+      new_products: string | number
+      pool_snapshots: string | number
+      products_rejected: string | number
+      runs: string | number
+    }>`
       SELECT
-        COALESCE(SUM(products_found), 0)::int AS products_found,
+        COALESCE((
+          SELECT COUNT(*)
+          FROM product_source_items
+          WHERE first_seen_at >= date_trunc('day', NOW())
+        ), 0)::int AS new_products,
+        COALESCE(SUM(products_found), 0)::int AS pool_snapshots,
         COALESCE(SUM(products_rejected), 0)::int AS products_rejected,
         COUNT(*)::int AS runs
       FROM source_engine_runs
@@ -625,7 +635,7 @@ export async function getSourceEngineIntelligenceSummary() {
       error: latestRun.error,
     } : null,
     runsToday: toNumber(todayRows[0]?.runs),
-    productsFoundToday: toNumber(todayRows[0]?.products_found),
+    productsFoundToday: toNumber(todayRows[0]?.new_products),
     productsRejectedToday: toNumber(todayRows[0]?.products_rejected),
     readyToListProducts: toNumber(readyRows[0]?.ready_to_list),
     weakNiches: toNumber(readyRows[0]?.weak_niches),

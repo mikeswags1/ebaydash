@@ -626,14 +626,14 @@ export default function AdminPage() {
               </span>
             </div>
             <div className="admin-health-grid">
-              <SmallStat label="Found today" value={formatNumber(intelligence?.productsFoundToday || 0)} />
-              <SmallStat label="Rejected today" value={formatNumber(intelligence?.productsRejectedToday || 0)} />
-              <SmallStat label="Ready products" value={formatNumber(intelligence?.readyToListProducts || 0)} />
+              <SmallStat label="New products today" value={formatNumber(intelligence?.productsFoundToday || 0)} />
+              <SmallStat label="Cleaned today" value={formatNumber(intelligence?.productsRejectedToday || 0)} />
+              <SmallStat label="Ready/listable pool" value={formatNumber(intelligence?.readyToListProducts || 0)} />
               <SmallStat label="Avg niche health" value={`${Math.round(intelligence?.averageNicheHealth || 0)}%`} />
             </div>
             <div className="admin-source-intel-row">
               <div>
-                <strong>Last crawl</strong>
+                <strong>Last maintenance run</strong>
                 <span>{formatDateTime(intelligence?.lastRun?.createdAt || null)}</span>
               </div>
               <div>
@@ -650,7 +650,7 @@ export default function AdminPage() {
               </div>
             </div>
             <div className="admin-subtle-line">
-              Scores combine product quality, profit, ROI, freshness, images, listing outcomes, and niche health. Weak niches are prioritized on the next deep refresh.
+              New products today counts brand-new source rows first seen today. Ready/listable pool is the current vetted inventory StackPilot can pull from. Cleaned today means unavailable, weak, or failed-source items removed from active use.
             </div>
             <div className={`admin-autopilot-card ${autopilot?.scheduledNow ? 'is-running' : autopilot?.available ? 'is-ready' : 'is-cooling'}`}>
               <div>
@@ -820,7 +820,7 @@ export default function AdminPage() {
                 <tr>
                   <th>Run</th>
                   <th>Status</th>
-                  <th>Products</th>
+                  <th>Pool impact</th>
                   <th>Ready</th>
                   <th>Duration</th>
                   <th>When</th>
@@ -842,8 +842,8 @@ export default function AdminPage() {
                       {run.error ? <span>{truncate(run.error, 80)}</span> : null}
                     </td>
                     <td>
-                      <strong>{formatNumber(run.productsFound)} found</strong>
-                      <span>{formatNumber(run.productsRejected)} rejected</span>
+                      <strong>{formatNumber(run.readyToList)} ready after run</strong>
+                      <span>{formatNumber(run.productsRejected)} cleaned</span>
                     </td>
                     <td>{formatNumber(run.readyToList)}</td>
                     <td>{formatDuration(run.durationMs)}</td>
