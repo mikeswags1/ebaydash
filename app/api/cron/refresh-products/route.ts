@@ -893,6 +893,25 @@ async function syncUnavailableListings(): Promise<{ ended: number; failed: numbe
   return { ended, failed, skipped }
 }
 
+async function closeUnavailableLocalOnlyListings() {
+  await ensureListingAvailabilityAuditColumns()
+  const rows = await queryRows<{ id: number }>`
+    UPDATE listed_asins la
+    SET ended_at = NOW(),
+        amazon_available = FALSE,
+        amazon_status_reason = 'unavailable_no_ebay_listing_id',
+        amazon_status_checked_at = NOW()
+    FROM amazon_product_cache apc
+    WHERE la.ended_at IS NULL
+      AND (la.ebay_listing_id IS NULL OR la.ebay_listing_id = '')
+      AND la.asin IS NOT NULL
+      AND UPPER(apc.asin) = UPPER(la.asin)
+      AND apc.available = FALSE
+    RETURNING la.id
+  `.catch(() => [])
+  return rows.length
+}
+
 async function auditActiveAmazonListings(limit = 24): Promise<{
   checked: number
   available: number
@@ -1085,6 +1104,7 @@ export async function GET(req: NextRequest) {
     // This ensures continuous-listing products have full images/features/description
     // before users try to bulk-list them. Top-scored 40 unenriched products per run.
     report.warmCache = await warmAmazonProductCache(40).catch(() => ({ warmed: 0, failed: 0 }))
+    report.closedUnavailableLocalOnlyListings = await closeUnavailableLocalOnlyListings().catch(() => 0)
     report.unavailableSync = await syncUnavailableListings().catch(() => 'error')
     report.amazonListingAudit = await auditActiveAmazonListings(requestedAuditLimit).catch(() => 'error')
     return finalizeReport([])
@@ -1099,6 +1119,7 @@ export async function GET(req: NextRequest) {
 
     // End eBay listings where Amazon has confirmed the product is out-of-stock
     try {
+      report.closedUnavailableLocalOnlyListings = await closeUnavailableLocalOnlyListings()
       report.unavailableSync = await syncUnavailableListings()
     } catch { report.unavailableSync = 'error' }
     try {
@@ -1244,6 +1265,7 @@ export async function GET(req: NextRequest) {
     report.priceRefresh = await refreshProductSourcePrices({ limit: 60, staleDays: 7 }).catch(() => ({}))
     report.repriced = await repriceProductSourceItems().catch(() => 0)
     report.warmCache = await warmAmazonProductCache(20).catch(() => ({ warmed: 0, failed: 0 }))
+    report.closedUnavailableLocalOnlyListings = await closeUnavailableLocalOnlyListings().catch(() => 0)
     try { report.unavailableSync = await syncUnavailableListings() } catch { report.unavailableSync = 'error' }
     try { report.amazonListingAudit = await auditActiveAmazonListings(requestedAuditLimit) } catch { report.amazonListingAudit = 'error' }
     return finalizeReport(niches)
@@ -1256,6 +1278,7 @@ export async function GET(req: NextRequest) {
       await repriceProductSourceItems().catch(() => 0)
     }
     await warmAmazonProductCache(20).catch(() => {})
+    await closeUnavailableLocalOnlyListings().catch(() => {})
     await syncUnavailableListings().catch(() => {})
     await auditActiveAmazonListings(60).catch(() => {})
   })
