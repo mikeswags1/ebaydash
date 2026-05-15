@@ -9,7 +9,7 @@ import { checkAmazonLiveAvailability } from '@/lib/amazon-availability'
 import { getListingPolicyFlags, hasBlockedListingPolicyFlag } from '@/lib/listing-policy'
 import { EBAY_DEFAULT_FEE_RATE, getListingMetrics, getRecommendedEbayPrice } from '@/lib/listing-pricing'
 import { getSeasonalQueryExpansions, loadActiveCustomSourceNicheQueries, mergeTrendingNicheQueries } from '@/lib/source-niches'
-import { getSourceEngineIntelligenceSummary, getWeakSourceNiches, recordSourceEngineRun, runSourceSelfHealing } from '@/lib/source-intelligence'
+import { getNicheStockRepairTargets, getSourceEngineIntelligenceSummary, getWeakSourceNiches, recordSourceEngineRun, runSourceSelfHealing } from '@/lib/source-intelligence'
 
 export const maxDuration = 300
 
@@ -26,6 +26,8 @@ const CATALOG_NICHE_BATCH_SIZE = 3
 /** Hourly background: one niche, medium depth — keeps catalog advancing 24/7 without huge bursts */
 const BACKGROUND_CATALOG_TARGET = 780
 const BACKGROUND_CATALOG_BATCH = 1
+const NICHE_STOCK_TARGET = 220
+const NICHE_STOCK_BATCH = 3
 
 const REJECT_KEYWORDS = [
   'rc plane','rc airplane','drone','laptop','tablet','ipad','iphone','macbook',
@@ -466,6 +468,7 @@ type RefreshOptions = {
   pages?: number[]
   timeoutMs?: number
   queryMap?: NicheQueryMap
+  mergeExisting?: boolean
 }
 
 function uniqueQueries(values: string[]) {
@@ -521,6 +524,53 @@ function buildCatalogQueries(niche: string, queryMap: NicheQueryMap = NICHE_QUER
 }
 
 // ── Refresh one niche in the product_cache table ─────────────────────────────
+function scoreCachedNicheProduct(product: Record<string, unknown>) {
+  const profit = Number(product.profit) || 0
+  const roi = Number(product.roi) || 0
+  const rating = Number(product._rating) || 3.8
+  const reviews = Number(product._numRatings) || 0
+  return profit * Math.max(0.35, roi / 55) * Math.max(0.7, rating / 4.5) * Math.log10(reviews + 20)
+}
+
+async function buildNicheCachePayload(
+  niche: string,
+  freshProducts: Array<Record<string, unknown>>,
+  target: number,
+  mergeExisting = false
+) {
+  const seen = new Set<string>()
+  const candidates: Array<Record<string, unknown>> = []
+  const addCandidate = (product: Record<string, unknown>) => {
+    const asin = String(product.asin || '').toUpperCase()
+    const title = String(product.title || '')
+    if (!asin || seen.has(asin)) return
+    if (!title || isRejected(title)) return
+    const repriced = repriceCachedProduct({ ...product, asin, sourceNiche: niche }, niche)
+    if (!repriced) return
+    if (repriced.risk === 'HIGH' || Number(repriced.profit || 0) < MIN_PROFIT || Number(repriced.roi || 0) < 30) return
+    seen.add(asin)
+    candidates.push(repriced)
+  }
+
+  freshProducts.forEach(addCandidate)
+
+  if (mergeExisting && candidates.length < target) {
+    const existingRows = await queryRows<{ results: unknown }>`
+      SELECT results
+      FROM product_cache
+      WHERE niche = ${niche}
+      LIMIT 1
+    `.catch(() => [])
+    const existing = Array.isArray(existingRows[0]?.results)
+      ? existingRows[0].results as Array<Record<string, unknown>>
+      : []
+    existing.forEach(addCandidate)
+  }
+
+  candidates.sort((a, b) => scoreCachedNicheProduct(b) - scoreCachedNicheProduct(a))
+  return candidates.slice(0, target)
+}
+
 async function refreshNiche(niche: string, options: RefreshOptions = {}): Promise<number> {
   const target = Math.max(30, Math.min(CATALOG_NICHE_TARGET, options.target || STANDARD_NICHE_TARGET))
   const allQueries = buildCatalogQueries(niche, options.queryMap)
@@ -575,10 +625,12 @@ async function refreshNiche(niche: string, options: RefreshOptions = {}): Promis
   })
 
   try {
-    await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results.slice(0, target))}, ${CACHE_VERSION})
+    const payload = await buildNicheCachePayload(niche, results, target, options.mergeExisting)
+    if (payload.length === 0) return 0
+    await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(payload)}, ${CACHE_VERSION})
               ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()`
+    return payload.length
   } catch { return 0 }
-  return results.length
 }
 
 // ── Refresh one niche using direct Amazon scraping (no API key needed) ───────
@@ -634,10 +686,12 @@ async function refreshNicheScrape(niche: string, options: RefreshOptions = {}): 
     return s(b) - s(a)
   })
   try {
-    await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(results.slice(0, target))}, ${CACHE_VERSION})
+    const payload = await buildNicheCachePayload(niche, results, target, options.mergeExisting)
+    if (payload.length === 0) return 0
+    await sql`INSERT INTO product_cache (niche, results, version) VALUES (${niche}, ${JSON.stringify(payload)}, ${CACHE_VERSION})
               ON CONFLICT (niche) DO UPDATE SET results = EXCLUDED.results, version = EXCLUDED.version, cached_at = NOW()`
+    return payload.length
   } catch { return 0 }
-  return results.length
 }
 
 async function refreshContinuousCache(): Promise<number> {
@@ -1045,8 +1099,10 @@ export async function GET(req: NextRequest) {
   const rollingRefresh = req.nextUrl.searchParams.get('rolling') === '1'
   const sourceOnly = req.nextUrl.searchParams.get('sourceOnly') === '1'
   const autopilotRepair = req.nextUrl.searchParams.get('autopilot') === '1'
+  const stockWeak = req.nextUrl.searchParams.get('stockWeak') === '1'
   const backgroundCatalog = req.nextUrl.searchParams.get('backgroundCatalog') === '1'
   const catalogRefresh =
+    stockWeak ||
     req.nextUrl.searchParams.get('catalog') === '1' ||
     req.nextUrl.searchParams.get('deep') === '1' ||
     backgroundCatalog
@@ -1057,8 +1113,8 @@ export async function GET(req: NextRequest) {
   const requestedStartIndex = hasExplicitStart ? Number(req.nextUrl.searchParams.get('start')) : NaN
   const now = new Date()
   const runMode = autopilotRepair
-    ? sourceOnly ? 'autopilot-sourceOnly' : 'autopilot-catalog'
-    : sourceOnly ? 'sourceOnly' : backgroundCatalog ? 'backgroundCatalog' : catalogRefresh ? 'catalog' : fullRefresh ? 'full' : 'rolling'
+    ? sourceOnly ? 'autopilot-sourceOnly' : stockWeak ? 'autopilot-stockWeak' : 'autopilot-catalog'
+    : sourceOnly ? 'sourceOnly' : stockWeak ? 'stockWeak' : backgroundCatalog ? 'backgroundCatalog' : catalogRefresh ? 'catalog' : fullRefresh ? 'full' : 'rolling'
   const runTrigger = autopilotRepair ? 'source-autopilot' : isVercelCron ? 'vercel-cron' : authHeader ? 'cron-secret' : 'manual'
   if (autopilotRepair) report.autopilot = true
 
@@ -1140,13 +1196,17 @@ export async function GET(req: NextRequest) {
     .filter(Boolean)
     .map((requested) => allNiches.find((niche) => niche.toLowerCase() === requested.toLowerCase()) || '')
     .filter(Boolean)
-  const targetProducts = backgroundCatalog
+  const targetProducts = stockWeak
+    ? NICHE_STOCK_TARGET
+    : backgroundCatalog
     ? BACKGROUND_CATALOG_TARGET
     : catalogRefresh
       ? CATALOG_NICHE_TARGET
       : STANDARD_NICHE_TARGET
-  const sourceRebuildLimit = backgroundCatalog ? 220 : catalogRefresh ? 250 : 120
-  const defaultBatchSize = backgroundCatalog
+  const sourceRebuildLimit = stockWeak ? 280 : backgroundCatalog ? 220 : catalogRefresh ? 250 : 120
+  const defaultBatchSize = stockWeak
+    ? NICHE_STOCK_BATCH
+    : backgroundCatalog
     ? BACKGROUND_CATALOG_BATCH
     : catalogRefresh
       ? CATALOG_NICHE_BATCH_SIZE
@@ -1157,8 +1217,17 @@ export async function GET(req: NextRequest) {
     ? explicitNiches.length
     : Math.max(1, Math.min(allNiches.length, Number.isFinite(requestedBatchSize) && requestedBatchSize > 0 ? Math.floor(requestedBatchSize) : defaultBatchSize))
   const weakNichePriority = explicitNiches.length === 0 && catalogRefresh
-    ? (await getWeakSourceNiches(batchSize + 3).catch(() => [])).filter((niche) => allNiches.includes(niche))
+    ? (stockWeak
+        ? await getNicheStockRepairTargets(batchSize + 5).catch(() => [])
+        : await getWeakSourceNiches(batchSize + 3).catch(() => [])
+      ).filter((niche) => allNiches.includes(niche))
     : []
+
+  if (stockWeak && explicitNiches.length === 0 && weakNichePriority.length === 0) {
+    report.stockWeakNoop = 'All niche caches are stocked and fresh enough.'
+    report.continuousProducts = await refreshContinuousCache()
+    return finalizeReport([])
+  }
 
   // For catalog refresh: use a persistent cursor stored in DB so every click advances
   // to the next 3 niches regardless of whether the scrape succeeded or got blocked.
@@ -1168,7 +1237,7 @@ export async function GET(req: NextRequest) {
   } else if (catalogRefresh && weakNichePriority.length > 0) {
     const priority = weakNichePriority.slice(0, batchSize)
     const fill = allNiches.filter((niche) => !priority.includes(niche)).slice(0, Math.max(0, batchSize - priority.length))
-    niches = [...priority, ...fill].slice(0, batchSize)
+    niches = stockWeak ? priority : [...priority, ...fill].slice(0, batchSize)
     report.selfHealingPriorityNiches = priority
   } else if (catalogRefresh && !Number.isFinite(requestedStartIndex)) {
     try {
@@ -1194,18 +1263,22 @@ export async function GET(req: NextRequest) {
       : fullRefresh && !catalogRefresh ? 0 : (rotation * batchSize) % allNiches.length
     niches = Array.from({ length: Math.min(batchSize, allNiches.length) }, (_, index) => allNiches[(startIndex + index) % allNiches.length])
   }
-  const primaryOptions = !catalogRefresh
+  const primaryOptions = stockWeak
+    ? { target: targetProducts, queryLimit: 4, pages: [1], timeoutMs: 5000, queryMap: sourceNicheQueries, mergeExisting: true }
+    : !catalogRefresh
     ? { target: targetProducts, queryLimit: 4, pages: [1], timeoutMs: 8000, queryMap: sourceNicheQueries }
     : backgroundCatalog
       ? { target: targetProducts, queryLimit: 5, pages: [1, 2], timeoutMs: 5000, queryMap: sourceNicheQueries }
       : { target: targetProducts, queryLimit: 6, pages: [1, 2], timeoutMs: 4500, queryMap: sourceNicheQueries }
-  const secondaryOptions = !catalogRefresh
+  const secondaryOptions = stockWeak
+    ? { target: targetProducts, queryLimit: 4, pages: [1, 2], timeoutMs: 4000, queryMap: sourceNicheQueries, mergeExisting: true }
+    : !catalogRefresh
     ? { target: targetProducts, queryLimit: 3, pages: [1], timeoutMs: 6000, queryMap: sourceNicheQueries }
     : backgroundCatalog
       ? { target: targetProducts, queryLimit: 4, pages: [1, 2], timeoutMs: 4000, queryMap: sourceNicheQueries }
       : { target: targetProducts, queryLimit: 4, pages: [1, 2], timeoutMs: 3500, queryMap: sourceNicheQueries }
-  const primaryScrapeBudgetMs = backgroundCatalog ? 150_000 : catalogRefresh ? 165_000 : 200_000
-  const fallbackScrapeBudgetMs = backgroundCatalog ? 220_000 : catalogRefresh ? 235_000 : 270_000
+  const primaryScrapeBudgetMs = stockWeak ? 120_000 : backgroundCatalog ? 150_000 : catalogRefresh ? 165_000 : 200_000
+  const fallbackScrapeBudgetMs = stockWeak ? 210_000 : backgroundCatalog ? 220_000 : catalogRefresh ? 235_000 : 270_000
   const runProductRefresh = async () => {
     let refreshed = 0
 

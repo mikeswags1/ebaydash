@@ -17,6 +17,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/refresh-products?stockWeak=1&wait=1&batch=3&auditLimit=60",
+      "schedule": "17 * * * *"
+    },
+    {
       "path": "/api/cron/refresh-products?backgroundCatalog=1&wait=1&auditLimit=60",
       "schedule": "7 */6 * * *"
     },

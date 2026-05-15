@@ -526,7 +526,32 @@ export async function getWeakSourceNiches(limit = 6) {
        OR health_score < 65
        OR last_cache_at IS NULL
        OR last_cache_at < NOW() - INTERVAL '48 hours'
-    ORDER BY health_score ASC, ready_products ASC, cache_products ASC, updated_at ASC
+    ORDER BY
+      CASE WHEN cache_products < 30 THEN 0 ELSE 1 END,
+      health_score ASC,
+      ready_products ASC,
+      cache_products ASC,
+      updated_at ASC
+    LIMIT ${Math.max(1, Math.min(20, limit))}
+  `.catch(() => [])
+  return rows.map((row) => row.niche).filter(Boolean)
+}
+
+export async function getNicheStockRepairTargets(limit = 6) {
+  await ensureSourceIntelligenceTables()
+  const rows = await queryRows<{ niche: string }>`
+    SELECT niche
+    FROM source_niche_intelligence
+    WHERE cache_products < 30
+       OR last_cache_at IS NULL
+       OR last_cache_at < NOW() - INTERVAL '36 hours'
+    ORDER BY
+      CASE WHEN cache_products < 30 THEN 0 ELSE 1 END,
+      cache_products ASC,
+      last_cache_at ASC NULLS FIRST,
+      health_score ASC,
+      ready_products DESC,
+      updated_at ASC
     LIMIT ${Math.max(1, Math.min(20, limit))}
   `.catch(() => [])
   return rows.map((row) => row.niche).filter(Boolean)

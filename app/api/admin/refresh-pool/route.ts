@@ -19,7 +19,11 @@ export async function POST(req: Request) {
   const host = new URL(req.url).origin
   const nicheValue = typeof niche === 'string' ? niche.trim() : ''
   const nicheParam = nicheValue ? `&niche=${encodeURIComponent(nicheValue)}&batch=1` : ''
-  const param = mode === 'catalog' ? `?catalog=1&wait=1${nicheParam}` : '?sourceOnly=1'
+  const param = mode === 'sourceOnly'
+    ? '?sourceOnly=1'
+    : mode === 'stockWeak'
+      ? `?stockWeak=1&wait=1${nicheParam || '&batch=3'}`
+      : `?catalog=1&wait=1${nicheParam}`
 
   const res = await fetch(`${host}/api/cron/refresh-products${param}`, {
     headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {},

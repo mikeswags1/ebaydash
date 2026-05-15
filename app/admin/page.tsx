@@ -143,6 +143,7 @@ type NichePerformance = {
 type AutomationSummary = {
   proCron: {
     sourceMaintenance: string
+    nicheStock: string
     deepCatalog: string
     autoBulk: string
     listingAuditBatch: number
@@ -270,6 +271,7 @@ function formatDuration(value: number) {
 const EMPTY_AUTOMATION: AutomationSummary = {
   proCron: {
     sourceMaintenance: 'Every 30 minutes',
+    nicheStock: 'Every hour',
     deepCatalog: 'Every 6 hours',
     autoBulk: 'Every 15 minutes',
     listingAuditBatch: 60,
@@ -318,9 +320,15 @@ function usePoolRefresh(onDone: () => void) {
   const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [msg, setMsg] = useState('')
 
-  const trigger = async (mode: 'catalog' | 'sourceOnly') => {
+  const trigger = async (mode: 'catalog' | 'sourceOnly' | 'stockWeak') => {
     setState('running')
-    setMsg(mode === 'catalog' ? 'Deep catalog crawl running. This can take a few minutes.' : 'Quick refresh running.')
+    setMsg(
+      mode === 'catalog'
+        ? 'Deep catalog crawl running. This can take a few minutes.'
+        : mode === 'stockWeak'
+          ? 'Stocking low-cache niches now.'
+          : 'Quick refresh running.'
+    )
     try {
       const res = await fetch('/api/admin/refresh-pool', {
         method: 'POST',
@@ -427,13 +435,13 @@ export default function AdminPage() {
       const data = await readJson(await fetch('/api/admin/refresh-pool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'catalog', niche: name }),
+        body: JSON.stringify({ mode: 'stockWeak', niche: name }),
       }))
       const attempted = Array.isArray(data?.result?.nichesAttempted) ? data.result.nichesAttempted.join(', ') : name
       setToolState({
         active: null,
         tone: 'success',
-        message: `Refresh started for ${attempted}. Source pool now has ${formatNumber(data?.result?.sourceProducts ?? 0)} products.`,
+        message: `Stock refresh completed for ${attempted}. Source pool now has ${formatNumber(data?.result?.sourceProducts ?? 0)} products.`,
       })
       await loadAdmin()
     } catch (err) {
@@ -570,9 +578,14 @@ export default function AdminPage() {
               <p>Reprices products, refreshes availability signals, cleans bad source rows, and audits active Amazon status.</p>
             </div>
             <div>
+              <span>Niche stocker</span>
+              <strong>{automation.proCron.nicheStock}</strong>
+              <p>Targets caches marked Needs stock and refills them from fresh Amazon search results.</p>
+            </div>
+            <div>
               <span>Deep catalog crawl</span>
               <strong>{automation.proCron.deepCatalog}</strong>
-              <p>Restocks weak niches, keeps the source pool deep, and refreshes Continuous Listing inventory.</p>
+              <p>Runs the heavier catalog sweep so the long-term source pool stays deep and fresh.</p>
             </div>
             <div>
               <span>Auto Bulk Listing</span>
@@ -740,6 +753,10 @@ export default function AdminPage() {
                 <strong>Quick Refresh</strong>
                 <span>Reprice, enrich, and rebuild ready queues.</span>
               </button>
+              <button className="admin-tool" disabled={pool.state === 'running'} onClick={() => pool.trigger('stockWeak')}>
+                <strong>Stock Weak Niches</strong>
+                <span>Refill low or stale niche caches without running a full deep crawl.</span>
+              </button>
               <button className="admin-tool" disabled={pool.state === 'running'} onClick={() => pool.trigger('catalog')}>
                 <strong>Deep Catalog Crawl</strong>
                 <span>Heavy on-demand crawl. Autopilot now repairs weak niches automatically; this is only for manual force-refresh.</span>
@@ -854,7 +871,7 @@ export default function AdminPage() {
             </table>
           </div>
           <div className="admin-subtle-line">
-            Pro cron runs source maintenance every 30 minutes and deeper catalog crawls every 6 hours; admin refreshes are manual force repairs for weak niches.
+            Pro cron runs source maintenance every 30 minutes, stocks weak niche caches every hour, and runs deeper catalog crawls every 6 hours.
           </div>
         </section>
 
@@ -938,7 +955,7 @@ export default function AdminPage() {
                         disabled={nicheAction !== null}
                         onClick={() => refreshNiche(niche.name)}
                       >
-                        {nicheAction === `refresh:${niche.name}` ? 'Refreshing...' : 'Refresh niche'}
+                        {nicheAction === `refresh:${niche.name}` ? 'Stocking...' : 'Stock now'}
                       </button>
                     </td>
                   </tr>
@@ -947,7 +964,7 @@ export default function AdminPage() {
             </table>
           </div>
           <div className="admin-subtle-line">
-            Ready means a niche has at least 30 active source products and 30 cached queue products with a recent refresh.
+            Ready means a niche has at least 30 active source products and 30 cached queue products with a recent refresh. Needs stock rows are now picked up automatically by the hourly niche stocker.
           </div>
         </section>
 

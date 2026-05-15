@@ -512,11 +512,27 @@ export async function GET(req: NextRequest) {
   const dueListingAudits = toNumber(listingAvailabilitySummary.due_for_audit)
   const activeAuditListings = toNumber(listingAvailabilitySummary.active_listings)
   let autopilotUpdate: Awaited<ReturnType<typeof reserveSourceAutopilotRun>> | null = null
-  const weakAutopilotNiches = (sourceIntelligenceSummary?.recommendations || [])
+  const lowStockTrendingNiches = trendingNicheRows
+    .map((row) => {
+      const name = String(row.name || '').trim()
+      const cacheProducts = toNumber(row.cache_products)
+      const refreshedAt = toIso(row.cache_refreshed_at) || toIso(row.latest_seen)
+      const refreshedDate = refreshedAt ? new Date(refreshedAt) : null
+      const stale = !refreshedDate || Number.isNaN(refreshedDate.getTime()) || Date.now() - refreshedDate.getTime() > 36 * 60 * 60 * 1000
+      return { name, cacheProducts, stale, refreshedAt }
+    })
+    .filter((item) => item.name && (item.cacheProducts < 30 || item.stale))
+    .sort((a, b) => {
+      if (a.cacheProducts < 30 && b.cacheProducts >= 30) return -1
+      if (b.cacheProducts < 30 && a.cacheProducts >= 30) return 1
+      return a.cacheProducts - b.cacheProducts || Date.parse(a.refreshedAt || '0') - Date.parse(b.refreshedAt || '0')
+    })
+    .map((item) => item.name)
+  const recommendedWeakNiches = (sourceIntelligenceSummary?.recommendations || [])
     .filter((item) => item.readyProducts < 30 || item.cacheProducts < 30 || item.healthScore < 65)
     .map((item) => item.niche)
     .filter(Boolean)
-    .slice(0, 2)
+  const weakAutopilotNiches = Array.from(new Set([...lowStockTrendingNiches, ...recommendedWeakNiches])).slice(0, 3)
   const shouldAutopilotRepair =
     weakAutopilotNiches.length > 0 ||
     continuousCount < 90 ||
@@ -531,7 +547,7 @@ export async function GET(req: NextRequest) {
     autopilotUpdate = await reserveSourceAutopilotRun({
       reason,
       niches: weakAutopilotNiches,
-      cooldownMinutes: 75,
+      cooldownMinutes: weakAutopilotNiches.length > 0 ? 45 : 75,
     }).catch(() => null)
 
     if (autopilotUpdate?.reserved) {
@@ -539,7 +555,7 @@ export async function GET(req: NextRequest) {
       const cronSecret = process.env.CRON_SECRET || ''
       const headers: Record<string, string> = cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {}
       const repairUrl = weakAutopilotNiches.length > 0
-        ? `${origin}/api/cron/refresh-products?catalog=1&wait=1&autopilot=1&batch=${weakAutopilotNiches.length}&niche=${encodeURIComponent(weakAutopilotNiches.join(','))}`
+        ? `${origin}/api/cron/refresh-products?stockWeak=1&wait=1&autopilot=1&batch=${weakAutopilotNiches.length}&niche=${encodeURIComponent(weakAutopilotNiches.join(','))}`
         : `${origin}/api/cron/refresh-products?sourceOnly=1&autopilot=1`
 
       after(async () => {
@@ -569,7 +585,7 @@ export async function GET(req: NextRequest) {
   if (users.length > 0 && connectedUsers < users.length) warnings.push('Some accounts have not connected eBay.')
   if (sourceTotal < 5000) warnings.push('Source engine pool is below the public-launch target of 5,000 active products.')
   if (continuousCount < 90) warnings.push('Continuous Listing pool has fewer than 90 ready products.')
-  if (totalNiches > 0 && readyNiches < Math.max(1, Math.floor(totalNiches * 0.7))) warnings.push('Several niche caches are below the 30-product ready target.')
+  if (totalNiches > 0 && readyNiches < Math.max(1, Math.floor(totalNiches * 0.7))) warnings.push('Several niche caches are below the 30-product ready target; hourly niche stocker is refilling them.')
   if (toNumber(source.stale) > sourceTotal * 0.45) warnings.push('A large share of source products are older than 7 days.')
   if (sourceIntelligenceWithAutopilot?.failedJobs24h) warnings.push(`${sourceIntelligenceWithAutopilot.failedJobs24h} source engine job(s) failed in the last 24 hours.`)
   if (sourceIntelligenceWithAutopilot?.weakNiches) warnings.push(`${sourceIntelligenceWithAutopilot.weakNiches} niche(s) need source-engine self-healing.`)
@@ -679,6 +695,7 @@ export async function GET(req: NextRequest) {
     automation: {
       proCron: {
         sourceMaintenance: 'Every 30 minutes',
+        nicheStock: 'Every hour',
         deepCatalog: 'Every 6 hours',
         autoBulk: 'Every 15 minutes',
         listingAuditBatch: 60,
