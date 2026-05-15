@@ -6,16 +6,23 @@
     },
     "app/api/cron/refresh-products/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/auto-listing-tick/route.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [
     {
-      "path": "/api/cron/refresh-products?backgroundCatalog=1&wait=1&auditLimit=60",
-      "schedule": "0 3 * * *"
+      "path": "/api/cron/refresh-products?sourceOnly=1&auditLimit=60",
+      "schedule": "*/30 * * * *"
     },
     {
-      "path": "/api/cron/auto-listing-tick?userId=4",
-      "schedule": "0 7 * * *"
+      "path": "/api/cron/refresh-products?backgroundCatalog=1&wait=1&auditLimit=60",
+      "schedule": "7 */6 * * *"
+    },
+    {
+      "path": "/api/cron/auto-listing-tick?limit=12",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

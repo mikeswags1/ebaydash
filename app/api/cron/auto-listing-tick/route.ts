@@ -11,7 +11,7 @@ import { sql, queryRows } from '@/lib/db'
 export const maxDuration = 300
 
 function jitterRetryMinutes() {
-  return 10 + Math.floor(Math.random() * 25) // 10–35 min
+  return 10 + Math.floor(Math.random() * 25) // 10-35 min
 }
 
 async function listOneViaInternal(req: NextRequest, input: { userId: number; accountId: number | null; asin: string; title?: string | null; niche?: string | null; categoryId?: string | null }) {
@@ -81,46 +81,25 @@ async function listOneViaInternal(req: NextRequest, input: { userId: number; acc
   return json as { ok: true; listingUrl: string; listingId: string }
 }
 
-export async function GET(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET
-  const authHeader = req.headers.get('authorization') || ''
-  const secretParam = req.nextUrl.searchParams.get('secret') || ''
-  const isVercelCron = req.headers.get('x-vercel-cron') === '1'
-  const authed =
-    !cronSecret ||
-    authHeader === `Bearer ${cronSecret}` ||
-    (secretParam && cronSecret && secretParam === cronSecret) ||
-    isVercelCron
-
-  if (!authed) {
-    return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
-  }
-
-  await ensureAutoListingTables()
-
-  const userIdParam = req.nextUrl.searchParams.get('userId')
-  const userId = userIdParam ? Number(userIdParam) : NaN
-  if (!Number.isFinite(userId)) return apiError('userId is required', { status: 400, code: 'INVALID_USER' })
-
+async function processAutoListingUser(req: NextRequest, userId: number): Promise<Record<string, unknown>> {
   const settings = await getAutoListingSettings(userId)
-  if (!settings.enabled) return apiOk({ ok: true, skipped: 'disabled' })
-  if (settings.emergency_stopped) return apiOk({ ok: true, skipped: 'emergency_stopped' })
-  if (settings.paused) return apiOk({ ok: true, skipped: 'paused' })
+  if (!settings.enabled) return { skipped: 'disabled' }
+  if (settings.emergency_stopped) return { skipped: 'emergency_stopped' }
+  if (settings.paused) return { skipped: 'paused' }
 
   const accountId = settings.selected_account_id ?? null
 
-  // Lease/lock per user so cron retries don’t double-run.
+  // Lease/lock per user so cron retries do not double-run.
   const leaseKey = `auto_listing:${userId}`
   const leaseRows = await queryRows<{ ok: boolean }>`
     SELECT pg_try_advisory_lock(hashtext(${leaseKey})) AS ok
   `.catch(() => [])
-  if (!leaseRows[0]?.ok) return apiOk({ ok: true, skipped: 'locked' })
+  if (!leaseRows[0]?.ok) return { skipped: 'locked' }
 
   const startedAt = Date.now()
   const report: Record<string, unknown> = {}
 
   try {
-    // Cooldown: if the last completed listing was too recent, skip this tick.
     if (settings.cooldown_minutes > 0) {
       const cooldownRows = await queryRows<{ listed_at: string | null }>`
         SELECT MAX(listed_at) AS listed_at
@@ -130,23 +109,20 @@ export async function GET(req: NextRequest) {
       `.catch(() => [])
       const last = cooldownRows[0]?.listed_at ? new Date(String(cooldownRows[0].listed_at)).getTime() : 0
       if (last && Date.now() - last < settings.cooldown_minutes * 60 * 1000) {
-        return apiOk({ ok: true, skipped: 'cooldown', ...report })
+        return { skipped: 'cooldown', ...report }
       }
     }
 
-    // 1) Fill queue from source pool
     const candidates = await getTopAutoListingCandidates(userId, settings, 220)
     report.candidates = candidates.length
     const fill = await fillQueueIfNeeded({ userId, accountId, settings, candidates })
     report.queued = fill.inserted
 
-    // 2) Respect max/hour throttle + cooldown pattern
     const canPost = await enforceMaxPerHour(userId, settings)
-    if (!canPost) return apiOk({ ok: true, ...report, skipped: 'max_per_hour' })
+    if (!canPost) return { ...report, skipped: 'max_per_hour' }
 
-    // 3) Process one due job per tick (keeps natural cadence)
     const job = await acquireNextDueJob(userId)
-    if (!job) return apiOk({ ok: true, ...report, processed: 0 })
+    if (!job) return { ...report, processed: 0 }
 
     await logAutoListingEvent({
       userId,
@@ -196,9 +172,67 @@ export async function GET(req: NextRequest) {
     }
 
     report.durationMs = Date.now() - startedAt
-    return apiOk({ ok: true, ...report })
+    return report
   } finally {
     await sql`SELECT pg_advisory_unlock(hashtext(${leaseKey}))`.catch(() => {})
   }
 }
 
+export async function GET(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET
+  const authHeader = req.headers.get('authorization') || ''
+  const secretParam = req.nextUrl.searchParams.get('secret') || ''
+  const isVercelCron = req.headers.get('x-vercel-cron') === '1'
+  const authed =
+    !cronSecret ||
+    authHeader === `Bearer ${cronSecret}` ||
+    (secretParam && cronSecret && secretParam === cronSecret) ||
+    isVercelCron
+
+  if (!authed) {
+    return apiError('Unauthorized', { status: 401, code: 'UNAUTHORIZED' })
+  }
+
+  await ensureAutoListingTables()
+
+  const userIdParam = req.nextUrl.searchParams.get('userId')
+  if (userIdParam) {
+    const userId = Number(userIdParam)
+    if (!Number.isFinite(userId)) return apiError('Invalid userId.', { status: 400, code: 'INVALID_USER' })
+    return apiOk({ ok: true, userId, ...await processAutoListingUser(req, userId) })
+  }
+
+  const limit = Math.max(1, Math.min(Number(req.nextUrl.searchParams.get('limit') || '12') || 12, 40))
+  const userRows = await queryRows<{ user_id: number }>`
+    SELECT s.user_id
+    FROM auto_listing_settings s
+    WHERE s.enabled = TRUE
+      AND s.paused = FALSE
+      AND s.emergency_stopped = FALSE
+      AND (
+        EXISTS (SELECT 1 FROM ebay_credentials ec WHERE ec.user_id = s.user_id)
+        OR EXISTS (SELECT 1 FROM ebay_accounts ea WHERE ea.user_id = s.user_id AND ea.active = TRUE)
+      )
+    ORDER BY RANDOM()
+    LIMIT ${limit}
+  `.catch(() => [])
+
+  const startedAt = Date.now()
+  const results: Array<{ userId: number; result: Record<string, unknown> }> = []
+  for (const row of userRows) {
+    if (Date.now() - startedAt > 270_000) break
+    const result = await processAutoListingUser(req, Number(row.user_id)).catch((error) => ({
+      failed: error instanceof Error ? error.message.slice(0, 180) : String(error).slice(0, 180),
+    }))
+    results.push({ userId: Number(row.user_id), result })
+  }
+
+  return apiOk({
+    ok: true,
+    mode: 'all-enabled-users',
+    usersFound: userRows.length,
+    usersProcessed: results.length,
+    results,
+    durationMs: Date.now() - startedAt,
+  })
+}
